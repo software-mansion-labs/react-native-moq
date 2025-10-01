@@ -1,0 +1,22 @@
+{
+  "name": "react-native-moq",
+  "version": "0.0.1",
+  "description": "MOQ for React Native",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/software-mansion-labs/react-native-moq.git"
+  },
+  "keywords": [
+    "react-native",
+    "quic",
+    "moq",
+    "video"
+  ],
+  "author": "Software Mansion",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/software-mansion-labs/react-native-moq/issues"
+  },
+  "homepage": "https://github.com/software-mansion-labs/react-native-moq#readme"
+}
