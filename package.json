@@ -69,8 +69,8 @@
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^10.0.1",
     "@jest/globals": "^30.0.0",
-    "@react-native/babel-preset": "0.83.0",
-    "@react-native/eslint-config": "0.83.0",
+    "@react-native/babel-preset": "0.84.1",
+    "@react-native/eslint-config": "0.84.1",
     "@release-it/conventional-changelog": "^10.0.6",
     "@types/react": "^19.2.0",
     "commitlint": "^20.5.0",
@@ -82,12 +82,12 @@
     "jest": "^30.3.0",
     "lefthook": "^2.1.4",
     "prettier": "^3.8.1",
-    "react": "19.2.0",
-    "react-native": "0.83.0",
+    "react": "19.2.3",
+    "react-native": "0.84.1",
     "react-native-builder-bob": "^0.41.0",
     "react-native-web": "~0.21.1",
     "release-it": "^19.2.4",
-    "turbo": "^2.8.21",
+    "turbo": "^2.9.4",
     "typescript": "^6.0.2"
   },
   "peerDependencies": {
@@ -141,7 +141,11 @@
   "commitlint": {
     "extends": [
       "@commitlint/config-conventional"
-    ]
+    ],
+    "rules": {
+      "type-empty": [0],
+      "subject-empty": [0]
+    }
   },
   "release-it": {
     "git": {
