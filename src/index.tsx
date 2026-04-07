@@ -1,1 +1,1 @@
-export { multiply } from './multiply';
+export { getSessionState, setSessionState } from './session';

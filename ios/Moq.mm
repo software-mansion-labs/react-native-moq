@@ -1,10 +1,13 @@
 #import "Moq.h"
+#import <Moq/Moq-Swift.h>
 
 @implementation Moq
-- (NSNumber *)multiply:(double)a b:(double)b {
-    NSNumber *result = @(a * b);
+- (NSString *)getSessionState {
+    return [MoqImpl getSessionState];
+}
 
-    return result;
+- (void)setSessionState:(NSString *)state {
+    [MoqImpl setSessionState:state];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
