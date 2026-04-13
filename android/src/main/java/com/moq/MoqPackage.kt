@@ -5,15 +5,11 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfo
 import com.facebook.react.module.model.ReactModuleInfoProvider
-import java.util.HashMap
+import com.facebook.react.uimanager.ViewManager
 
 class MoqPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
-    return if (name == MoqModule.NAME) {
-      MoqModule(reactContext)
-    } else {
-      null
-    }
+    return if (name == MoqModule.NAME) MoqModule(reactContext) else null
   }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
@@ -24,8 +20,12 @@ class MoqPackage : BaseReactPackage() {
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,
-        isTurboModule = true
+        isTurboModule = true,
       )
     )
+  }
+
+  override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
+    return listOf(MoqVideoViewManager())
   }
 }
