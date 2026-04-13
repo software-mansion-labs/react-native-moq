@@ -1,5 +1,6 @@
+#import <React/RCTEventEmitter.h>
 #import <MoqSpec/MoqSpec.h>
 
-@interface Moq : NSObject <NativeMoqSpec>
+@interface Moq : RCTEventEmitter <NativeMoqSpec>
 
 @end
