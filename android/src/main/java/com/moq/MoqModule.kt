@@ -139,9 +139,12 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
     player?.stop()
     stopStatsPolling()
 
-    val tracks = mutableListOf<MoQTrackInfo>()
-    info.videoTracks.firstOrNull()?.let { tracks.add(it) }
-    info.audioTracks.firstOrNull()?.let { tracks.add(it) }
+    if (info.audioTracks.isEmpty()) return
+
+    val tracks = buildList {
+      addAll(info.audioTracks.take(1))
+      addAll(info.videoTracks.take(1))
+    }
 
     val p = MoQPlayer(
       tracks = tracks,
@@ -152,10 +155,12 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
     currentPlayer = p
 
     observePlayerEvents(p)
+    // Match example app order: play() first (audio starts, video pending),
+    // then setSurface triggers startVideo once the surface is known.
     mainHandler.post {
+      p.play()
       currentSurface?.let { p.setSurface(it) }
       onPlayerChanged?.invoke()
-      p.play()
     }
 
     val videoArray = Arguments.createArray()

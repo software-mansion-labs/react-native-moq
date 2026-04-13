@@ -1,47 +1,38 @@
 package com.moq
 
 import android.content.Context
-import android.graphics.SurfaceTexture
-import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.view.Surface
-import android.view.TextureView
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 
-class MoqVideoView(context: Context) : TextureView(context), TextureView.SurfaceTextureListener {
+class MoqVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
   private var surface: Surface? = null
   private val mainHandler = Handler(Looper.getMainLooper())
 
   init {
-    surfaceTextureListener = this
+//    setZOrderMediaOverlay(true)
+    holder.addCallback(this)
     MoqModule.onPlayerChanged = { mainHandler.post { onPlayerChanged() } }
   }
 
-  override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
-    val s = Surface(st)
+  override fun surfaceCreated(holder: SurfaceHolder) {
+    val s = holder.surface
     surface = s
     MoqModule.currentSurface = s
     MoqModule.currentPlayer?.setSurface(s)
   }
 
-  override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) {}
+  override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
 
-  override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+  override fun surfaceDestroyed(holder: SurfaceHolder) {
     MoqModule.currentPlayer?.setSurface(null)
     MoqModule.currentSurface = null
     surface?.release()
     surface = null
-    return true
   }
-
-  override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
-
-  // TextureView does not support background drawables; suppress the crash
-  // that React Native triggers when it sets backgroundColor on native views.
-  override fun setBackground(background: Drawable?) {}
-  @Suppress("OVERRIDE_DEPRECATION")
-  override fun setBackgroundDrawable(background: Drawable?) {}
 
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
