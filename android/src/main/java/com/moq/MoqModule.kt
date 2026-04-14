@@ -11,8 +11,6 @@ import com.swmansion.moqkit.MoQBroadcastInfo
 import com.swmansion.moqkit.MoQPlayer
 import com.swmansion.moqkit.MoQSession
 import com.swmansion.moqkit.MoQTrackInfo
-import com.swmansion.moqkit.MoQAudioTrackInfo
-import com.swmansion.moqkit.MoQVideoTrackInfo
 import com.swmansion.moqkit.PlaybackStats
 import com.swmansion.moqkit.StallStats
 import kotlinx.coroutines.CoroutineScope
@@ -47,7 +45,6 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
   companion object {
     const val NAME = NativeMoqSpec.NAME
 
-    @Volatile var currentSurface: android.view.Surface? = null
     @Volatile var currentPlayer: MoQPlayer? = null
     var onPlayerChanged: (() -> Unit)? = null
 

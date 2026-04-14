@@ -29,7 +29,6 @@ class MoqVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callb
   }
 
   fun setSurface(surface: Surface?) {
-    MoqModule.currentSurface = surface
     MoqModule.currentPlayer?.setSurface(surface)
   }
 
