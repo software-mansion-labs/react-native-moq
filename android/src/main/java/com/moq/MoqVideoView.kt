@@ -1,59 +1,45 @@
 package com.moq
 
 import android.content.Context
-import android.graphics.SurfaceTexture
-import android.graphics.drawable.Drawable
-import android.os.Handler
-import android.os.Looper
 import android.view.Surface
-import android.view.TextureView
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 
-class MoqVideoView(context: Context) : TextureView(context), TextureView.SurfaceTextureListener {
-
-  private var surface: Surface? = null
-  private val mainHandler = Handler(Looper.getMainLooper())
+class MoqVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
   init {
-    surfaceTextureListener = this
-    MoqModule.onPlayerChanged = { mainHandler.post { onPlayerChanged() } }
+    setZOrderOnTop(true)
+    holder.addCallback(this)
+    MoqModule.onPlayerChanged = { onPlayerChanged() }
   }
 
-  override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
-    val s = Surface(st)
-    surface = s
-    MoqModule.currentSurface = s
-    MoqModule.currentPlayer?.setSurface(s)
+  override fun surfaceCreated(holder: SurfaceHolder) {
+    setSurface(holder.surface)
   }
 
-  override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) {}
+  override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
 
-  override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
-    MoqModule.currentPlayer?.setSurface(null)
-    MoqModule.currentSurface = null
-    surface?.release()
-    surface = null
-    return true
+  override fun surfaceDestroyed(holder: SurfaceHolder) {
+    setSurface(null)
   }
-
-  override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
-
-  // TextureView does not support background drawables; suppress the crash
-  // that React Native triggers when it sets backgroundColor on native views.
-  override fun setBackground(background: Drawable?) {}
-  @Suppress("OVERRIDE_DEPRECATION")
-  override fun setBackgroundDrawable(background: Drawable?) {}
 
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
+    cleanup()
+  }
+
+  fun setSurface(surface: Surface?) {
+    MoqModule.currentSurface = surface
+    MoqModule.currentPlayer?.setSurface(surface)
+  }
+
+  fun cleanup() {
+    holder.removeCallback(this)
     MoqModule.onPlayerChanged = null
-    MoqModule.currentPlayer?.setSurface(null)
-    MoqModule.currentSurface = null
-    surface?.release()
-    surface = null
+    setSurface(null)
   }
 
   private fun onPlayerChanged() {
-    val s = surface ?: return
-    MoqModule.currentPlayer?.setSurface(s)
+    setSurface(holder.surface)
   }
 }

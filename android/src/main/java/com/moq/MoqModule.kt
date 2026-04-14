@@ -153,7 +153,6 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
 
     observePlayerEvents(p)
     mainHandler.post {
-      currentSurface?.let { p.setSurface(it) }
       onPlayerChanged?.invoke()
       p.play()
     }

@@ -12,4 +12,10 @@ class MoqVideoViewManager : SimpleViewManager<MoqVideoView>() {
   override fun getName() = NAME
 
   override fun createViewInstance(context: ThemedReactContext) = MoqVideoView(context)
+
+  override fun onDropViewInstance(view: MoqVideoView) {
+    view.cleanup()
+    super.onDropViewInstance(view)
+  }
+
 }
