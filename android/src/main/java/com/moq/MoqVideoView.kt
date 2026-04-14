@@ -13,7 +13,7 @@ class MoqVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callb
   private val mainHandler = Handler(Looper.getMainLooper())
 
   init {
-//    setZOrderMediaOverlay(true)
+    setZOrderOnTop(true)
     holder.addCallback(this)
     MoqModule.onPlayerChanged = { mainHandler.post { onPlayerChanged() } }
   }
@@ -30,16 +30,19 @@ class MoqVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callb
   override fun surfaceDestroyed(holder: SurfaceHolder) {
     MoqModule.currentPlayer?.setSurface(null)
     MoqModule.currentSurface = null
-    surface?.release()
     surface = null
   }
 
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
+    cleanup()
+  }
+
+  fun cleanup() {
+    holder.removeCallback(this)
     MoqModule.onPlayerChanged = null
     MoqModule.currentPlayer?.setSurface(null)
     MoqModule.currentSurface = null
-    surface?.release()
     surface = null
   }
 

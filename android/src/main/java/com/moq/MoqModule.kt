@@ -152,15 +152,13 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
       parentScope = moduleScope,
     )
     player = p
-    currentPlayer = p
 
     observePlayerEvents(p)
-    // Match example app order: play() first (audio starts, video pending),
-    // then setSurface triggers startVideo once the surface is known.
     mainHandler.post {
-      p.play()
+      currentPlayer = p
       currentSurface?.let { p.setSurface(it) }
       onPlayerChanged?.invoke()
+      p.play()
     }
 
     val videoArray = Arguments.createArray()
