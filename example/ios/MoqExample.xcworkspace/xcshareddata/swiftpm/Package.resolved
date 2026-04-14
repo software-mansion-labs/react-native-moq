@@ -4,10 +4,10 @@
     {
       "identity" : "moq-kit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/software-mansion-labs/moq-kit.git",
+      "location" : "https://github.com/software-mansion-labs/moq-kit",
       "state" : {
-        "revision" : "aec9c72966ccc2dfb17b89c0b67d3c56b817aaa1",
-        "version" : "0.0.1-alpha2"
+        "revision" : "4ef20a2b79681f66caa60fa40bfd2686cd1f8fa0",
+        "version" : "0.0.1-alpha3"
       }
     }
   ],

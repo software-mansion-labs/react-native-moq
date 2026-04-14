@@ -20,7 +20,7 @@ Pod::Spec.new do |s|
 
   spm_dependency(s,
     url: 'https://github.com/software-mansion-labs/moq-kit.git',
-    requirement: { kind: 'exactVersion', version: '0.0.1-alpha2' },
+    requirement: { kind: 'exactVersion', version: '0.0.1-alpha3' },
     products: ['MoQKit']
   )
 end

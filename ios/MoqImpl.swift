@@ -183,6 +183,8 @@ import MoQKit
           self.onEvent?("playerEvent", [
             "type": "error", "trackKind": kind.rawValue, "message": message,
           ])
+        case .trackSwitched(let kind):
+          self.onEvent?("playerEvent", ["type": "trackSwitched", "trackKind": kind.rawValue])
         }
       }
     }
