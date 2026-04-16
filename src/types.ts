@@ -44,18 +44,19 @@ export interface MoQPlaybackStats {
   audioStalls?: StallStats;
 }
 
-export interface MoQPlayer {
-  // State
+export interface MoQSession {
   sessionState: MoQSessionState;
   broadcasts: MoQBroadcastInfo[];
+  connect(): void;
+  disconnect(): void;
+}
+
+export interface MoQPlayerState {
   isPlaying: boolean;
   isPaused: boolean;
   playbackStats: MoQPlaybackStats | null;
-
-  // Controls
-  connect(): void;
-  disconnect(): void;
   play(): void;
   pause(): void;
+  stop(): void;
   updateTargetLatency(ms: number): void;
 }

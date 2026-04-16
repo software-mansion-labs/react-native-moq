@@ -1,4 +1,4 @@
-import type { MoQPlaybackStats } from 'react-native-moq';
+import type { MoQBroadcastInfo, MoQPlaybackStats } from 'react-native-moq';
 import { useState } from 'react';
 import {
   Button,
@@ -9,15 +9,15 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { MoQVideoView, useMoQPlayer } from 'react-native-moq';
+import { MoQVideoView, useMoQPlayer, useMoQSession } from 'react-native-moq';
 
 export default function App() {
   const [url, setUrl] = useState('http://192.168.1.48:4443');
 
-  const player = useMoQPlayer(url);
+  const session = useMoQSession(url);
 
   const canConnect =
-    player.sessionState === 'idle' || player.sessionState === 'closed';
+    session.sessionState === 'idle' || session.sessionState === 'closed';
 
   return (
     <SafeAreaProvider>
@@ -35,24 +35,45 @@ export default function App() {
 
           <Button
             title={canConnect ? 'Connect' : 'Disconnect'}
-            onPress={canConnect ? player.connect : player.disconnect}
+            onPress={canConnect ? session.connect : session.disconnect}
           />
 
-          <StateIndicator state={player.sessionState} />
+          <StateIndicator state={session.sessionState} />
 
-          <MoQVideoView style={styles.video} />
+          {session.broadcasts.length === 0 &&
+            session.sessionState === 'connected' && (
+              <Text style={styles.noBroadcasts}>No broadcasts available</Text>
+            )}
 
-          {(player.isPlaying || player.isPaused) && (
-            <Button
-              title={player.isPaused ? 'Resume' : 'Pause'}
-              onPress={player.isPaused ? player.play : player.pause}
-            />
-          )}
-
-          {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
+          {session.broadcasts.map((broadcast) => (
+            <BroadcastPlayer key={broadcast.path} broadcast={broadcast} />
+          ))}
         </ScrollView>
       </SafeAreaView>
     </SafeAreaProvider>
+  );
+}
+
+// ── Per-broadcast player ─────────────────────────────────────────────────────
+
+function BroadcastPlayer({ broadcast }: { broadcast: MoQBroadcastInfo }) {
+  const player = useMoQPlayer(broadcast.path);
+
+  return (
+    <View style={styles.broadcastCard}>
+      <Text style={styles.broadcastPath}>{broadcast.path}</Text>
+
+      <MoQVideoView broadcastPath={broadcast.path} style={styles.video} />
+
+      {(player.isPlaying || player.isPaused) && (
+        <Button
+          title={player.isPaused ? 'Resume' : 'Pause'}
+          onPress={player.isPaused ? player.play : player.pause}
+        />
+      )}
+
+      {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
+    </View>
   );
 }
 
@@ -163,6 +184,24 @@ const styles = StyleSheet.create({
   },
   stateText: {
     fontSize: 14,
+    color: '#374151',
+  },
+  noBroadcasts: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  broadcastCard: {
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+  },
+  broadcastPath: {
+    fontSize: 13,
+    fontWeight: '600',
     color: '#374151',
   },
   video: {

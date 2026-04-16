@@ -7,10 +7,24 @@ import android.view.SurfaceView
 
 class MoqVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
+  var broadcastPath: String? = null
+    set(value) {
+      val old = field
+      field = value
+      if (old != null) {
+        MoqModule.removePlayerListener(old, playerChangedCallback)
+      }
+      if (value != null) {
+        MoqModule.addPlayerListener(value, playerChangedCallback)
+        setSurface(holder.surface)
+      }
+    }
+
+  private val playerChangedCallback: () -> Unit = { setSurface(holder.surface) }
+
   init {
     setZOrderOnTop(true)
     holder.addCallback(this)
-    MoqModule.onPlayerChanged = { onPlayerChanged() }
   }
 
   override fun surfaceCreated(holder: SurfaceHolder) {
@@ -29,16 +43,12 @@ class MoqVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callb
   }
 
   fun setSurface(surface: Surface?) {
-    MoqModule.currentPlayer?.setSurface(surface)
+    broadcastPath?.let { path -> MoqModule.players[path]?.setSurface(surface) }
   }
 
   fun cleanup() {
     holder.removeCallback(this)
-    MoqModule.onPlayerChanged = null
+    broadcastPath?.let { path -> MoqModule.removePlayerListener(path, playerChangedCallback) }
     setSurface(null)
-  }
-
-  private fun onPlayerChanged() {
-    setSurface(holder.surface)
   }
 }

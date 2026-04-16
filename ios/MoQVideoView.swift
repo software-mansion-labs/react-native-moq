@@ -5,13 +5,18 @@ import UIKit
 public class MoQVideoView: UIView {
   private var displayLayer: AVSampleBufferDisplayLayer?
 
+  @objc var broadcastPath: String? {
+    didSet {
+      attach(layer: broadcastPath.flatMap { MoqImpl.shared.videoLayer(for: $0) })
+    }
+  }
+
   public override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .black
-    attach(layer: MoqImpl.shared.videoLayer)
     NotificationCenter.default.addObserver(
       self,
-      selector: #selector(playerDidChange),
+      selector: #selector(playerDidChange(_:)),
       name: MoqImpl.playerChangedNotification,
       object: nil
     )
@@ -30,8 +35,11 @@ public class MoQVideoView: UIView {
     displayLayer?.frame = bounds
   }
 
-  @objc private func playerDidChange() {
-    attach(layer: MoqImpl.shared.videoLayer)
+  @objc private func playerDidChange(_ notification: Notification) {
+    let changedPath = notification.object as? String
+    // nil object = disconnect (all players removed); otherwise filter by path
+    guard changedPath == nil || changedPath == broadcastPath else { return }
+    attach(layer: broadcastPath.flatMap { MoqImpl.shared.videoLayer(for: $0) })
   }
 
   private func attach(layer newLayer: AVSampleBufferDisplayLayer?) {

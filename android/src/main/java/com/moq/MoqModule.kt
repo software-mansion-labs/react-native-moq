@@ -13,6 +13,8 @@ import com.swmansion.moqkit.MoQSession
 import com.swmansion.moqkit.MoQTrackInfo
 import com.swmansion.moqkit.PlaybackStats
 import com.swmansion.moqkit.StallStats
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,43 +28,55 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
   private val mainHandler = Handler(Looper.getMainLooper())
 
   private var session: MoQSession? = null
-  private var player: MoQPlayer? = null
-  private var targetLatencyMs: Int = 200
-
   private var stateJob: Job? = null
   private var broadcastsJob: Job? = null
-  private var playerEventsJob: Job? = null
 
-  private val statsRunnable = object : Runnable {
-    override fun run() {
-      player?.stats?.let { emitEvent("playbackStatsUpdated", it.toWritableMap()) }
-      mainHandler.postDelayed(this, 500)
-    }
-  }
+  private val playerEventJobs = ConcurrentHashMap<String, Job>()
+  private val statsRunnables = ConcurrentHashMap<String, Runnable>()
 
-  // MARK: - Companion: shared surface/player for MoqVideoView
+  // MARK: - Companion: shared player map and listeners for MoqVideoView
 
   companion object {
     const val NAME = NativeMoqSpec.NAME
 
-    @Volatile var currentPlayer: MoQPlayer? = null
-    var onPlayerChanged: (() -> Unit)? = null
+    val players = ConcurrentHashMap<String, MoQPlayer>()
+    private val playerChangeListeners =
+      ConcurrentHashMap<String, CopyOnWriteArrayList<() -> Unit>>()
 
-    fun MoQSession.State.toStringValue(): String = when (this) {
-      MoQSession.State.Idle -> "idle"
-      MoQSession.State.Connecting -> "connecting"
-      MoQSession.State.Connected -> "connected"
-      MoQSession.State.Closed -> "closed"
-      is MoQSession.State.Error -> "error:${this.message}"
+    fun addPlayerListener(broadcastPath: String, listener: () -> Unit) {
+      playerChangeListeners.getOrPut(broadcastPath) { CopyOnWriteArrayList() }.add(listener)
     }
+
+    fun removePlayerListener(broadcastPath: String, listener: () -> Unit) {
+      playerChangeListeners[broadcastPath]?.remove(listener)
+    }
+
+    fun notifyPlayerChanged(broadcastPath: String?) {
+      if (broadcastPath == null) {
+        playerChangeListeners.values.forEach { list -> list.forEach { it() } }
+      } else {
+        playerChangeListeners[broadcastPath]?.forEach { it() }
+      }
+    }
+
+    fun MoQSession.State.toStringValue(): String =
+      when (this) {
+        MoQSession.State.Idle -> "idle"
+        MoQSession.State.Connecting -> "connecting"
+        MoQSession.State.Connected -> "connected"
+        MoQSession.State.Closed -> "closed"
+        is MoQSession.State.Error -> "error:${this.message}"
+      }
   }
 
   // MARK: - NativeMoqSpec
 
   override fun addListener(eventName: String) {}
+
   override fun removeListeners(count: Double) {}
 
-  override fun connect(url: String, prefix: String) {
+  override fun connect(url: String, prefix: String, targetLatencyMs: Double) {
+    val latencyMs = targetLatencyMs.toInt()
     moduleScope.launch {
       val s = MoQSession(url = url, parentScope = moduleScope)
       session = s
@@ -78,7 +92,7 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
       broadcastsJob = launch {
         s.broadcasts.collect { event ->
           when (event) {
-            is MoQBroadcastEvent.Available -> handleBroadcastAvailable(event.info)
+            is MoQBroadcastEvent.Available -> handleBroadcastAvailable(event.info, latencyMs)
             is MoQBroadcastEvent.Unavailable -> handleBroadcastUnavailable(event.path)
           }
         }
@@ -91,37 +105,35 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
   }
 
   override fun disconnect() {
-    stateJob?.cancel(); stateJob = null
-    broadcastsJob?.cancel(); broadcastsJob = null
-    playerEventsJob?.cancel(); playerEventsJob = null
-    stopStatsPolling()
+    stateJob?.cancel()
+    stateJob = null
+    broadcastsJob?.cancel()
+    broadcastsJob = null
+
+    playerEventJobs.keys.toList().forEach { path -> removePlayer(path, notify = false) }
 
     val s = session
-    val p = player
     session = null
-    player = null
-    currentPlayer = null
-    onPlayerChanged?.invoke()
 
-    p?.stop()
+    mainHandler.post { notifyPlayerChanged(null) }
+
     s?.close()
   }
 
-  override fun play() {
-    player?.play()
+  override fun play(broadcastPath: String) {
+    players[broadcastPath]?.play()
   }
 
-  override fun pause() {
-    player?.pause()
+  override fun pause(broadcastPath: String) {
+    players[broadcastPath]?.pause()
   }
 
-  override fun stopAll() {
-    player?.stop()
+  override fun stopPlayer(broadcastPath: String) {
+    removePlayer(broadcastPath)
   }
 
-  override fun updateTargetLatency(ms: Double) {
-    targetLatencyMs = ms.toInt()
-    player?.updateTargetLatency(ms.toInt())
+  override fun updateTargetLatency(broadcastPath: String, ms: Double) {
+    players[broadcastPath]?.updateTargetLatency(ms.toInt())
   }
 
   override fun invalidate() {
@@ -132,9 +144,8 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
 
   // MARK: - Broadcast events
 
-  private fun handleBroadcastAvailable(info: MoQBroadcastInfo) {
-    player?.stop()
-    stopStatsPolling()
+  private fun handleBroadcastAvailable(info: MoQBroadcastInfo, targetLatencyMs: Int) {
+    removePlayer(info.path, notify = false)
 
     val tracks = mutableListOf<MoQTrackInfo>()
     info.videoTracks.firstOrNull()?.let { tracks.add(it) }
@@ -145,12 +156,11 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
       targetLatencyMs = targetLatencyMs,
       parentScope = moduleScope,
     )
-    player = p
-    currentPlayer = p
+    players[info.path] = p
+    observePlayerEvents(p, info.path)
 
-    observePlayerEvents(p)
     mainHandler.post {
-      onPlayerChanged?.invoke()
+      notifyPlayerChanged(info.path)
       p.play()
     }
 
@@ -177,29 +187,34 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
   }
 
   private fun handleBroadcastUnavailable(path: String) {
-    player?.stop()
-    player = null
-    currentPlayer = null
-    onPlayerChanged?.invoke()
-    stopStatsPolling()
-
+    removePlayer(path)
     val map = Arguments.createMap()
     map.putString("path", path)
     emitEvent("broadcastUnavailable", map)
   }
 
+  private fun removePlayer(path: String, notify: Boolean = true) {
+    playerEventJobs.remove(path)?.cancel()
+    stopStatsPolling(path)
+    players.remove(path)?.stop()
+    if (notify) {
+      mainHandler.post { notifyPlayerChanged(path) }
+    }
+  }
+
   // MARK: - Player events
 
-  private fun observePlayerEvents(p: MoQPlayer) {
-    playerEventsJob?.cancel()
-    playerEventsJob = moduleScope.launch {
+  private fun observePlayerEvents(p: MoQPlayer, broadcastPath: String) {
+    playerEventJobs[broadcastPath]?.cancel()
+    playerEventJobs[broadcastPath] = moduleScope.launch {
       p.events.collect { event ->
         val map = Arguments.createMap()
+        map.putString("broadcastPath", broadcastPath)
         when (event) {
           is MoQPlayer.Event.TrackPlaying -> {
             map.putString("type", "trackPlaying")
             map.putString("trackKind", event.kind)
-            startStatsPolling()
+            startStatsPolling(p, broadcastPath)
           }
           is MoQPlayer.Event.TrackPaused -> {
             map.putString("type", "trackPaused")
@@ -211,7 +226,7 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
           }
           MoQPlayer.Event.AllTracksStopped -> {
             map.putString("type", "allTracksStopped")
-            stopStatsPolling()
+            stopStatsPolling(broadcastPath)
           }
           is MoQPlayer.Event.Error -> {
             map.putString("type", "error")
@@ -226,13 +241,24 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
 
   // MARK: - Stats polling
 
-  private fun startStatsPolling() {
-    mainHandler.removeCallbacks(statsRunnable)
-    mainHandler.postDelayed(statsRunnable, 500)
+  private fun startStatsPolling(player: MoQPlayer, broadcastPath: String) {
+    stopStatsPolling(broadcastPath)
+    val runnable = object : Runnable {
+      override fun run() {
+        player.stats?.let { stats ->
+          val map = stats.toWritableMap()
+          map.putString("broadcastPath", broadcastPath)
+          emitEvent("playbackStatsUpdated", map)
+        }
+        mainHandler.postDelayed(this, 500)
+      }
+    }
+    statsRunnables[broadcastPath] = runnable
+    mainHandler.postDelayed(runnable, 500)
   }
 
-  private fun stopStatsPolling() {
-    mainHandler.removeCallbacks(statsRunnable)
+  private fun stopStatsPolling(broadcastPath: String) {
+    statsRunnables.remove(broadcastPath)?.let { mainHandler.removeCallbacks(it) }
   }
 
   // MARK: - Helpers

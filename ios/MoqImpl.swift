@@ -16,8 +16,8 @@ import MoQKit
 
   static let playerChangedNotification = Notification.Name("MoqImpl.playerChanged")
 
-  @objc @MainActor public var videoLayer: AVSampleBufferDisplayLayer? {
-    player?.videoLayer
+  @MainActor @objc public func videoLayer(for broadcastPath: String) -> AVSampleBufferDisplayLayer? {
+    players[broadcastPath]?.videoLayer
   }
 
   // MARK: - State (readable from any context)
@@ -27,56 +27,60 @@ import MoQKit
   // MARK: - Private
 
   private var session: MoQSession?
-  private var player: MoQPlayer?
   private var targetLatencyMs: UInt64 = 200
+
+  private var players: [String: MoQPlayer] = [:]
+  private var playerEventsTasks: [String: Task<Void, Never>] = [:]
+  private var statsTimers: [String: Timer] = [:]
 
   private var stateTask: Task<Void, Never>?
   private var broadcastsTask: Task<Void, Never>?
-  private var playerEventsTask: Task<Void, Never>?
-  private var statsTimer: Timer?
 
   // MARK: - Public API
 
-  @objc(connect:prefix:)
-  public func connect(url: String, prefix: String) {
-    Task { @MainActor in self._connect(url: url, prefix: prefix) }
+  @objc(connect:prefix:targetLatencyMs:)
+  public func connect(url: String, prefix: String, targetLatencyMs: Int) {
+    Task { @MainActor in self._connect(url: url, prefix: prefix, targetLatencyMs: UInt64(targetLatencyMs)) }
   }
 
   @objc public func disconnect() {
     Task { @MainActor in self._disconnect() }
   }
 
-  @objc public func play() {
+  @objc(play:)
+  public func play(broadcastPath: String) {
     Task { @MainActor in
-      try? await self.player?.play()
+      try? await self.players[broadcastPath]?.play()
     }
   }
 
-  @objc public func pause() {
+  @objc(pause:)
+  public func pause(broadcastPath: String) {
     Task { @MainActor in
-      await self.player?.pause()
+      await self.players[broadcastPath]?.pause()
     }
   }
 
-  @objc public func stopAll() {
+  @objc(stopPlayer:)
+  public func stopPlayer(broadcastPath: String) {
     Task { @MainActor in
-      await self.player?.stopAll()
+      await self._removePlayer(for: broadcastPath)
     }
   }
 
-  @objc(updateTargetLatencyMs:)
-  public func updateTargetLatency(ms: Int) {
-    targetLatencyMs = UInt64(ms)
+  @objc(updateTargetLatency:ms:)
+  public func updateTargetLatency(broadcastPath: String, ms: Int) {
     Task { @MainActor in
-      self.player?.updateTargetLatency(ms: UInt64(ms))
+      self.players[broadcastPath]?.updateTargetLatency(ms: UInt64(ms))
     }
   }
 
   // MARK: - Private: connect / disconnect
 
   @MainActor
-  private func _connect(url: String, prefix: String) {
+  private func _connect(url: String, prefix: String, targetLatencyMs: UInt64) {
     guard session == nil else { return }
+    self.targetLatencyMs = targetLatencyMs
 
     let s = MoQSession(url: url, prefix: prefix)
     session = s
@@ -104,18 +108,25 @@ import MoQKit
   private func _disconnect() {
     stateTask?.cancel(); stateTask = nil
     broadcastsTask?.cancel(); broadcastsTask = nil
-    playerEventsTask?.cancel(); playerEventsTask = nil
-    _stopStatsPolling()
     currentState = .idle
 
     let s = session
-    let p = player
+    let allPlayers = players
     session = nil
-    player = nil
-    NotificationCenter.default.post(name: MoqImpl.playerChangedNotification, object: self)
+    players = [:]
+
+    for (path, _) in playerEventsTasks {
+      playerEventsTasks[path]?.cancel()
+    }
+    playerEventsTasks = [:]
+
+    for (_, timer) in statsTimers { timer.invalidate() }
+    statsTimers = [:]
+
+    NotificationCenter.default.post(name: MoqImpl.playerChangedNotification, object: nil)
 
     Task {
-      await p?.stopAll()
+      for (_, p) in allPlayers { await p.stopAll() }
       await s?.close()
     }
   }
@@ -124,67 +135,94 @@ import MoQKit
 
   @MainActor
   private func _handleBroadcastAvailable(_ info: MoQBroadcastInfo) async {
-    if let existing = player {
-      await existing.stopAll()
-      player = nil
-      _stopStatsPolling()
-    }
+    let path = info.path
+    await _removePlayer(for: path, notifyVideoViews: false)
 
     var tracks: [any MoQTrackInfo] = []
     if let v = info.videoTracks.first { tracks.append(v) }
     if let a = info.audioTracks.first { tracks.append(a) }
 
     let p = try? MoQPlayer(tracks: tracks, targetBufferingMs: targetLatencyMs)
-    player = p
-    NotificationCenter.default.post(name: MoqImpl.playerChangedNotification, object: self)
-
     if let p {
-      _observePlayerEvents(p.events)
+      players[path] = p
+      NotificationCenter.default.post(
+        name: MoqImpl.playerChangedNotification, object: path)
+      _observePlayerEvents(p.events, broadcastPath: path)
       try? await p.play()
     }
 
     onEvent?("broadcastAvailable", [
-      "path": info.path,
-      "videoTracks": info.videoTracks.map { ["name": $0.name, "codec": $0.config.codec] as [String: Any] },
+      "path": path,
+      "videoTracks": info.videoTracks.map {
+        ["name": $0.name, "codec": $0.config.codec] as [String: Any]
+      },
       "audioTracks": info.audioTracks.map {
-        ["name": $0.name, "codec": $0.config.codec, "sampleRate": $0.config.sampleRate] as [String: Any]
+        ["name": $0.name, "codec": $0.config.codec, "sampleRate": $0.config.sampleRate]
+          as [String: Any]
       },
     ])
   }
 
   @MainActor
   private func _handleBroadcastUnavailable(path: String) async {
-    await player?.stopAll()
-    player = nil
-    _stopStatsPolling()
-    NotificationCenter.default.post(name: MoqImpl.playerChangedNotification, object: self)
+    await _removePlayer(for: path)
     onEvent?("broadcastUnavailable", ["path": path])
+  }
+
+  @MainActor
+  private func _removePlayer(for path: String, notifyVideoViews: Bool = true) async {
+    if let p = players.removeValue(forKey: path) {
+      playerEventsTasks.removeValue(forKey: path)?.cancel()
+      _stopStatsPolling(for: path)
+      await p.stopAll()
+    }
+    if notifyVideoViews {
+      NotificationCenter.default.post(
+        name: MoqImpl.playerChangedNotification, object: path)
+    }
   }
 
   // MARK: - Private: player events
 
   @MainActor
-  private func _observePlayerEvents(_ events: AsyncStream<MoQPlayerEvent>) {
-    playerEventsTask?.cancel()
-    playerEventsTask = Task { @MainActor in
+  private func _observePlayerEvents(
+    _ events: AsyncStream<MoQPlayerEvent>, broadcastPath: String
+  ) {
+    playerEventsTasks[broadcastPath]?.cancel()
+    playerEventsTasks[broadcastPath] = Task { @MainActor in
       for await event in events {
         switch event {
         case .trackPlaying(let kind):
-          self._startStatsPolling()
-          self.onEvent?("playerEvent", ["type": "trackPlaying", "trackKind": kind.rawValue])
+          self._startStatsPolling(for: broadcastPath)
+          self.onEvent?("playerEvent", [
+            "broadcastPath": broadcastPath, "type": "trackPlaying",
+            "trackKind": kind.rawValue,
+          ])
         case .trackPaused(let kind):
-          self.onEvent?("playerEvent", ["type": "trackPaused", "trackKind": kind.rawValue])
+          self.onEvent?("playerEvent", [
+            "broadcastPath": broadcastPath, "type": "trackPaused",
+            "trackKind": kind.rawValue,
+          ])
         case .trackStopped(let kind):
-          self.onEvent?("playerEvent", ["type": "trackStopped", "trackKind": kind.rawValue])
+          self.onEvent?("playerEvent", [
+            "broadcastPath": broadcastPath, "type": "trackStopped",
+            "trackKind": kind.rawValue,
+          ])
         case .allTracksStopped:
-          self._stopStatsPolling()
-          self.onEvent?("playerEvent", ["type": "allTracksStopped"])
+          self._stopStatsPolling(for: broadcastPath)
+          self.onEvent?("playerEvent", [
+            "broadcastPath": broadcastPath, "type": "allTracksStopped",
+          ])
         case .error(let kind, let message):
           self.onEvent?("playerEvent", [
-            "type": "error", "trackKind": kind.rawValue, "message": message,
+            "broadcastPath": broadcastPath, "type": "error",
+            "trackKind": kind.rawValue, "message": message,
           ])
         case .trackSwitched(let kind):
-          self.onEvent?("playerEvent", ["type": "trackSwitched", "trackKind": kind.rawValue])
+          self.onEvent?("playerEvent", [
+            "broadcastPath": broadcastPath, "type": "trackSwitched",
+            "trackKind": kind.rawValue,
+          ])
         }
       }
     }
@@ -193,20 +231,23 @@ import MoQKit
   // MARK: - Private: stats polling
 
   @MainActor
-  private func _startStatsPolling() {
-    guard statsTimer == nil else { return }
-    statsTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+  private func _startStatsPolling(for broadcastPath: String) {
+    guard statsTimers[broadcastPath] == nil else { return }
+    statsTimers[broadcastPath] = Timer.scheduledTimer(
+      withTimeInterval: 0.5, repeats: true
+    ) { [weak self] _ in
       Task { @MainActor [weak self] in
-        guard let self, let stats = self.player?.stats else { return }
-        self.onEvent?("playbackStatsUpdated", stats.asDictionary())
+        guard let self, let stats = self.players[broadcastPath]?.stats else { return }
+        var dict = stats.asDictionary()
+        dict["broadcastPath"] = broadcastPath
+        self.onEvent?("playbackStatsUpdated", dict)
       }
     }
   }
 
   @MainActor
-  private func _stopStatsPolling() {
-    statsTimer?.invalidate()
-    statsTimer = nil
+  private func _stopStatsPolling(for broadcastPath: String) {
+    statsTimers.removeValue(forKey: broadcastPath)?.invalidate()
   }
 }
 

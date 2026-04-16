@@ -25,28 +25,28 @@ RCT_EXPORT_MODULE()
   [MoqImpl shared].onEvent = nil;
 }
 
-- (void)connect:(NSString *)url prefix:(NSString *)prefix {
-  [[MoqImpl shared] connect:url prefix:prefix];
+- (void)connect:(NSString *)url prefix:(NSString *)prefix targetLatencyMs:(double)targetLatencyMs {
+  [[MoqImpl shared] connect:url prefix:prefix targetLatencyMs:(int)targetLatencyMs];
 }
 
 - (void)disconnect {
   [[MoqImpl shared] disconnect];
 }
 
-- (void)play {
-  [[MoqImpl shared] play];
+- (void)play:(NSString *)broadcastPath {
+  [[MoqImpl shared] play:broadcastPath];
 }
 
-- (void)pause {
-  [[MoqImpl shared] pause];
+- (void)pause:(NSString *)broadcastPath {
+  [[MoqImpl shared] pause:broadcastPath];
 }
 
-- (void)stopAll {
-  [[MoqImpl shared] stopAll];
+- (void)stopPlayer:(NSString *)broadcastPath {
+  [[MoqImpl shared] stopPlayer:broadcastPath];
 }
 
-- (void)updateTargetLatency:(double)ms {
-  [[MoqImpl shared] updateTargetLatencyMs:(int)ms];
+- (void)updateTargetLatency:(NSString *)broadcastPath ms:(double)ms {
+  [[MoqImpl shared] updateTargetLatency:broadcastPath ms:(int)ms];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:

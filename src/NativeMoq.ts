@@ -5,14 +5,14 @@ export interface Spec extends TurboModule {
   removeListeners(count: number): void;
 
   // Session
-  connect(url: string, prefix: string): void;
+  connect(url: string, prefix: string, targetLatencyMs: number): void;
   disconnect(): void;
 
-  // Player controls
-  play(): void;
-  pause(): void;
-  stopAll(): void;
-  updateTargetLatency(ms: number): void;
+  // Player controls (per broadcast)
+  play(broadcastPath: string): void;
+  pause(broadcastPath: string): void;
+  stopPlayer(broadcastPath: string): void;
+  updateTargetLatency(broadcastPath: string, ms: number): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Moq');
