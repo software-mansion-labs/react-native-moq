@@ -244,7 +244,7 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
     stopStatsPolling(broadcastPath)
     val runnable = object : Runnable {
       override fun run() {
-        player.stats?.let { stats ->
+        player.stats.let { stats ->
           val map = stats.toWritableMap()
           map.putString("broadcastPath", broadcastPath)
           emitEvent("playbackStatsUpdated", map)

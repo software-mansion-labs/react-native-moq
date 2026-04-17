@@ -12,7 +12,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { MoQVideoView, useMoQPlayer, useMoQSession } from 'react-native-moq';
 
 export default function App() {
-  const [url, setUrl] = useState('http://192.168.1.48:4443');
+  const [url, setUrl] = useState('http://192.168.0.26:4443');
   const [activePaths, setActivePaths] = useState<string[]>([]);
 
   const session = useMoQSession(url);
@@ -102,13 +102,13 @@ function BroadcastPlayer({
   useEffect(() => {
     player.play();
     return () => {
-      player.stop();
+      player.pause();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRemove = () => {
-    player.stop();
+    player.pause();
     onRemove();
   };
 

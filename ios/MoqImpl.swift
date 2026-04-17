@@ -234,12 +234,12 @@ import MoQKit
     guard statsTimers[broadcastPath] == nil else { return }
     statsTimers[broadcastPath] = Timer.scheduledTimer(
       withTimeInterval: 0.5, repeats: true
-    ) { [weak self] _ in
-      Task { @MainActor [weak self] in
-        guard let self, let stats = self.players[broadcastPath]?.stats else { return }
+    ) { [players, onEvent] _ in
+      Task { @MainActor [players, onEvent] in
+        guard let stats = players[broadcastPath]?.stats else { return }
         var dict = stats.asDictionary()
         dict["broadcastPath"] = broadcastPath
-        self.onEvent?("playbackStatsUpdated", dict)
+        onEvent?("playbackStatsUpdated", dict)
       }
     }
   }
