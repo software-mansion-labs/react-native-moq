@@ -26,14 +26,6 @@ export default function App() {
     }
   }, [canConnect]);
 
-  const availableBroadcasts = session.broadcasts.filter(
-    (b) => !activePaths.includes(b.path)
-  );
-
-  const activeBroadcasts = activePaths
-    .map((path) => session.broadcasts.find((b) => b.path === path))
-    .filter((b): b is MoQBroadcastInfo => b !== undefined);
-
   const addPlayer = (path: string) => setActivePaths((prev) => [...prev, path]);
 
   const removePlayer = (path: string) =>
@@ -65,23 +57,23 @@ export default function App() {
               <Text style={styles.noBroadcasts}>No broadcasts available</Text>
             )}
 
-          {availableBroadcasts.map((broadcast) => (
-            <View key={broadcast.path} style={styles.availableCard}>
-              <Text style={styles.broadcastPath}>{broadcast.path}</Text>
-              <Button
-                title="Show player"
-                onPress={() => addPlayer(broadcast.path)}
+          {session.broadcasts.map((broadcast) =>
+            activePaths.includes(broadcast.path) ? (
+              <BroadcastPlayer
+                key={broadcast.path}
+                broadcast={broadcast}
+                onRemove={() => removePlayer(broadcast.path)}
               />
-            </View>
-          ))}
-
-          {activeBroadcasts.map((broadcast) => (
-            <BroadcastPlayer
-              key={broadcast.path}
-              broadcast={broadcast}
-              onRemove={() => removePlayer(broadcast.path)}
-            />
-          ))}
+            ) : (
+              <View key={broadcast.path} style={styles.availableCard}>
+                <Text style={styles.broadcastPath}>{broadcast.path}</Text>
+                <Button
+                  title="Show player"
+                  onPress={() => addPlayer(broadcast.path)}
+                />
+              </View>
+            )
+          )}
         </ScrollView>
       </SafeAreaView>
     </SafeAreaProvider>
