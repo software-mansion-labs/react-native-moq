@@ -161,7 +161,6 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
 
     mainHandler.post {
       notifyPlayerChanged(info.path)
-      p.play()
     }
 
     val videoArray = Arguments.createArray()

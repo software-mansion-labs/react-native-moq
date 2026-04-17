@@ -148,7 +148,6 @@ import MoQKit
       NotificationCenter.default.post(
         name: MoqImpl.playerChangedNotification, object: path)
       _observePlayerEvents(p.events, broadcastPath: path)
-      try? await p.play()
     }
 
     onEvent?("broadcastAvailable", [

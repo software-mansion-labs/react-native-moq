@@ -1,5 +1,5 @@
 import type { MoQBroadcastInfo, MoQPlaybackStats } from 'react-native-moq';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   ScrollView,
@@ -13,11 +13,31 @@ import { MoQVideoView, useMoQPlayer, useMoQSession } from 'react-native-moq';
 
 export default function App() {
   const [url, setUrl] = useState('http://192.168.1.48:4443');
+  const [activePaths, setActivePaths] = useState<string[]>([]);
 
   const session = useMoQSession(url);
 
   const canConnect =
     session.sessionState === 'idle' || session.sessionState === 'closed';
+
+  useEffect(() => {
+    if (canConnect) {
+      setActivePaths([]);
+    }
+  }, [canConnect]);
+
+  const availableBroadcasts = session.broadcasts.filter(
+    (b) => !activePaths.includes(b.path)
+  );
+
+  const activeBroadcasts = activePaths
+    .map((path) => session.broadcasts.find((b) => b.path === path))
+    .filter((b): b is MoQBroadcastInfo => b !== undefined);
+
+  const addPlayer = (path: string) => setActivePaths((prev) => [...prev, path]);
+
+  const removePlayer = (path: string) =>
+    setActivePaths((prev) => prev.filter((p) => p !== path));
 
   return (
     <SafeAreaProvider>
@@ -40,13 +60,27 @@ export default function App() {
 
           <StateIndicator state={session.sessionState} />
 
-          {session.broadcasts.length === 0 &&
-            session.sessionState === 'connected' && (
+          {session.sessionState === 'connected' &&
+            session.broadcasts.length === 0 && (
               <Text style={styles.noBroadcasts}>No broadcasts available</Text>
             )}
 
-          {session.broadcasts.map((broadcast) => (
-            <BroadcastPlayer key={broadcast.path} broadcast={broadcast} />
+          {availableBroadcasts.map((broadcast) => (
+            <View key={broadcast.path} style={styles.availableCard}>
+              <Text style={styles.broadcastPath}>{broadcast.path}</Text>
+              <Button
+                title="Show player"
+                onPress={() => addPlayer(broadcast.path)}
+              />
+            </View>
+          ))}
+
+          {activeBroadcasts.map((broadcast) => (
+            <BroadcastPlayer
+              key={broadcast.path}
+              broadcast={broadcast}
+              onRemove={() => removePlayer(broadcast.path)}
+            />
           ))}
         </ScrollView>
       </SafeAreaView>
@@ -56,12 +90,34 @@ export default function App() {
 
 // ── Per-broadcast player ─────────────────────────────────────────────────────
 
-function BroadcastPlayer({ broadcast }: { broadcast: MoQBroadcastInfo }) {
+function BroadcastPlayer({
+  broadcast,
+  onRemove,
+}: {
+  broadcast: MoQBroadcastInfo;
+  onRemove: () => void;
+}) {
   const player = useMoQPlayer(broadcast.path);
+
+  useEffect(() => {
+    player.play();
+    return () => {
+      player.stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleRemove = () => {
+    player.stop();
+    onRemove();
+  };
 
   return (
     <View style={styles.broadcastCard}>
-      <Text style={styles.broadcastPath}>{broadcast.path}</Text>
+      <View style={styles.broadcastHeader}>
+        <Text style={styles.broadcastPath}>{broadcast.path}</Text>
+        <Button title="Disconnect" onPress={handleRemove} color="#ef4444" />
+      </View>
 
       <MoQVideoView broadcastPath={broadcast.path} style={styles.video} />
 
@@ -192,12 +248,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 8,
   },
+  availableCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+  },
   broadcastCard: {
     gap: 8,
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 8,
     padding: 12,
+  },
+  broadcastHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   broadcastPath: {
     fontSize: 13,
