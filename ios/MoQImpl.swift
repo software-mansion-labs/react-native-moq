@@ -2,19 +2,19 @@ import AVFoundation
 import Foundation
 import MoQKit
 
-@objc public class MoqImpl: NSObject {
+@objc public class MoQImpl: NSObject {
   // MARK: - Singleton
 
-  @objc public static let shared = MoqImpl()
+  @objc public static let shared = MoQImpl()
   private override init() {}
 
-  // MARK: - Event callback (set by Moq.mm, called on main actor)
+  // MARK: - Event callback (set by MoQ.mm, called on main actor)
 
   @objc public var onEvent: ((_ name: String, _ body: [String: Any]) -> Void)?
 
   // MARK: - Video layer notification
 
-  static let playerChangedNotification = Notification.Name("MoqImpl.playerChanged")
+  static let playerChangedNotification = Notification.Name("MoQImpl.playerChanged")
 
   @MainActor @objc public func videoLayer(for broadcastPath: String) -> AVSampleBufferDisplayLayer? {
     players[broadcastPath]?.videoLayer
@@ -153,7 +153,7 @@ import MoQKit
     for (_, timer) in statsTimers { timer.invalidate() }
     statsTimers = [:]
 
-    NotificationCenter.default.post(name: MoqImpl.playerChangedNotification, object: nil)
+    NotificationCenter.default.post(name: MoQImpl.playerChangedNotification, object: nil)
 
     Task {
       for (_, p) in allPlayers { await p.stopAll() }
@@ -182,7 +182,7 @@ import MoQKit
     if let p {
       players[path] = p
       NotificationCenter.default.post(
-        name: MoqImpl.playerChangedNotification, object: path)
+        name: MoQImpl.playerChangedNotification, object: path)
       _observePlayerEvents(p.events, broadcastPath: path)
     }
 
@@ -229,7 +229,7 @@ import MoQKit
     }
     if notifyVideoViews {
       NotificationCenter.default.post(
-        name: MoqImpl.playerChangedNotification, object: path)
+        name: MoQImpl.playerChangedNotification, object: path)
     }
   }
 

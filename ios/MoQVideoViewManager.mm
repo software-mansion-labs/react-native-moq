@@ -1,5 +1,5 @@
 #import <React/RCTViewManager.h>
-#import <Moq/Moq-Swift.h>
+#import <MoQ/MoQ-Swift.h>
 
 @interface MoQVideoViewManager : RCTViewManager
 @end

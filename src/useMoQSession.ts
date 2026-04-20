@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
-import NativeMoq from './NativeMoq';
+import NativeMoQ from './NativeMoQ';
 import type { MoQBroadcastInfo, MoQSession, MoQSessionState } from './types';
 
-const moqEmitter = new NativeEventEmitter(NativeMoq);
+const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
 export interface UseMoQSessionOptions {
   /** Track namespace prefix passed to MoQSession. Defaults to `''`. */
@@ -51,16 +51,16 @@ export function useMoQSession(
 
     return () => {
       subs.forEach((s) => s.remove());
-      NativeMoq.disconnect();
+      NativeMoQ.disconnect();
     };
   }, []);
 
   const connect = useCallback(() => {
-    NativeMoq.connect(urlRef.current, prefixRef.current, latencyRef.current);
+    NativeMoQ.connect(urlRef.current, prefixRef.current, latencyRef.current);
   }, []);
 
   const disconnect = useCallback(() => {
-    NativeMoq.disconnect();
+    NativeMoQ.disconnect();
     setSessionState('idle');
     setBroadcasts([]);
   }, []);

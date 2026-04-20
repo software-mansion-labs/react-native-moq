@@ -3,7 +3,7 @@ PODS:
   - hermes-engine (250829098.0.9):
     - hermes-engine/Pre-built (= 250829098.0.9)
   - hermes-engine/Pre-built (250829098.0.9)
-  - Moq (0.0.1):
+  - MoQ (0.0.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1881,7 +1881,7 @@ PODS:
 DEPENDENCIES:
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
-  - Moq (from `../..`)
+  - MoQ (from `../..`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
   - RCTSwiftUI (from `../node_modules/react-native/ReactApple/RCTSwiftUI`)
@@ -1962,7 +1962,7 @@ EXTERNAL SOURCES:
   hermes-engine:
     :podspec: "../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
     :tag: hermes-v250829098.0.9
-  Moq:
+  MoQ:
     :path: "../.."
   RCTDeprecation:
     :path: "../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation"
@@ -2112,7 +2112,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   FBLazyVector: e97c19a5a442429d1988f182a1940fb08df514da
   hermes-engine: fb317aed34e12c4d6e7de4b7e5d236a9805ce646
-  Moq: ebd37cf57df9156fe307cd1e324821f3ec6e488c
+  MoQ: 4991008e7f9834f15cbc8150b48d52ed44319fb6
   RCTDeprecation: af44b104091a34482596cd9bd7e8d90c4e9b4bd7
   RCTRequired: bb77b070f75f53398ce43c0aaaa58337cebe2bf6
   RCTSwiftUI: afc0a0a635860da1040a0b894bfd529da06d7810
@@ -2186,6 +2186,6 @@ SPEC CHECKSUMS:
   ReactNativeDependencies: 7c29d6a355920a91fc578833d0b26f4ab11fb526
   Yoga: 846fbe6f595136be802ad81d05688ff748839764
 
-PODFILE CHECKSUM: bd5dd6cee78d25924f7e070629a0193791a2e04d
+PODFILE CHECKSUM: 21886fb3c2609c65dd49fdafc92d70c27765c31e
 
 COCOAPODS: 1.16.2

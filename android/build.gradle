@@ -1,5 +1,5 @@
 buildscript {
-  ext.Moq = [
+  ext.MoQ = [
     kotlinVersion: "2.0.21",
     minSdkVersion: 30,
     compileSdkVersion: 36,
@@ -11,7 +11,7 @@ buildscript {
       return rootProject.ext.get(prop)
     }
 
-    return Moq[prop]
+    return MoQ[prop]
   }
 
   repositories {

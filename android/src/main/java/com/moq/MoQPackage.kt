@@ -7,16 +7,16 @@ import com.facebook.react.module.model.ReactModuleInfo
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
 
-class MoqPackage : BaseReactPackage() {
+class MoQPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
-    return if (name == MoqModule.NAME) MoqModule(reactContext) else null
+    return if (name == MoQModule.NAME) MoQModule(reactContext) else null
   }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
     mapOf(
-      MoqModule.NAME to ReactModuleInfo(
-        name = MoqModule.NAME,
-        className = MoqModule.NAME,
+      MoQModule.NAME to ReactModuleInfo(
+        name = MoQModule.NAME,
+        className = MoQModule.NAME,
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,
@@ -26,6 +26,6 @@ class MoqPackage : BaseReactPackage() {
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
-    return listOf(MoqVideoViewManager())
+    return listOf(MoQVideoViewManager())
   }
 }

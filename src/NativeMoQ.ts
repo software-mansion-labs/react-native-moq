@@ -17,4 +17,4 @@ export interface Spec extends TurboModule {
   switchAudioTrack(broadcastPath: string, trackName: string): void;
 }
 
-export default TurboModuleRegistry.getEnforcing<Spec>('Moq');
+export default TurboModuleRegistry.getEnforcing<Spec>('MoQ');

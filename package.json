@@ -117,7 +117,7 @@
     ]
   },
   "codegenConfig": {
-    "name": "MoqSpec",
+    "name": "MoQSpec",
     "type": "modules",
     "jsSrcsDir": "src",
     "android": {

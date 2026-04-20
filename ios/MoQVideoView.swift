@@ -7,7 +7,7 @@ public class MoQVideoView: UIView {
 
   @objc var broadcastPath: String? {
     didSet {
-      attach(layer: broadcastPath.flatMap { MoqImpl.shared.videoLayer(for: $0) })
+      attach(layer: broadcastPath.flatMap { MoQImpl.shared.videoLayer(for: $0) })
     }
   }
 
@@ -17,7 +17,7 @@ public class MoQVideoView: UIView {
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(playerDidChange(_:)),
-      name: MoqImpl.playerChangedNotification,
+      name: MoQImpl.playerChangedNotification,
       object: nil
     )
   }
@@ -39,7 +39,7 @@ public class MoQVideoView: UIView {
     let changedPath = notification.object as? String
     // nil object = disconnect (all players removed); otherwise filter by path
     guard changedPath == nil || changedPath == broadcastPath else { return }
-    attach(layer: broadcastPath.flatMap { MoqImpl.shared.videoLayer(for: $0) })
+    attach(layer: broadcastPath.flatMap { MoQImpl.shared.videoLayer(for: $0) })
   }
 
   private func attach(layer newLayer: AVSampleBufferDisplayLayer?) {

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
-import NativeMoq from './NativeMoq';
+import NativeMoQ from './NativeMoQ';
 import type {
   MoQPlaybackStats,
   MoQPlayerState,
   MoQVideoTrackInfo,
 } from './types';
 
-const moqEmitter = new NativeEventEmitter(NativeMoq);
+const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
 export interface UseMoQPlayerOptions {
   /** Override the target buffering latency in milliseconds for this player. */
@@ -43,7 +43,7 @@ export function useMoQPlayer(
 
   useEffect(() => {
     if (targetLatencyMs !== undefined) {
-      NativeMoq.updateTargetLatency(broadcastPath, targetLatencyMs);
+      NativeMoQ.updateTargetLatency(broadcastPath, targetLatencyMs);
     }
   }, [broadcastPath, targetLatencyMs]);
 
@@ -91,29 +91,29 @@ export function useMoQPlayer(
   }, []);
 
   const play = useCallback(() => {
-    NativeMoq.play(pathRef.current);
+    NativeMoQ.play(pathRef.current);
     setIsPaused(false);
   }, []);
 
   const pause = useCallback(() => {
-    NativeMoq.pause(pathRef.current);
+    NativeMoQ.pause(pathRef.current);
     setIsPaused(true);
   }, []);
 
   const stop = useCallback(() => {
-    NativeMoq.stopPlayer(pathRef.current);
+    NativeMoQ.stopPlayer(pathRef.current);
   }, []);
 
   const updateTargetLatency = useCallback((ms: number) => {
-    NativeMoq.updateTargetLatency(pathRef.current, ms);
+    NativeMoQ.updateTargetLatency(pathRef.current, ms);
   }, []);
 
   const switchVideoTrack = useCallback((trackName: string) => {
-    NativeMoq.switchVideoTrack(pathRef.current, trackName);
+    NativeMoQ.switchVideoTrack(pathRef.current, trackName);
   }, []);
 
   const switchAudioTrack = useCallback((trackName: string) => {
-    NativeMoq.switchAudioTrack(pathRef.current, trackName);
+    NativeMoQ.switchAudioTrack(pathRef.current, trackName);
   }, []);
 
   return {

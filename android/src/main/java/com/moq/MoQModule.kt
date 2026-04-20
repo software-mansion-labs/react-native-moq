@@ -11,7 +11,6 @@ import com.swmansion.moqkit.MoQBroadcastInfo
 import com.swmansion.moqkit.MoQPlayer
 import com.swmansion.moqkit.MoQSession
 import com.swmansion.moqkit.MoQTrackInfo
-import com.swmansion.moqkit.MoQVideoTrackInfo
 import com.swmansion.moqkit.PlaybackStats
 import com.swmansion.moqkit.StallStats
 import java.util.concurrent.ConcurrentHashMap
@@ -23,7 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactContext) {
+class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactContext) {
 
   private val moduleScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -36,10 +35,10 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
   private val statsRunnables = ConcurrentHashMap<String, Runnable>()
   private val broadcastInfos = ConcurrentHashMap<String, MoQBroadcastInfo>()
 
-  // MARK: - Companion: shared player map and listeners for MoqVideoView
+  // MARK: - Companion: shared player map and listeners for MoQVideoView
 
   companion object {
-    const val NAME = NativeMoqSpec.NAME
+    const val NAME = NativeMoQSpec.NAME
 
     val players = ConcurrentHashMap<String, MoQPlayer>()
     private val playerChangeListeners =
@@ -71,7 +70,7 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
       }
   }
 
-  // MARK: - NativeMoqSpec
+  // MARK: - NativeMoQSpec
 
   override fun addListener(eventName: String) {}
 
