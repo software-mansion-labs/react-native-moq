@@ -13,6 +13,8 @@ export interface Spec extends TurboModule {
   pause(broadcastPath: string): void;
   stopPlayer(broadcastPath: string): void;
   updateTargetLatency(broadcastPath: string, ms: number): void;
+  switchVideoTrack(broadcastPath: string, trackName: string): void;
+  switchAudioTrack(broadcastPath: string, trackName: string): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Moq');

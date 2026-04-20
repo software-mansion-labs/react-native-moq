@@ -8,12 +8,18 @@ export type MoQSessionState =
 export interface MoQVideoTrackInfo {
   name: string;
   codec: string;
+  width?: number;
+  height?: number;
+  bitrate?: number;
+  framerate?: number;
 }
 
 export interface MoQAudioTrackInfo {
   name: string;
   codec: string;
   sampleRate: number;
+  channelCount?: number;
+  bitrate?: number;
 }
 
 export interface MoQBroadcastInfo {
@@ -55,8 +61,12 @@ export interface MoQPlayerState {
   isPlaying: boolean;
   isPaused: boolean;
   playbackStats: MoQPlaybackStats | null;
+  currentVideoTrackName?: string;
+  currentAudioTrackName?: string;
   play(): void;
   pause(): void;
   stop(): void;
   updateTargetLatency(ms: number): void;
+  switchVideoTrack(trackName: string): void;
+  switchAudioTrack(trackName: string): void;
 }

@@ -49,6 +49,14 @@ RCT_EXPORT_MODULE()
   [[MoqImpl shared] updateTargetLatency:broadcastPath ms:(int)ms];
 }
 
+- (void)switchVideoTrack:(NSString *)broadcastPath trackName:(NSString *)trackName {
+  [[MoqImpl shared] switchVideoTrack:broadcastPath trackName:trackName];
+}
+
+- (void)switchAudioTrack:(NSString *)broadcastPath trackName:(NSString *)trackName {
+  [[MoqImpl shared] switchAudioTrack:broadcastPath trackName:trackName];
+}
+
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
 {

@@ -11,6 +11,7 @@ import com.swmansion.moqkit.MoQBroadcastInfo
 import com.swmansion.moqkit.MoQPlayer
 import com.swmansion.moqkit.MoQSession
 import com.swmansion.moqkit.MoQTrackInfo
+import com.swmansion.moqkit.MoQVideoTrackInfo
 import com.swmansion.moqkit.PlaybackStats
 import com.swmansion.moqkit.StallStats
 import java.util.concurrent.ConcurrentHashMap
@@ -33,6 +34,7 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
 
   private val playerEventJobs = ConcurrentHashMap<String, Job>()
   private val statsRunnables = ConcurrentHashMap<String, Runnable>()
+  private val broadcastInfos = ConcurrentHashMap<String, MoQBroadcastInfo>()
 
   // MARK: - Companion: shared player map and listeners for MoqVideoView
 
@@ -136,6 +138,23 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
     players[broadcastPath]?.updateTargetLatency(ms.toInt())
   }
 
+  override fun switchVideoTrack(broadcastPath: String, trackName: String) {
+    val player = players[broadcastPath] ?: return
+    val track = broadcastInfos[broadcastPath]?.videoTracks?.find { it.name == trackName } ?: return
+    player.switchVideoTrack(track) {
+      val map = Arguments.createMap()
+      map.putString("broadcastPath", broadcastPath)
+      map.putString("type", "trackSwitched")
+      map.putString("trackKind", "video")
+      map.putString("trackName", trackName)
+      emitEvent("playerEvent", map)
+    }
+  }
+
+  override fun switchAudioTrack(broadcastPath: String, trackName: String) {
+    // Audio track switching is not supported on Android
+  }
+
   override fun invalidate() {
     super.invalidate()
     disconnect()
@@ -146,9 +165,13 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
 
   private fun handleBroadcastAvailable(info: MoQBroadcastInfo, targetLatencyMs: Int) {
     removePlayer(info.path, notify = false)
+    broadcastInfos[info.path] = info
 
+    val sortedVideo = info.videoTracks.sortedByDescending {
+      it.config.coded?.let { d -> d.width.toLong() * d.height.toLong() } ?: 0L
+    }
     val tracks = mutableListOf<MoQTrackInfo>()
-    info.videoTracks.firstOrNull()?.let { tracks.add(it) }
+    sortedVideo.firstOrNull()?.let { tracks.add(it) }
     info.audioTracks.firstOrNull()?.let { tracks.add(it) }
 
     val p = MoQPlayer(
@@ -168,6 +191,12 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
       val item = Arguments.createMap()
       item.putString("name", track.name)
       item.putString("codec", track.config.codec)
+      track.config.coded?.let { size ->
+        item.putInt("width", size.width.toInt())
+        item.putInt("height", size.height.toInt())
+      }
+      track.config.bitrate?.let { item.putDouble("bitrate", it.toDouble()) }
+      track.config.framerate?.let { item.putDouble("framerate", it) }
       videoArray.pushMap(item)
     }
     val audioArray = Arguments.createArray()
@@ -176,6 +205,8 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
       item.putString("name", track.name)
       item.putString("codec", track.config.codec)
       item.putInt("sampleRate", track.config.sampleRate.toInt())
+      item.putInt("channelCount", track.config.channelCount.toInt())
+      track.config.bitrate?.let { item.putDouble("bitrate", it.toDouble()) }
       audioArray.pushMap(item)
     }
     val map = Arguments.createMap()
@@ -195,6 +226,7 @@ class MoqModule(reactContext: ReactApplicationContext) : NativeMoqSpec(reactCont
   private fun removePlayer(path: String, notify: Boolean = true) {
     playerEventJobs.remove(path)?.cancel()
     stopStatsPolling(path)
+    broadcastInfos.remove(path)
     players.remove(path)?.stop()
     if (notify) {
       mainHandler.post { notifyPlayerChanged(path) }

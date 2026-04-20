@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		05A4443FFAD88909E1529436 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		50A47D9C2F92BC860074E548 /* MoQKit in Frameworks */ = {isa = PBXBuildFile; productRef = 50A47D9B2F92BC860074E548 /* MoQKit */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		BE9A4BDF26517AB5BCE9115A /* Pods_MoqExample.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3006685728BD44382A12A0C1 /* Pods_MoqExample.framework */; };
@@ -33,6 +34,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BE9A4BDF26517AB5BCE9115A /* Pods_MoqExample.framework in Frameworks */,
+				50A47D9C2F92BC860074E548 /* MoQKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -144,6 +146,9 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
+			packageReferences = (
+				50A47D9A2F92BC860074E548 /* XCRemoteSwiftPackageReference "moq-kit" */,
+			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -191,13 +196,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MoqExample/Pods-MoqExample-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MoqExample/Pods-MoqExample-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -234,13 +235,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MoqExample/Pods-MoqExample-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MoqExample/Pods-MoqExample-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -523,6 +520,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		50A47D9A2F92BC860074E548 /* XCRemoteSwiftPackageReference "moq-kit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/software-mansion-labs/moq-kit";
+			requirement = {
+				kind = exactVersion;
+				version = "0.0.1-alpha3";
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		50A47D9B2F92BC860074E548 /* MoQKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50A47D9A2F92BC860074E548 /* XCRemoteSwiftPackageReference "moq-kit" */;
+			productName = MoQKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }

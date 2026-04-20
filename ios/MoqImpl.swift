@@ -30,6 +30,9 @@ import MoQKit
   private var targetLatencyMs: UInt64 = 200
 
   private var players: [String: MoQPlayer] = [:]
+  private var broadcastInfos: [String: MoQBroadcastInfo] = [:]
+  private var pendingVideoTrackName: [String: String] = [:]
+  private var pendingAudioTrackName: [String: String] = [:]
   private var playerEventsTasks: [String: Task<Void, Never>] = [:]
   private var statsTimers: [String: Timer] = [:]
 
@@ -75,6 +78,30 @@ import MoQKit
     }
   }
 
+  @objc(switchVideoTrack:trackName:)
+  public func switchVideoTrack(broadcastPath: String, trackName: String) {
+    Task { @MainActor in
+      guard
+        let player = self.players[broadcastPath],
+        let track = self.broadcastInfos[broadcastPath]?.videoTracks.first(where: { $0.name == trackName })
+      else { return }
+      self.pendingVideoTrackName[broadcastPath] = trackName
+      try? await player.switchTrack(to: track)
+    }
+  }
+
+  @objc(switchAudioTrack:trackName:)
+  public func switchAudioTrack(broadcastPath: String, trackName: String) {
+    Task { @MainActor in
+      guard
+        let player = self.players[broadcastPath],
+        let track = self.broadcastInfos[broadcastPath]?.audioTracks.first(where: { $0.name == trackName })
+      else { return }
+      self.pendingAudioTrackName[broadcastPath] = trackName
+      try? await player.switchTrack(to: track)
+    }
+  }
+
   // MARK: - Private: connect / disconnect
 
   @MainActor
@@ -114,6 +141,9 @@ import MoQKit
     let allPlayers = players
     session = nil
     players = [:]
+    broadcastInfos = [:]
+    pendingVideoTrackName = [:]
+    pendingAudioTrackName = [:]
 
     for (path, _) in playerEventsTasks {
       playerEventsTasks[path]?.cancel()
@@ -137,9 +167,15 @@ import MoQKit
   private func _handleBroadcastAvailable(_ info: MoQBroadcastInfo) async {
     let path = info.path
     await _removePlayer(for: path, notifyVideoViews: false)
+    broadcastInfos[path] = info
 
+    let sortedVideo = info.videoTracks.sorted {
+      let a = $0.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
+      let b = $1.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
+      return a > b
+    }
     var tracks: [any MoQTrackInfo] = []
-    if let v = info.videoTracks.first { tracks.append(v) }
+    if let v = sortedVideo.first { tracks.append(v) }
     if let a = info.audioTracks.first { tracks.append(a) }
 
     let p = try? MoQPlayer(tracks: tracks, targetBufferingMs: targetLatencyMs)
@@ -152,12 +188,25 @@ import MoQKit
 
     onEvent?("broadcastAvailable", [
       "path": path,
-      "videoTracks": info.videoTracks.map {
-        ["name": $0.name, "codec": $0.config.codec] as [String: Any]
+      "videoTracks": info.videoTracks.map { t -> [String: Any] in
+        var d: [String: Any] = ["name": t.name, "codec": t.config.codec]
+        if let size = t.config.coded {
+          d["width"] = size.width
+          d["height"] = size.height
+        }
+        if let bitrate = t.config.bitrate { d["bitrate"] = bitrate }
+        if let fps = t.config.framerate { d["framerate"] = fps }
+        return d
       },
-      "audioTracks": info.audioTracks.map {
-        ["name": $0.name, "codec": $0.config.codec, "sampleRate": $0.config.sampleRate]
-          as [String: Any]
+      "audioTracks": info.audioTracks.map { t -> [String: Any] in
+        var d: [String: Any] = [
+          "name": t.name,
+          "codec": t.config.codec,
+          "sampleRate": t.config.sampleRate,
+          "channelCount": t.config.channelCount,
+        ]
+        if let bitrate = t.config.bitrate { d["bitrate"] = bitrate }
+        return d
       },
     ])
   }
@@ -171,6 +220,9 @@ import MoQKit
   @MainActor
   private func _removePlayer(for path: String, notifyVideoViews: Bool = true) async {
     if let p = players.removeValue(forKey: path) {
+      broadcastInfos.removeValue(forKey: path)
+      pendingVideoTrackName.removeValue(forKey: path)
+      pendingAudioTrackName.removeValue(forKey: path)
       playerEventsTasks.removeValue(forKey: path)?.cancel()
       _stopStatsPolling(for: path)
       await p.stopAll()
@@ -218,10 +270,23 @@ import MoQKit
             "trackKind": kind.rawValue, "message": message,
           ])
         case .trackSwitched(let kind):
-          self.onEvent?("playerEvent", [
+          var body: [String: Any] = [
             "broadcastPath": broadcastPath, "type": "trackSwitched",
             "trackKind": kind.rawValue,
-          ])
+          ]
+          switch kind {
+          case .video:
+            if let name = self.pendingVideoTrackName.removeValue(forKey: broadcastPath) {
+              body["trackName"] = name
+            }
+          case .audio:
+            if let name = self.pendingAudioTrackName.removeValue(forKey: broadcastPath) {
+              body["trackName"] = name
+            }
+          @unknown default:
+            break
+          }
+          self.onEvent?("playerEvent", body)
         }
       }
     }
