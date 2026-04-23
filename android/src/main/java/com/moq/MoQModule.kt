@@ -6,13 +6,12 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import com.swmansion.moqkit.MoQBroadcastEvent
-import com.swmansion.moqkit.MoQBroadcastInfo
-import com.swmansion.moqkit.MoQPlayer
-import com.swmansion.moqkit.MoQSession
-import com.swmansion.moqkit.MoQTrackInfo
-import com.swmansion.moqkit.PlaybackStats
-import com.swmansion.moqkit.StallStats
+import com.swmansion.moqkit.Session
+import com.swmansion.moqkit.subscribe.BroadcastSubscription
+import com.swmansion.moqkit.subscribe.Catalog
+import com.swmansion.moqkit.subscribe.PlaybackStats
+import com.swmansion.moqkit.subscribe.Player
+import com.swmansion.moqkit.subscribe.StallStats
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
@@ -27,20 +26,20 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private val moduleScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
   private val mainHandler = Handler(Looper.getMainLooper())
 
-  private var session: MoQSession? = null
+  private var session: Session? = null
+  private var subscription: BroadcastSubscription? = null
   private var stateJob: Job? = null
   private var broadcastsJob: Job? = null
 
   private val playerEventJobs = ConcurrentHashMap<String, Job>()
   private val statsRunnables = ConcurrentHashMap<String, Runnable>()
-  private val broadcastInfos = ConcurrentHashMap<String, MoQBroadcastInfo>()
 
   // MARK: - Companion: shared player map and listeners for MoQVideoView
 
   companion object {
     const val NAME = NativeMoQSpec.NAME
 
-    val players = ConcurrentHashMap<String, MoQPlayer>()
+    val players = ConcurrentHashMap<String, Player>()
     private val playerChangeListeners =
       ConcurrentHashMap<String, CopyOnWriteArrayList<() -> Unit>>()
 
@@ -60,13 +59,13 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       }
     }
 
-    fun MoQSession.State.toStringValue(): String =
+    fun Session.State.toStringValue(): String =
       when (this) {
-        MoQSession.State.Idle -> "idle"
-        MoQSession.State.Connecting -> "connecting"
-        MoQSession.State.Connected -> "connected"
-        MoQSession.State.Closed -> "closed"
-        is MoQSession.State.Error -> "error:${this.message}"
+        Session.State.Idle -> "idle"
+        Session.State.Connecting -> "connecting"
+        Session.State.Connected -> "connected"
+        Session.State.Closed -> "closed"
+        is Session.State.Error -> "error:${this.message}"
       }
   }
 
@@ -79,7 +78,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   override fun connect(url: String, prefix: String, targetLatencyMs: Double) {
     val latencyMs = targetLatencyMs.toInt()
     moduleScope.launch {
-      val s = MoQSession(url = url, parentScope = moduleScope)
+      val s = Session(url = url, parentScope = moduleScope)
       session = s
 
       stateJob = launch {
@@ -90,18 +89,28 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         }
       }
 
-      broadcastsJob = launch {
-        s.broadcasts.collect { event ->
-          when (event) {
-            is MoQBroadcastEvent.Available -> handleBroadcastAvailable(event.info, latencyMs)
-            is MoQBroadcastEvent.Unavailable -> handleBroadcastUnavailable(event.path)
-          }
-        }
-      }
-
       try {
         s.connect()
       } catch (_: Exception) {}
+
+      val sub = s.subscribe(prefix = prefix)
+      subscription = sub
+
+      broadcastsJob = launch {
+        sub.broadcasts.collect { broadcast ->
+          val path = broadcast.path
+          launch {
+            try {
+              broadcast.catalogs().collect { catalog ->
+                handleBroadcastAvailable(catalog, latencyMs)
+              }
+            } finally {
+              broadcast.close()
+            }
+            handleBroadcastUnavailable(path)
+          }
+        }
+      }
     }
   }
 
@@ -110,6 +119,9 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     stateJob = null
     broadcastsJob?.cancel()
     broadcastsJob = null
+
+    subscription?.close()
+    subscription = null
 
     playerEventJobs.keys.toList().forEach { path -> removePlayer(path, notify = false) }
 
@@ -139,15 +151,13 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun switchVideoTrack(broadcastPath: String, trackName: String) {
     val player = players[broadcastPath] ?: return
-    val track = broadcastInfos[broadcastPath]?.videoTracks?.find { it.name == trackName } ?: return
-    player.switchVideoTrack(track) {
-      val map = Arguments.createMap()
-      map.putString("broadcastPath", broadcastPath)
-      map.putString("type", "trackSwitched")
-      map.putString("trackKind", "video")
-      map.putString("trackName", trackName)
-      emitEvent("playerEvent", map)
-    }
+    player.switchTrack(trackName)
+    val map = Arguments.createMap()
+    map.putString("broadcastPath", broadcastPath)
+    map.putString("type", "trackSwitched")
+    map.putString("trackKind", "video")
+    map.putString("trackName", trackName)
+    emitEvent("playerEvent", map)
   }
 
   override fun switchAudioTrack(broadcastPath: String, trackName: String) {
@@ -162,31 +172,33 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   // MARK: - Broadcast events
 
-  private fun handleBroadcastAvailable(info: MoQBroadcastInfo, targetLatencyMs: Int) {
-    removePlayer(info.path, notify = false)
-    broadcastInfos[info.path] = info
+  private fun handleBroadcastAvailable(catalog: Catalog, targetLatencyMs: Int) {
+    val path = catalog.path
 
-    val sortedVideo = info.videoTracks.sortedByDescending {
-      it.config.coded?.let { d -> d.width.toLong() * d.height.toLong() } ?: 0L
-    }
-    val tracks = mutableListOf<MoQTrackInfo>()
-    sortedVideo.firstOrNull()?.let { tracks.add(it) }
-    info.audioTracks.firstOrNull()?.let { tracks.add(it) }
+    if (players[path] == null) {
+      val sortedVideo = catalog.videoTracks.sortedByDescending {
+        it.config.coded?.let { d -> d.width.toLong() * d.height.toLong() } ?: 0L
+      }
+      val videoTrackName = sortedVideo.firstOrNull()?.name
+      val audioTrackName = catalog.audioTracks.firstOrNull()?.name
 
-    val p = MoQPlayer(
-      tracks = tracks,
-      targetLatencyMs = targetLatencyMs,
-      parentScope = moduleScope,
-    )
-    players[info.path] = p
-    observePlayerEvents(p, info.path)
+      val p = Player(
+        catalog = catalog,
+        videoTrackName = videoTrackName,
+        audioTrackName = audioTrackName,
+        targetLatencyMs = targetLatencyMs,
+        parentScope = moduleScope,
+      )
+      players[path] = p
+      observePlayerEvents(p, path)
 
-    mainHandler.post {
-      notifyPlayerChanged(info.path)
+      mainHandler.post {
+        notifyPlayerChanged(path)
+      }
     }
 
     val videoArray = Arguments.createArray()
-    info.videoTracks.forEach { track ->
+    catalog.videoTracks.forEach { track ->
       val item = Arguments.createMap()
       item.putString("name", track.name)
       item.putString("codec", track.config.codec)
@@ -199,7 +211,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       videoArray.pushMap(item)
     }
     val audioArray = Arguments.createArray()
-    info.audioTracks.forEach { track ->
+    catalog.audioTracks.forEach { track ->
       val item = Arguments.createMap()
       item.putString("name", track.name)
       item.putString("codec", track.config.codec)
@@ -209,7 +221,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       audioArray.pushMap(item)
     }
     val map = Arguments.createMap()
-    map.putString("path", info.path)
+    map.putString("path", path)
     map.putArray("videoTracks", videoArray)
     map.putArray("audioTracks", audioArray)
     emitEvent("broadcastAvailable", map)
@@ -225,7 +237,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private fun removePlayer(path: String, notify: Boolean = true) {
     playerEventJobs.remove(path)?.cancel()
     stopStatsPolling(path)
-    broadcastInfos.remove(path)
     players.remove(path)?.stop()
     if (notify) {
       mainHandler.post { notifyPlayerChanged(path) }
@@ -234,31 +245,31 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   // MARK: - Player events
 
-  private fun observePlayerEvents(p: MoQPlayer, broadcastPath: String) {
+  private fun observePlayerEvents(p: Player, broadcastPath: String) {
     playerEventJobs[broadcastPath]?.cancel()
     playerEventJobs[broadcastPath] = moduleScope.launch {
       p.events.collect { event ->
         val map = Arguments.createMap()
         map.putString("broadcastPath", broadcastPath)
         when (event) {
-          is MoQPlayer.Event.TrackPlaying -> {
+          is Player.Event.TrackPlaying -> {
             map.putString("type", "trackPlaying")
             map.putString("trackKind", event.kind)
             startStatsPolling(p, broadcastPath)
           }
-          is MoQPlayer.Event.TrackPaused -> {
+          is Player.Event.TrackPaused -> {
             map.putString("type", "trackPaused")
             map.putString("trackKind", event.kind)
           }
-          is MoQPlayer.Event.TrackStopped -> {
+          is Player.Event.TrackStopped -> {
             map.putString("type", "trackStopped")
             map.putString("trackKind", event.kind)
           }
-          MoQPlayer.Event.AllTracksStopped -> {
+          Player.Event.AllTracksStopped -> {
             map.putString("type", "allTracksStopped")
             stopStatsPolling(broadcastPath)
           }
-          is MoQPlayer.Event.Error -> {
+          is Player.Event.Error -> {
             map.putString("type", "error")
             map.putString("trackKind", event.kind)
             map.putString("message", event.message)
@@ -271,7 +282,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   // MARK: - Stats polling
 
-  private fun startStatsPolling(player: MoQPlayer, broadcastPath: String) {
+  private fun startStatsPolling(player: Player, broadcastPath: String) {
     stopStatsPolling(broadcastPath)
     val runnable = object : Runnable {
       override fun run() {

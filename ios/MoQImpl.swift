@@ -22,18 +22,20 @@ import MoQKit
 
   // MARK: - State (readable from any context)
 
-  private(set) var currentState: MoQSessionState = .idle
+  private(set) var currentState: SessionState = .idle
 
   // MARK: - Private
 
-  private var session: MoQSession?
+  private var session: Session?
+  private var subscription: BroadcastSubscription?
   private var targetLatencyMs: UInt64 = 200
 
-  private var players: [String: MoQPlayer] = [:]
-  private var broadcastInfos: [String: MoQBroadcastInfo] = [:]
+  private var players: [String: Player] = [:]
+  private var broadcastCatalogs: [String: Catalog] = [:]
   private var pendingVideoTrackName: [String: String] = [:]
   private var pendingAudioTrackName: [String: String] = [:]
   private var playerEventsTasks: [String: Task<Void, Never>] = [:]
+  private var catalogTasks: [String: Task<Void, Never>] = [:]
   private var statsTimers: [String: Timer] = [:]
 
   private var stateTask: Task<Void, Never>?
@@ -81,24 +83,18 @@ import MoQKit
   @objc(switchVideoTrack:trackName:)
   public func switchVideoTrack(broadcastPath: String, trackName: String) {
     Task { @MainActor in
-      guard
-        let player = self.players[broadcastPath],
-        let track = self.broadcastInfos[broadcastPath]?.videoTracks.first(where: { $0.name == trackName })
-      else { return }
+      guard let player = self.players[broadcastPath] else { return }
       self.pendingVideoTrackName[broadcastPath] = trackName
-      try? await player.switchTrack(to: track)
+      try? await player.switchTrack(to: trackName)
     }
   }
 
   @objc(switchAudioTrack:trackName:)
   public func switchAudioTrack(broadcastPath: String, trackName: String) {
     Task { @MainActor in
-      guard
-        let player = self.players[broadcastPath],
-        let track = self.broadcastInfos[broadcastPath]?.audioTracks.first(where: { $0.name == trackName })
-      else { return }
+      guard let player = self.players[broadcastPath] else { return }
       self.pendingAudioTrackName[broadcastPath] = trackName
-      try? await player.switchTrack(to: track)
+      try? await player.switchAudioTrack(to: trackName)
     }
   }
 
@@ -109,7 +105,7 @@ import MoQKit
     guard session == nil else { return }
     self.targetLatencyMs = targetLatencyMs
 
-    let s = MoQSession(url: url, prefix: prefix)
+    let s = Session(url: url)
     session = s
 
     stateTask = Task { @MainActor in
@@ -119,29 +115,36 @@ import MoQKit
       }
     }
 
-    broadcastsTask = Task { @MainActor in
-      for await event in s.broadcasts {
-        switch event {
-        case .available(let info): await self._handleBroadcastAvailable(info)
-        case .unavailable(let path): await self._handleBroadcastUnavailable(path: path)
+    Task { @MainActor in
+      try? await s.connect()
+      guard let sub = try? await s.subscribe(prefix: prefix) else { return }
+      self.subscription = sub
+      self.broadcastsTask = Task { @MainActor in
+        for await broadcast in sub.broadcasts {
+          let path = broadcast.path
+          self.catalogTasks[path] = Task { @MainActor in
+            for await catalog in broadcast.catalogs() {
+              await self._handleBroadcastAvailable(catalog)
+            }
+            await self._handleBroadcastUnavailable(path: path)
+          }
         }
       }
     }
-
-    Task { try? await s.connect() }
   }
 
   @MainActor
   private func _disconnect() {
     stateTask?.cancel(); stateTask = nil
     broadcastsTask?.cancel(); broadcastsTask = nil
+    subscription?.cancel(); subscription = nil
     currentState = .idle
 
     let s = session
     let allPlayers = players
     session = nil
     players = [:]
-    broadcastInfos = [:]
+    broadcastCatalogs = [:]
     pendingVideoTrackName = [:]
     pendingAudioTrackName = [:]
 
@@ -149,6 +152,11 @@ import MoQKit
       playerEventsTasks[path]?.cancel()
     }
     playerEventsTasks = [:]
+
+    for (path, _) in catalogTasks {
+      catalogTasks[path]?.cancel()
+    }
+    catalogTasks = [:]
 
     for (_, timer) in statsTimers { timer.invalidate() }
     statsTimers = [:]
@@ -164,31 +172,40 @@ import MoQKit
   // MARK: - Private: broadcast events
 
   @MainActor
-  private func _handleBroadcastAvailable(_ info: MoQBroadcastInfo) async {
-    let path = info.path
-    await _removePlayer(for: path, notifyVideoViews: false)
-    broadcastInfos[path] = info
+  private func _handleBroadcastAvailable(_ catalog: Catalog) async {
+    let path = catalog.path
 
-    let sortedVideo = info.videoTracks.sorted {
-      let a = $0.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
-      let b = $1.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
-      return a > b
-    }
-    var tracks: [any MoQTrackInfo] = []
-    if let v = sortedVideo.first { tracks.append(v) }
-    if let a = info.audioTracks.first { tracks.append(a) }
+    if players[path] == nil {
+      await _removePlayer(for: path, notifyVideoViews: false)
+      broadcastCatalogs[path] = catalog
 
-    let p = try? MoQPlayer(tracks: tracks, targetBufferingMs: targetLatencyMs)
-    if let p {
-      players[path] = p
-      NotificationCenter.default.post(
-        name: MoQImpl.playerChangedNotification, object: path)
-      _observePlayerEvents(p.events, broadcastPath: path)
+      let sortedVideo = catalog.videoTracks.sorted {
+        let a = $0.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
+        let b = $1.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
+        return a > b
+      }
+      let videoTrackName = sortedVideo.first?.name
+      let audioTrackName = catalog.audioTracks.first?.name
+
+      let p = try? Player(
+        catalog: catalog,
+        videoTrackName: videoTrackName,
+        audioTrackName: audioTrackName,
+        targetBufferingMs: targetLatencyMs
+      )
+      if let p {
+        players[path] = p
+        NotificationCenter.default.post(
+          name: MoQImpl.playerChangedNotification, object: path)
+        _observePlayerEvents(p.events, broadcastPath: path)
+      }
+    } else {
+      broadcastCatalogs[path] = catalog
     }
 
     onEvent?("broadcastAvailable", [
       "path": path,
-      "videoTracks": info.videoTracks.map { t -> [String: Any] in
+      "videoTracks": catalog.videoTracks.map { t -> [String: Any] in
         var d: [String: Any] = ["name": t.name, "codec": t.config.codec]
         if let size = t.config.coded {
           d["width"] = size.width
@@ -198,7 +215,7 @@ import MoQKit
         if let fps = t.config.framerate { d["framerate"] = fps }
         return d
       },
-      "audioTracks": info.audioTracks.map { t -> [String: Any] in
+      "audioTracks": catalog.audioTracks.map { t -> [String: Any] in
         var d: [String: Any] = [
           "name": t.name,
           "codec": t.config.codec,
@@ -220,10 +237,11 @@ import MoQKit
   @MainActor
   private func _removePlayer(for path: String, notifyVideoViews: Bool = true) async {
     if let p = players.removeValue(forKey: path) {
-      broadcastInfos.removeValue(forKey: path)
+      broadcastCatalogs.removeValue(forKey: path)
       pendingVideoTrackName.removeValue(forKey: path)
       pendingAudioTrackName.removeValue(forKey: path)
       playerEventsTasks.removeValue(forKey: path)?.cancel()
+      catalogTasks.removeValue(forKey: path)?.cancel()
       _stopStatsPolling(for: path)
       await p.stopAll()
     }
@@ -237,7 +255,7 @@ import MoQKit
 
   @MainActor
   private func _observePlayerEvents(
-    _ events: AsyncStream<MoQPlayerEvent>, broadcastPath: String
+    _ events: AsyncStream<PlayerEvent>, broadcastPath: String
   ) {
     playerEventsTasks[broadcastPath]?.cancel()
     playerEventsTasks[broadcastPath] = Task { @MainActor in
@@ -315,9 +333,9 @@ import MoQKit
   }
 }
 
-// MARK: - MoQSessionState helpers
+// MARK: - SessionState helpers
 
-extension MoQSessionState {
+extension SessionState {
   var stringValue: String {
     switch self {
     case .idle: return "idle"
