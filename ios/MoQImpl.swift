@@ -175,32 +175,33 @@ import MoQKit
   private func _handleBroadcastAvailable(_ catalog: Catalog) async {
     let path = catalog.path
 
-    if players[path] == nil {
-      await _removePlayer(for: path, notifyVideoViews: false)
-      broadcastCatalogs[path] = catalog
+    let hadPlayer = players[path] != nil
+    await _removePlayer(for: path, notifyVideoViews: false, cancelCatalogTask: false)
+    broadcastCatalogs[path] = catalog
 
-      let sortedVideo = catalog.videoTracks.sorted {
-        let a = $0.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
-        let b = $1.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
-        return a > b
-      }
-      let videoTrackName = sortedVideo.first?.name
-      let audioTrackName = catalog.audioTracks.first?.name
+    let sortedVideo = catalog.videoTracks.sorted {
+      let a = $0.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
+      let b = $1.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
+      return a > b
+    }
+    let videoTrackName = sortedVideo.first?.name
+    let audioTrackName = catalog.audioTracks.first?.name
 
-      let p = try? Player(
-        catalog: catalog,
-        videoTrackName: videoTrackName,
-        audioTrackName: audioTrackName,
-        targetBufferingMs: targetLatencyMs
-      )
-      if let p {
-        players[path] = p
-        NotificationCenter.default.post(
-          name: MoQImpl.playerChangedNotification, object: path)
-        _observePlayerEvents(p.events, broadcastPath: path)
+    let p = try? Player(
+      catalog: catalog,
+      videoTrackName: videoTrackName,
+      audioTrackName: audioTrackName,
+      targetBufferingMs: targetLatencyMs
+    )
+    if let p {
+      players[path] = p
+      NotificationCenter.default.post(
+        name: MoQImpl.playerChangedNotification, object: path)
+      _observePlayerEvents(p.events, broadcastPath: path)
+
+      if hadPlayer {
+        try? await p.play()
       }
-    } else {
-      broadcastCatalogs[path] = catalog
     }
 
     onEvent?("broadcastAvailable", [
@@ -235,13 +236,19 @@ import MoQKit
   }
 
   @MainActor
-  private func _removePlayer(for path: String, notifyVideoViews: Bool = true) async {
+  private func _removePlayer(
+    for path: String,
+    notifyVideoViews: Bool = true,
+    cancelCatalogTask: Bool = true
+  ) async {
     if let p = players.removeValue(forKey: path) {
       broadcastCatalogs.removeValue(forKey: path)
       pendingVideoTrackName.removeValue(forKey: path)
       pendingAudioTrackName.removeValue(forKey: path)
       playerEventsTasks.removeValue(forKey: path)?.cancel()
-      catalogTasks.removeValue(forKey: path)?.cancel()
+      if cancelCatalogTask {
+        catalogTasks.removeValue(forKey: path)?.cancel()
+      }
       _stopStatsPolling(for: path)
       await p.stopAll()
     }

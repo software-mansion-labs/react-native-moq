@@ -100,12 +100,10 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         sub.broadcasts.collect { broadcast ->
           val path = broadcast.path
           launch {
-            try {
+            broadcast.use { broadcast ->
               broadcast.catalogs().collect { catalog ->
                 handleBroadcastAvailable(catalog, latencyMs)
               }
-            } finally {
-              broadcast.close()
             }
             handleBroadcastUnavailable(path)
           }
@@ -175,22 +173,32 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private fun handleBroadcastAvailable(catalog: Catalog, targetLatencyMs: Int) {
     val path = catalog.path
 
-    if (players[path] == null) {
-      val sortedVideo = catalog.videoTracks.sortedByDescending {
-        it.config.coded?.let { d -> d.width.toLong() * d.height.toLong() } ?: 0L
-      }
-      val videoTrackName = sortedVideo.firstOrNull()?.name
-      val audioTrackName = catalog.audioTracks.firstOrNull()?.name
+    val hadPlayer = players[path] != null
+    removePlayer(path, notify = false)
 
-      val p = Player(
+    val sortedVideo = catalog.videoTracks.sortedByDescending {
+      it.config.coded?.let { d -> d.width.toLong() * d.height.toLong() } ?: 0L
+    }
+    val videoTrackName = sortedVideo.firstOrNull()?.name
+    val audioTrackName = catalog.audioTracks.firstOrNull()?.name
+
+    val p = try {
+      Player(
         catalog = catalog,
         videoTrackName = videoTrackName,
         audioTrackName = audioTrackName,
         targetLatencyMs = targetLatencyMs,
         parentScope = moduleScope,
       )
+    } catch (_: Exception) { null }
+
+    if (p != null) {
       players[path] = p
       observePlayerEvents(p, path)
+
+      if (hadPlayer) {
+        p.play()
+      }
 
       mainHandler.post {
         notifyPlayerChanged(path)
@@ -237,7 +245,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private fun removePlayer(path: String, notify: Boolean = true) {
     playerEventJobs.remove(path)?.cancel()
     stopStatsPolling(path)
-    players.remove(path)?.stop()
+    players.remove(path)?.close()
     if (notify) {
       mainHandler.post { notifyPlayerChanged(path) }
     }
