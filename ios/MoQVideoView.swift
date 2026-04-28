@@ -5,41 +5,25 @@ import UIKit
 public class MoQVideoView: UIView {
   private var displayLayer: AVSampleBufferDisplayLayer?
 
-  @objc var broadcastPath: String? {
+  @objc var playerHandle: NSNumber? {
     didSet {
-      attach(layer: broadcastPath.flatMap { MoQImpl.shared.videoLayer(for: $0) })
+      let handleId = playerHandle?.intValue ?? 0
+      attach(layer: handleId > 0 ? MoQImpl.shared.videoLayer(forHandleId: handleId) : nil)
     }
   }
 
   public override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .black
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(playerDidChange(_:)),
-      name: MoQImpl.playerChangedNotification,
-      object: nil
-    )
   }
 
   required init?(coder: NSCoder) {
     fatalError("init(coder:) not supported")
   }
 
-  deinit {
-    NotificationCenter.default.removeObserver(self)
-  }
-
   public override func layoutSubviews() {
     super.layoutSubviews()
     displayLayer?.frame = bounds
-  }
-
-  @objc private func playerDidChange(_ notification: Notification) {
-    let changedPath = notification.object as? String
-    // nil object = disconnect (all players removed); otherwise filter by path
-    guard changedPath == nil || changedPath == broadcastPath else { return }
-    attach(layer: broadcastPath.flatMap { MoQImpl.shared.videoLayer(for: $0) })
   }
 
   private func attach(layer newLayer: AVSampleBufferDisplayLayer?) {

@@ -5,6 +5,8 @@ export type MoQSessionState =
   | 'closed'
   | `error:${string}`;
 
+export type MoQPlayerHandle = number;
+
 export interface MoQVideoTrackInfo {
   name: string;
   codec: string;
@@ -58,6 +60,7 @@ export interface MoQSession {
 }
 
 export interface MoQPlayerState {
+  playerHandle: MoQPlayerHandle | null;
   isPlaying: boolean;
   isPaused: boolean;
   playbackStats: MoQPlaybackStats | null;

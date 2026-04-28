@@ -7,20 +7,13 @@ import android.view.SurfaceView
 
 class MoQVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
-  var broadcastPath: String? = null
+  var playerHandle: Int? = null
     set(value) {
-      val old = field
+      // Detach the old player's surface before switching.
+      field?.let { MoQModule.players[it]?.setSurface(null) }
       field = value
-      if (old != null) {
-        MoQModule.removePlayerListener(old, playerChangedCallback)
-      }
-      if (value != null) {
-        MoQModule.addPlayerListener(value, playerChangedCallback)
-        setSurface(holder.surface)
-      }
+      value?.let { MoQModule.players[it]?.setSurface(holder.surface) }
     }
-
-  private val playerChangedCallback: () -> Unit = { setSurface(holder.surface) }
 
   init {
     setZOrderOnTop(true)
@@ -28,27 +21,18 @@ class MoQVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callb
   }
 
   override fun surfaceCreated(holder: SurfaceHolder) {
-    setSurface(holder.surface)
+    playerHandle?.let { MoQModule.players[it]?.setSurface(holder.surface) }
   }
 
   override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
 
   override fun surfaceDestroyed(holder: SurfaceHolder) {
-    setSurface(null)
+    playerHandle?.let { MoQModule.players[it]?.setSurface(null) }
   }
 
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
-    cleanup()
-  }
-
-  fun setSurface(surface: Surface?) {
-    broadcastPath?.let { path -> MoQModule.players[path]?.setSurface(surface) }
-  }
-
-  fun cleanup() {
     holder.removeCallback(this)
-    broadcastPath?.let { path -> MoQModule.removePlayerListener(path, playerChangedCallback) }
-    setSurface(null)
+    playerHandle?.let { MoQModule.players[it]?.setSurface(null) }
   }
 }

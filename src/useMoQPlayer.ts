@@ -3,6 +3,7 @@ import { NativeEventEmitter } from 'react-native';
 import NativeMoQ from './NativeMoQ';
 import type {
   MoQPlaybackStats,
+  MoQPlayerHandle,
   MoQPlayerState,
   MoQVideoTrackInfo,
 } from './types';
@@ -26,6 +27,9 @@ export function useMoQPlayer(
 ): MoQPlayerState {
   const { targetLatencyMs, videoTracks } = options;
 
+  const [playerHandle, setPlayerHandle] = useState<MoQPlayerHandle | null>(
+    null
+  );
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [playbackStats, setPlaybackStats] = useState<MoQPlaybackStats | null>(
@@ -38,85 +42,141 @@ export function useMoQPlayer(
     string | undefined
   >(undefined);
 
-  const pathRef = useRef(broadcastPath);
-  pathRef.current = broadcastPath;
+  const handleRef = useRef<MoQPlayerHandle | null>(null);
+  const isPlayingRef = useRef(false);
+  const latencyRef = useRef(targetLatencyMs);
+  latencyRef.current = targetLatencyMs;
+  const videoTracksRef = useRef(videoTracks);
+  videoTracksRef.current = videoTracks;
 
   useEffect(() => {
-    if (targetLatencyMs !== undefined) {
-      NativeMoQ.updateTargetLatency(broadcastPath, targetLatencyMs);
+    const tryCreate = () => {
+      if (handleRef.current !== null) {
+        NativeMoQ.releasePlayer(handleRef.current);
+        handleRef.current = null;
+      }
+
+      const h = NativeMoQ.createPlayer(broadcastPath);
+      if (h === 0) return; // catalog not yet available
+
+      handleRef.current = h;
+      setPlayerHandle(h);
+      setIsPlaying(false);
+      setIsPaused(false);
+      setPlaybackStats(null);
+      setCurrentVideoTrackName(videoTracksRef.current?.[0]?.name);
+      setCurrentAudioTrackName(undefined);
+
+      if (latencyRef.current !== undefined) {
+        NativeMoQ.updateTargetLatency(h, latencyRef.current);
+      }
+      if (isPlayingRef.current) {
+        NativeMoQ.play(h);
+      }
+    };
+
+    tryCreate();
+
+    const sub = moqEmitter.addListener('broadcastAvailable', (e) => {
+      if ((e as { path: string }).path === broadcastPath) tryCreate();
+    });
+
+    return () => {
+      sub.remove();
+      if (handleRef.current !== null) {
+        NativeMoQ.releasePlayer(handleRef.current);
+        handleRef.current = null;
+        setPlayerHandle(null);
+      }
+      isPlayingRef.current = false;
+    };
+  }, [broadcastPath]);
+
+  useEffect(() => {
+    if (targetLatencyMs !== undefined && handleRef.current !== null) {
+      NativeMoQ.updateTargetLatency(handleRef.current, targetLatencyMs);
     }
-  }, [broadcastPath, targetLatencyMs]);
+  }, [targetLatencyMs]);
 
   useEffect(() => {
     const subs = [
       moqEmitter.addListener('playerEvent', (event) => {
         const e = event as {
-          broadcastPath: string;
+          handleId: number;
           type: string;
           trackKind?: string;
           trackName?: string;
         };
-        if (e.broadcastPath !== pathRef.current) return;
+        if (e.handleId !== handleRef.current) return;
+
         if (e.type === 'trackPlaying') {
+          isPlayingRef.current = true;
           setIsPlaying(true);
           setIsPaused(false);
         } else if (e.type === 'trackPaused') {
           setIsPaused(true);
           setIsPlaying(false);
         } else if (e.type === 'allTracksStopped') {
+          isPlayingRef.current = false;
           setIsPlaying(false);
           setIsPaused(false);
           setPlaybackStats(null);
           setCurrentVideoTrackName(undefined);
           setCurrentAudioTrackName(undefined);
         } else if (e.type === 'trackSwitched') {
-          if (e.trackKind === 'video') {
-            setCurrentVideoTrackName(e.trackName);
-          } else if (e.trackKind === 'audio') {
+          if (e.trackKind === 'video') setCurrentVideoTrackName(e.trackName);
+          else if (e.trackKind === 'audio')
             setCurrentAudioTrackName(e.trackName);
-          }
         }
       }),
 
       moqEmitter.addListener('playbackStatsUpdated', (event) => {
-        const e = event as MoQPlaybackStats & { broadcastPath: string };
-        if (e.broadcastPath !== pathRef.current) return;
+        const e = event as { handleId: number } & MoQPlaybackStats;
+        if (e.handleId !== handleRef.current) return;
         setPlaybackStats(e);
       }),
     ];
 
-    return () => {
-      subs.forEach((s) => s.remove());
-    };
+    return () => subs.forEach((s) => s.remove());
   }, []);
 
   const play = useCallback(() => {
-    NativeMoQ.play(pathRef.current);
+    if (handleRef.current !== null) NativeMoQ.play(handleRef.current);
     setIsPaused(false);
   }, []);
 
   const pause = useCallback(() => {
-    NativeMoQ.pause(pathRef.current);
+    if (handleRef.current !== null) NativeMoQ.pause(handleRef.current);
     setIsPaused(true);
   }, []);
 
   const stop = useCallback(() => {
-    NativeMoQ.stopPlayer(pathRef.current);
+    if (handleRef.current === null) return;
+    NativeMoQ.releasePlayer(handleRef.current);
+    handleRef.current = null;
+    isPlayingRef.current = false;
+    setPlayerHandle(null);
+    setIsPlaying(false);
+    setIsPaused(false);
   }, []);
 
   const updateTargetLatency = useCallback((ms: number) => {
-    NativeMoQ.updateTargetLatency(pathRef.current, ms);
+    if (handleRef.current !== null)
+      NativeMoQ.updateTargetLatency(handleRef.current, ms);
   }, []);
 
   const switchVideoTrack = useCallback((trackName: string) => {
-    NativeMoQ.switchVideoTrack(pathRef.current, trackName);
+    if (handleRef.current !== null)
+      NativeMoQ.switchVideoTrack(handleRef.current, trackName);
   }, []);
 
   const switchAudioTrack = useCallback((trackName: string) => {
-    NativeMoQ.switchAudioTrack(pathRef.current, trackName);
+    if (handleRef.current !== null)
+      NativeMoQ.switchAudioTrack(handleRef.current, trackName);
   }, []);
 
   return {
+    playerHandle,
     isPlaying,
     isPaused,
     playbackStats,

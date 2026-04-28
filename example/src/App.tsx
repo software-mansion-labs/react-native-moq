@@ -124,7 +124,7 @@ function BroadcastPlayer({
         <Button title="Disconnect" onPress={handleRemove} color="#ef4444" />
       </View>
 
-      <MoQVideoView broadcastPath={broadcast.path} style={styles.video} />
+      <MoQVideoView player={player.playerHandle} style={styles.video} />
 
       {sortedVideoTracks.length > 1 && (
         <RenditionPicker

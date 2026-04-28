@@ -12,7 +12,7 @@ RCT_EXPORT_MODULE(MoQVideoView)
   return [MoQVideoView new];
 }
 
-RCT_EXPORT_VIEW_PROPERTY(broadcastPath, NSString)
+RCT_EXPORT_VIEW_PROPERTY(playerHandle, NSNumber)
 
 + (BOOL)requiresMainQueueSetup {
   return YES;

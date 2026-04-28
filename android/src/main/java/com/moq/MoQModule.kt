@@ -13,12 +13,13 @@ import com.swmansion.moqkit.subscribe.PlaybackStats
 import com.swmansion.moqkit.subscribe.Player
 import com.swmansion.moqkit.subscribe.StallStats
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactContext) {
@@ -31,33 +32,45 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private var stateJob: Job? = null
   private var broadcastsJob: Job? = null
 
-  private val playerEventJobs = ConcurrentHashMap<String, Job>()
-  private val statsRunnables = ConcurrentHashMap<String, Runnable>()
+  private val eventJobs = ConcurrentHashMap<Int, Job>()
+  private val statsJobs = ConcurrentHashMap<Int, Job>()
 
-  // MARK: - Companion: shared player map and listeners for MoQVideoView
+  // MARK: - Companion: shared player map for MoQVideoView
 
   companion object {
     const val NAME = NativeMoQSpec.NAME
 
-    val players = ConcurrentHashMap<String, Player>()
-    private val playerChangeListeners =
-      ConcurrentHashMap<String, CopyOnWriteArrayList<() -> Unit>>()
+    private val nextId = AtomicInteger(1)
+    val players = ConcurrentHashMap<Int, Player>()
+    private val pathByHandle = ConcurrentHashMap<Int, String>()
+    private val catalogByPath = ConcurrentHashMap<String, Catalog>()
+    private var targetLatencyMs: Int = 200
 
-    fun addPlayerListener(broadcastPath: String, listener: () -> Unit) {
-      playerChangeListeners.getOrPut(broadcastPath) { CopyOnWriteArrayList() }.add(listener)
+    fun allocatePlayer(broadcastPath: String): Int {
+      val catalog = catalogByPath[broadcastPath] ?: return 0
+      val player = try {
+        Player(
+          catalog = catalog,
+          videoTrackName = catalog.videoTracks.firstOrNull()?.name,
+          audioTrackName = catalog.audioTracks.firstOrNull()?.name,
+          targetLatencyMs = targetLatencyMs,
+          parentScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+        )
+      } catch (_: Exception) { return 0 }
+
+      val id = nextId.getAndIncrement()
+      players[id] = player
+      pathByHandle[id] = broadcastPath
+      return id
     }
 
-    fun removePlayerListener(broadcastPath: String, listener: () -> Unit) {
-      playerChangeListeners[broadcastPath]?.remove(listener)
+    fun removePlayer(id: Int): Player? {
+      pathByHandle.remove(id)
+      return players.remove(id)
     }
 
-    fun notifyPlayerChanged(broadcastPath: String?) {
-      if (broadcastPath == null) {
-        playerChangeListeners.values.forEach { list -> list.forEach { it() } }
-      } else {
-        playerChangeListeners[broadcastPath]?.forEach { it() }
-      }
-    }
+    fun handlesForPath(path: String): List<Int> =
+      pathByHandle.filter { it.value == path }.map { it.key }
 
     fun Session.State.toStringValue(): String =
       when (this) {
@@ -72,11 +85,10 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   // MARK: - NativeMoQSpec
 
   override fun addListener(eventName: String) {}
-
   override fun removeListeners(count: Double) {}
 
   override fun connect(url: String, prefix: String, targetLatencyMs: Double) {
-    val latencyMs = targetLatencyMs.toInt()
+    Companion.targetLatencyMs = targetLatencyMs.toInt()
     moduleScope.launch {
       val s = Session(url = url, parentScope = moduleScope)
       session = s
@@ -89,9 +101,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         }
       }
 
-      try {
-        s.connect()
-      } catch (_: Exception) {}
+      try { s.connect() } catch (_: Exception) {}
 
       val sub = s.subscribe(prefix = prefix)
       subscription = sub
@@ -100,12 +110,18 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         sub.broadcasts.collect { broadcast ->
           val path = broadcast.path
           launch {
-            broadcast.use { broadcast ->
-              broadcast.catalogs().collect { catalog ->
-                handleBroadcastAvailable(catalog, latencyMs)
+            broadcast.use { b ->
+              b.catalogs().collect { catalog ->
+                catalogByPath[path] = catalog
+                handlesForPath(path).forEach { releasePlayer(it.toDouble()) }
+                emitBroadcastAvailable(catalog)
               }
             }
-            handleBroadcastUnavailable(path)
+            catalogByPath.remove(path)
+            handlesForPath(path).forEach { releasePlayer(it.toDouble()) }
+            val map = Arguments.createMap()
+            map.putString("path", path)
+            emitEvent("broadcastUnavailable", map)
           }
         }
       }
@@ -113,52 +129,92 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   }
 
   override fun disconnect() {
-    stateJob?.cancel()
-    stateJob = null
-    broadcastsJob?.cancel()
-    broadcastsJob = null
+    stateJob?.cancel(); stateJob = null
+    broadcastsJob?.cancel(); broadcastsJob = null
+    subscription?.close(); subscription = null
 
-    subscription?.close()
-    subscription = null
+    players.keys.toList().forEach { id ->
+      eventJobs.remove(id)?.cancel()
+      statsJobs.remove(id)?.cancel()
+      removePlayer(id)?.close()
+    }
 
-    playerEventJobs.keys.toList().forEach { path -> removePlayer(path, notify = false) }
-
-    val s = session
+    session?.close()
     session = null
-
-    mainHandler.post { notifyPlayerChanged(null) }
-
-    s?.close()
+    catalogByPath.clear()
   }
 
-  override fun play(broadcastPath: String) {
-    players[broadcastPath]?.play()
+  override fun createPlayer(broadcastPath: String): Double {
+    val id = allocatePlayer(broadcastPath)
+    if (id == 0) return 0.0
+    val player = players[id] ?: return 0.0
+
+    eventJobs[id] = moduleScope.launch {
+      player.events.collect { event ->
+        val map = Arguments.createMap()
+        map.putInt("handleId", id)
+        when (event) {
+          is Player.Event.TrackPlaying -> {
+            map.putString("type", "trackPlaying")
+            map.putString("trackKind", event.kind)
+            startStatsJob(id, player)
+          }
+          is Player.Event.TrackPaused -> {
+            map.putString("type", "trackPaused")
+            map.putString("trackKind", event.kind)
+          }
+          is Player.Event.TrackStopped -> {
+            map.putString("type", "trackStopped")
+            map.putString("trackKind", event.kind)
+          }
+          Player.Event.AllTracksStopped -> {
+            map.putString("type", "allTracksStopped")
+            statsJobs.remove(id)?.cancel()
+          }
+          is Player.Event.Error -> {
+            map.putString("type", "error")
+            map.putString("trackKind", event.kind)
+            map.putString("message", event.message)
+          }
+        }
+        emitEvent("playerEvent", map)
+      }
+    }
+
+    return id.toDouble()
   }
 
-  override fun pause(broadcastPath: String) {
-    players[broadcastPath]?.pause()
+  override fun releasePlayer(handleId: Double) {
+    val id = handleId.toInt()
+    eventJobs.remove(id)?.cancel()
+    statsJobs.remove(id)?.cancel()
+    removePlayer(id)?.close()
   }
 
-  override fun stopPlayer(broadcastPath: String) {
-    removePlayer(broadcastPath)
+  override fun play(handleId: Double) {
+    players[handleId.toInt()]?.play()
   }
 
-  override fun updateTargetLatency(broadcastPath: String, ms: Double) {
-    players[broadcastPath]?.updateTargetLatency(ms.toInt())
+  override fun pause(handleId: Double) {
+    players[handleId.toInt()]?.pause()
   }
 
-  override fun switchVideoTrack(broadcastPath: String, trackName: String) {
-    val player = players[broadcastPath] ?: return
-    player.switchTrack(trackName)
+  override fun updateTargetLatency(handleId: Double, ms: Double) {
+    players[handleId.toInt()]?.updateTargetLatency(ms.toInt())
+  }
+
+  override fun switchVideoTrack(handleId: Double, trackName: String) {
+    val id = handleId.toInt()
+    players[id]?.switchTrack(trackName)
     val map = Arguments.createMap()
-    map.putString("broadcastPath", broadcastPath)
+    map.putInt("handleId", id)
     map.putString("type", "trackSwitched")
     map.putString("trackKind", "video")
     map.putString("trackName", trackName)
     emitEvent("playerEvent", map)
   }
 
-  override fun switchAudioTrack(broadcastPath: String, trackName: String) {
+  override fun switchAudioTrack(handleId: Double, trackName: String) {
     // Audio track switching is not supported on Android
   }
 
@@ -168,43 +224,21 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     moduleScope.cancel()
   }
 
-  // MARK: - Broadcast events
+  // MARK: - Helpers
 
-  private fun handleBroadcastAvailable(catalog: Catalog, targetLatencyMs: Int) {
-    val path = catalog.path
-
-    val hadPlayer = players[path] != null
-    removePlayer(path, notify = false)
-
-    val sortedVideo = catalog.videoTracks.sortedByDescending {
-      it.config.coded?.let { d -> d.width.toLong() * d.height.toLong() } ?: 0L
-    }
-    val videoTrackName = sortedVideo.firstOrNull()?.name
-    val audioTrackName = catalog.audioTracks.firstOrNull()?.name
-
-    val p = try {
-      Player(
-        catalog = catalog,
-        videoTrackName = videoTrackName,
-        audioTrackName = audioTrackName,
-        targetLatencyMs = targetLatencyMs,
-        parentScope = moduleScope,
-      )
-    } catch (_: Exception) { null }
-
-    if (p != null) {
-      players[path] = p
-      observePlayerEvents(p, path)
-
-      if (hadPlayer) {
-        p.play()
-      }
-
-      mainHandler.post {
-        notifyPlayerChanged(path)
+  private fun startStatsJob(id: Int, player: Player) {
+    if (statsJobs.containsKey(id)) return
+    statsJobs[id] = moduleScope.launch {
+      while (true) {
+        delay(500)
+        val map = player.stats.toWritableMap()
+        map.putInt("handleId", id)
+        emitEvent("playbackStatsUpdated", map)
       }
     }
+  }
 
+  private fun emitBroadcastAvailable(catalog: Catalog) {
     val videoArray = Arguments.createArray()
     catalog.videoTracks.forEach { track ->
       val item = Arguments.createMap()
@@ -229,88 +263,11 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       audioArray.pushMap(item)
     }
     val map = Arguments.createMap()
-    map.putString("path", path)
+    map.putString("path", catalog.path)
     map.putArray("videoTracks", videoArray)
     map.putArray("audioTracks", audioArray)
     emitEvent("broadcastAvailable", map)
   }
-
-  private fun handleBroadcastUnavailable(path: String) {
-    removePlayer(path)
-    val map = Arguments.createMap()
-    map.putString("path", path)
-    emitEvent("broadcastUnavailable", map)
-  }
-
-  private fun removePlayer(path: String, notify: Boolean = true) {
-    playerEventJobs.remove(path)?.cancel()
-    stopStatsPolling(path)
-    players.remove(path)?.close()
-    if (notify) {
-      mainHandler.post { notifyPlayerChanged(path) }
-    }
-  }
-
-  // MARK: - Player events
-
-  private fun observePlayerEvents(p: Player, broadcastPath: String) {
-    playerEventJobs[broadcastPath]?.cancel()
-    playerEventJobs[broadcastPath] = moduleScope.launch {
-      p.events.collect { event ->
-        val map = Arguments.createMap()
-        map.putString("broadcastPath", broadcastPath)
-        when (event) {
-          is Player.Event.TrackPlaying -> {
-            map.putString("type", "trackPlaying")
-            map.putString("trackKind", event.kind)
-            startStatsPolling(p, broadcastPath)
-          }
-          is Player.Event.TrackPaused -> {
-            map.putString("type", "trackPaused")
-            map.putString("trackKind", event.kind)
-          }
-          is Player.Event.TrackStopped -> {
-            map.putString("type", "trackStopped")
-            map.putString("trackKind", event.kind)
-          }
-          Player.Event.AllTracksStopped -> {
-            map.putString("type", "allTracksStopped")
-            stopStatsPolling(broadcastPath)
-          }
-          is Player.Event.Error -> {
-            map.putString("type", "error")
-            map.putString("trackKind", event.kind)
-            map.putString("message", event.message)
-          }
-        }
-        emitEvent("playerEvent", map)
-      }
-    }
-  }
-
-  // MARK: - Stats polling
-
-  private fun startStatsPolling(player: Player, broadcastPath: String) {
-    stopStatsPolling(broadcastPath)
-    val runnable = object : Runnable {
-      override fun run() {
-        player.stats.let { stats ->
-          val map = stats.toWritableMap()
-          map.putString("broadcastPath", broadcastPath)
-          emitEvent("playbackStatsUpdated", map)
-        }
-        mainHandler.postDelayed(this, 500)
-      }
-    }
-    statsRunnables[broadcastPath] = runnable
-    mainHandler.postDelayed(runnable, 500)
-  }
-
-  private fun stopStatsPolling(broadcastPath: String) {
-    statsRunnables.remove(broadcastPath)?.let { mainHandler.removeCallbacks(it) }
-  }
-
-  // MARK: - Helpers
 
   private fun emitEvent(name: String, params: WritableMap) {
     reactApplicationContext

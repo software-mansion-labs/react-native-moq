@@ -31,24 +31,23 @@ function App() {
     <>
       <Button title="Connect" onPress={session.connect} />
       {session.broadcasts.map((broadcast) => (
-        <BroadcastPlayer key={broadcast.path} path={broadcast.path} />
+        <BroadcastPlayer key={broadcast.path} broadcast={broadcast} />
       ))}
     </>
   );
 }
 
-function BroadcastPlayer({ path }: { path: string }) {
-  const player = useMoQPlayer(path);
+function BroadcastPlayer({ broadcast }: { broadcast: MoQBroadcastInfo }) {
+  const { playerHandle, isPaused, play, pause } = useMoQPlayer(broadcast.path);
 
   useEffect(() => {
-    player.play();
-    return () => player.pause();
+    play();
   }, []);
 
   return (
     <>
-      <MoQVideoView broadcastPath={path} style={{ width: '100%', aspectRatio: 16 / 9 }} />
-      <Button title={player.isPaused ? 'Resume' : 'Pause'} onPress={player.isPaused ? player.play : player.pause} />
+      <MoQVideoView player={playerHandle} style={{ width: '100%', aspectRatio: 16 / 9 }} />
+      <Button title={isPaused ? 'Resume' : 'Pause'} onPress={isPaused ? play : pause} />
     </>
   );
 }
@@ -84,11 +83,11 @@ Call `connect()` manually after mounting — the hook does not auto-connect.
 
 ### `useMoQPlayer(broadcastPath, options?)`
 
-Controls playback of a single broadcast. Must be used after the session is connected and the broadcast is available.
+Creates and controls a native player for a single broadcast. The player is created when the broadcast becomes available and released when the hook unmounts. If the broadcast catalog refreshes (e.g. the sender restarts), the player is automatically recreated and, if it was playing, resumes automatically.
 
 ```tsx
 const player = useMoQPlayer(broadcast.path, {
-  targetLatencyMs: 300,          // override buffering latency for this player
+  targetLatencyMs: 300,           // override buffering latency for this player
   videoTracks: broadcast.videoTracks // pre-populate currentVideoTrackName
 });
 ```
@@ -97,14 +96,15 @@ Returns a `MoQPlayerState` object:
 
 | Property / Method | Type | Description |
 |---|---|---|
+| `playerHandle` | `MoQPlayerHandle \| null` | Opaque handle to the native player — pass this to `<MoQVideoView>` |
 | `isPlaying` | `boolean` | True while tracks are actively playing |
 | `isPaused` | `boolean` | True while paused |
-| `playbackStats` | `MoQPlaybackStats \| null` | Live metrics, updated continuously |
+| `playbackStats` | `MoQPlaybackStats \| null` | Live metrics, updated every 500 ms |
 | `currentVideoTrackName` | `string \| undefined` | Name of the active video track |
 | `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
 | `play()` | `() => void` | Start or resume playback |
 | `pause()` | `() => void` | Pause playback |
-| `stop()` | `() => void` | Stop playback and reset state |
+| `stop()` | `() => void` | Release the player and reset state |
 | `updateTargetLatency(ms)` | `(ms: number) => void` | Change buffering latency at runtime |
 | `switchVideoTrack(name)` | `(name: string) => void` | Switch to a different video rendition |
 | `switchAudioTrack(name)` | `(name: string) => void` | Switch to a different audio track |
@@ -113,23 +113,33 @@ Returns a `MoQPlayerState` object:
 
 ### `<MoQVideoView>`
 
-Native component that renders the video for a given broadcast path.
+Native component that renders the video for a given player handle.
 
 ```tsx
 <MoQVideoView
-  broadcastPath={broadcast.path}
+  player={playerHandle}
   style={{ width: '100%', aspectRatio: 16 / 9 }}
 />
 ```
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `broadcastPath` | `string` | Yes | Path of the broadcast to render |
+| `player` | `MoQPlayerHandle \| null` | Yes | Handle returned by `useMoQPlayer` |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
+
+Passing `null` clears the view (shows black). Because the view binds directly to the handle rather than looking up a broadcast by path, multiple views can independently render different players without any global coordination.
 
 ---
 
 ### Types
+
+#### `MoQPlayerHandle`
+
+```ts
+type MoQPlayerHandle = number;
+```
+
+An opaque numeric reference to a native player instance. Obtain one from `useMoQPlayer` and pass it to `<MoQVideoView>`. Do not construct or interpret this value directly.
 
 #### `MoQBroadcastInfo`
 

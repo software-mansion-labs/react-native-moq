@@ -33,28 +33,32 @@ RCT_EXPORT_MODULE()
   [[MoQImpl shared] disconnect];
 }
 
-- (void)play:(NSString *)broadcastPath {
-  [[MoQImpl shared] play:broadcastPath];
+- (NSNumber *)createPlayer:(NSString *)broadcastPath {
+  return @([[MoQImpl shared] createPlayer:broadcastPath]);
 }
 
-- (void)pause:(NSString *)broadcastPath {
-  [[MoQImpl shared] pause:broadcastPath];
+- (void)releasePlayer:(double)handleId {
+  [[MoQImpl shared] releasePlayer:(int)handleId];
 }
 
-- (void)stopPlayer:(NSString *)broadcastPath {
-  [[MoQImpl shared] stopPlayer:broadcastPath];
+- (void)play:(double)handleId {
+  [[MoQImpl shared] play:(int)handleId];
 }
 
-- (void)updateTargetLatency:(NSString *)broadcastPath ms:(double)ms {
-  [[MoQImpl shared] updateTargetLatency:broadcastPath ms:(int)ms];
+- (void)pause:(double)handleId {
+  [[MoQImpl shared] pause:(int)handleId];
 }
 
-- (void)switchVideoTrack:(NSString *)broadcastPath trackName:(NSString *)trackName {
-  [[MoQImpl shared] switchVideoTrack:broadcastPath trackName:trackName];
+- (void)updateTargetLatency:(double)handleId ms:(double)ms {
+  [[MoQImpl shared] updateTargetLatency:(int)handleId ms:(int)ms];
 }
 
-- (void)switchAudioTrack:(NSString *)broadcastPath trackName:(NSString *)trackName {
-  [[MoQImpl shared] switchAudioTrack:broadcastPath trackName:trackName];
+- (void)switchVideoTrack:(double)handleId trackName:(NSString *)trackName {
+  [[MoQImpl shared] switchVideoTrack:(int)handleId trackName:trackName];
+}
+
+- (void)switchAudioTrack:(double)handleId trackName:(NSString *)trackName {
+  [[MoQImpl shared] switchAudioTrack:(int)handleId trackName:trackName];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
