@@ -6,6 +6,7 @@ import type {
   MoQPlayerState,
   MoQVideoTrackInfo,
 } from './types';
+import { MoQPlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
@@ -14,14 +15,14 @@ export interface UseMoQPlayerOptions {
   targetLatencyMs?: number;
   /**
    * Available video tracks for this broadcast. When provided, the hook
-   * initializes currentVideoTrackName to the first track, matching the
+   * initialises currentVideoTrackName to the first track, matching the
    * default selection made by the native player.
    */
   videoTracks?: MoQVideoTrackInfo[];
 }
 
 export function useMoQPlayer(
-  broadcastPath: string,
+  player: MoQPlayerHandle,
   options: UseMoQPlayerOptions = {}
 ): MoQPlayerState {
   const { targetLatencyMs, videoTracks } = options;
@@ -38,14 +39,16 @@ export function useMoQPlayer(
     string | undefined
   >(undefined);
 
-  const pathRef = useRef(broadcastPath);
-  pathRef.current = broadcastPath;
+  const playerRef = useRef(player);
+  playerRef.current = player;
+
+  const { broadcastPath } = player;
 
   useEffect(() => {
     if (targetLatencyMs !== undefined) {
-      NativeMoQ.updateTargetLatency(broadcastPath, targetLatencyMs);
+      player.updateTargetLatency(targetLatencyMs);
     }
-  }, [broadcastPath, targetLatencyMs]);
+  }, [player, targetLatencyMs]);
 
   useEffect(() => {
     const subs = [
@@ -56,7 +59,7 @@ export function useMoQPlayer(
           trackKind?: string;
           trackName?: string;
         };
-        if (e.broadcastPath !== pathRef.current) return;
+        if (e.broadcastPath !== playerRef.current.broadcastPath) return;
         if (e.type === 'trackPlaying') {
           setIsPlaying(true);
           setIsPaused(false);
@@ -80,7 +83,7 @@ export function useMoQPlayer(
 
       moqEmitter.addListener('playbackStatsUpdated', (event) => {
         const e = event as MoQPlaybackStats & { broadcastPath: string };
-        if (e.broadcastPath !== pathRef.current) return;
+        if (e.broadcastPath !== playerRef.current.broadcastPath) return;
         setPlaybackStats(e);
       }),
     ];
@@ -88,32 +91,35 @@ export function useMoQPlayer(
     return () => {
       subs.forEach((s) => s.remove());
     };
-  }, []);
+    // Intentionally keyed on broadcastPath string — re-subscribe only when
+    // the player changes identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [broadcastPath]);
 
   const play = useCallback(() => {
-    NativeMoQ.play(pathRef.current);
+    playerRef.current.play();
     setIsPaused(false);
   }, []);
 
   const pause = useCallback(() => {
-    NativeMoQ.pause(pathRef.current);
+    playerRef.current.pause();
     setIsPaused(true);
   }, []);
 
   const stop = useCallback(() => {
-    NativeMoQ.stopPlayer(pathRef.current);
+    playerRef.current.stop();
   }, []);
 
   const updateTargetLatency = useCallback((ms: number) => {
-    NativeMoQ.updateTargetLatency(pathRef.current, ms);
+    playerRef.current.updateTargetLatency(ms);
   }, []);
 
   const switchVideoTrack = useCallback((trackName: string) => {
-    NativeMoQ.switchVideoTrack(pathRef.current, trackName);
+    playerRef.current.switchVideoTrack(trackName);
   }, []);
 
   const switchAudioTrack = useCallback((trackName: string) => {
-    NativeMoQ.switchAudioTrack(pathRef.current, trackName);
+    playerRef.current.switchAudioTrack(trackName);
   }, []);
 
   return {

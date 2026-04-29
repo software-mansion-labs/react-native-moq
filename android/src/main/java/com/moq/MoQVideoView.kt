@@ -43,7 +43,7 @@ class MoQVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callb
   }
 
   fun setSurface(surface: Surface?) {
-    broadcastPath?.let { path -> MoQModule.players[path]?.setSurface(surface) }
+    broadcastPath?.let { path -> MoQModule.playerHandles[path]?.setSurface(surface) }
   }
 
   fun cleanup() {

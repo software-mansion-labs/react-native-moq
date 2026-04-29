@@ -95,7 +95,7 @@ function BroadcastPlayer({
   broadcast: MoQBroadcastInfo;
   onRemove: () => void;
 }) {
-  const player = useMoQPlayer(broadcast.path, {
+  const player = useMoQPlayer(broadcast.player, {
     videoTracks: broadcast.videoTracks,
   });
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import NativeMoQ from './NativeMoQ';
 import type { MoQBroadcastInfo, MoQSession, MoQSessionState } from './types';
+import { MoQPlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
@@ -36,7 +37,13 @@ export function useMoQSession(
       }),
 
       moqEmitter.addListener('broadcastAvailable', (event) => {
-        const info = event as MoQBroadcastInfo;
+        const raw = event as Omit<MoQBroadcastInfo, 'player'>;
+        // getPlayer is provided by the C++ TurboModule override on iOS and
+        // returns a JSI HostObject.  On Android it is undefined so the handle
+        // falls back to bridge calls keyed by broadcastPath.
+        const native = (NativeMoQ as any).getPlayer?.(raw.path);
+        const player = new MoQPlayerHandle(raw.path, native);
+        const info: MoQBroadcastInfo = { ...raw, player };
         setBroadcasts((prev) => [
           ...prev.filter((b) => b.path !== info.path),
           info,

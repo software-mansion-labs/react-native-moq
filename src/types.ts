@@ -1,3 +1,5 @@
+import NativeMoQ from './NativeMoQ';
+
 export type MoQSessionState =
   | 'idle'
   | 'connecting'
@@ -22,10 +24,54 @@ export interface MoQAudioTrackInfo {
   bitrate?: number;
 }
 
+// Opaque handle returned in broadcastAvailable events.
+// On iOS the native field is a JSI HostObject with direct methods;
+// on Android it falls back to bridge calls keyed by broadcastPath.
+export class MoQPlayerHandle {
+  readonly broadcastPath: string;
+  readonly #native: any;
+
+  constructor(broadcastPath: string, native?: unknown) {
+    this.broadcastPath = broadcastPath;
+    this.#native = native;
+  }
+
+  play() {
+    if (this.#native) this.#native.play();
+    else NativeMoQ.play(this.broadcastPath);
+  }
+
+  pause() {
+    if (this.#native) this.#native.pause();
+    else NativeMoQ.pause(this.broadcastPath);
+  }
+
+  stop() {
+    if (this.#native) this.#native.stop();
+    else NativeMoQ.stopPlayer(this.broadcastPath);
+  }
+
+  updateTargetLatency(ms: number) {
+    if (this.#native) this.#native.updateTargetLatency(ms);
+    else NativeMoQ.updateTargetLatency(this.broadcastPath, ms);
+  }
+
+  switchVideoTrack(trackName: string) {
+    if (this.#native) this.#native.switchVideoTrack(trackName);
+    else NativeMoQ.switchVideoTrack(this.broadcastPath, trackName);
+  }
+
+  switchAudioTrack(trackName: string) {
+    if (this.#native) this.#native.switchAudioTrack(trackName);
+    else NativeMoQ.switchAudioTrack(this.broadcastPath, trackName);
+  }
+}
+
 export interface MoQBroadcastInfo {
   path: string;
   videoTracks: MoQVideoTrackInfo[];
   audioTracks: MoQAudioTrackInfo[];
+  player: MoQPlayerHandle;
 }
 
 export interface StallStats {

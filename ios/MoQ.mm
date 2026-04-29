@@ -1,5 +1,36 @@
 #import "MoQ.h"
+#import "MoQPlayerHostObject.h"
 #import <MoQ/MoQ-Swift.h>
+
+// C++ subclass of the codegen-generated TurboModule that adds the `getPlayer`
+// JSI method.  All other methods fall through to NativeMoQSpecJSI's dispatch
+// table, which bridges them to the ObjC @implementation below.
+namespace {
+
+class MoQJSIModule : public facebook::react::NativeMoQSpecJSI {
+ public:
+  using NativeMoQSpecJSI::NativeMoQSpecJSI;
+
+  facebook::jsi::Value get(facebook::jsi::Runtime& rt,
+                            const facebook::jsi::PropNameID& name) override {
+    if (name.utf8(rt) == "getPlayer") {
+      return facebook::jsi::Function::createFromHostFunction(
+          rt, name, 1,
+          [](facebook::jsi::Runtime& rt, const facebook::jsi::Value&,
+             const facebook::jsi::Value* args, size_t) -> facebook::jsi::Value {
+            NSString* path = [NSString
+                stringWithUTF8String:args[0].asString(rt).utf8(rt).c_str()];
+            MoQPlayerRef* ref = [[MoQImpl shared] playerRefForPath:path];
+            if (!ref) return facebook::jsi::Value::undefined();
+            auto hostObj = std::make_shared<moq::PlayerHostObject>(ref);
+            return facebook::jsi::Object::createFromHostObject(rt, hostObj);
+          });
+    }
+    return NativeMoQSpecJSI::get(rt, name);
+  }
+};
+
+}  // namespace
 
 @implementation MoQ
 
@@ -60,7 +91,7 @@ RCT_EXPORT_MODULE()
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
 {
-    return std::make_shared<facebook::react::NativeMoQSpecJSI>(params);
+    return std::make_shared<MoQJSIModule>(params);
 }
 
 @end
