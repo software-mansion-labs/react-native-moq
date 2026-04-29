@@ -73,9 +73,9 @@ export function useMoQPlayer(
           setCurrentVideoTrackName(undefined);
           setCurrentAudioTrackName(undefined);
         } else if (e.type === 'trackSwitched') {
-          if (e.trackKind === 'video') {
+          if (e.trackKind === 'video' && e.trackName !== undefined) {
             setCurrentVideoTrackName(e.trackName);
-          } else if (e.trackKind === 'audio') {
+          } else if (e.trackKind === 'audio' && e.trackName !== undefined) {
             setCurrentAudioTrackName(e.trackName);
           }
         }
@@ -93,7 +93,6 @@ export function useMoQPlayer(
     };
     // Intentionally keyed on broadcastPath string — re-subscribe only when
     // the player changes identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [broadcastPath]);
 
   const play = useCallback(() => {

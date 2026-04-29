@@ -5,15 +5,19 @@ import MoQKit
   let player: Player
   @objc public let broadcastPath: String
 
+  var currentVideoTrackName: String?
+  var currentAudioTrackName: String?
   var pendingVideoTrackName: String?
   var pendingAudioTrackName: String?
   var eventsTask: Task<Void, Never>?
   var statsTimer: Timer?
   var onEvent: ((String, [String: Any]) -> Void)?
 
-  init(player: Player, broadcastPath: String) {
+  init(player: Player, broadcastPath: String, videoTrackName: String? = nil, audioTrackName: String? = nil) {
     self.player = player
     self.broadcastPath = broadcastPath
+    self.currentVideoTrackName = videoTrackName
+    self.currentAudioTrackName = audioTrackName
   }
 
   @MainActor var videoLayer: AVSampleBufferDisplayLayer? { player.videoLayer }
@@ -96,15 +100,19 @@ import MoQKit
           ]
           switch kind {
           case .video:
-            if let name = self.pendingVideoTrackName {
+            let name = self.pendingVideoTrackName ?? self.currentVideoTrackName
+            if let name = name {
               body["trackName"] = name
-              self.pendingVideoTrackName = nil
+              self.currentVideoTrackName = name
             }
+            self.pendingVideoTrackName = nil
           case .audio:
-            if let name = self.pendingAudioTrackName {
+            let name = self.pendingAudioTrackName ?? self.currentAudioTrackName
+            if let name = name {
               body["trackName"] = name
-              self.pendingAudioTrackName = nil
+              self.currentAudioTrackName = name
             }
+            self.pendingAudioTrackName = nil
           @unknown default:
             break
           }

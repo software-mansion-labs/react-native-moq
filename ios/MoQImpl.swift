@@ -170,7 +170,7 @@ import MoQKit
       targetBufferingMs: targetLatencyMs
     )
     if let p {
-      let ref = MoQPlayerRef(player: p, broadcastPath: path)
+      let ref = MoQPlayerRef(player: p, broadcastPath: path, videoTrackName: videoTrackName, audioTrackName: audioTrackName)
       ref.onEvent = { [weak self] name, body in self?.onEvent?(name, body) }
       playerRefs[path] = ref
       NotificationCenter.default.post(
