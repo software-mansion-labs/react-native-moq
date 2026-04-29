@@ -48,7 +48,7 @@ function BroadcastPlayer({ player }: { player: MoQPlayerHandle }) {
 
   return (
     <>
-      <MoQVideoView broadcastPath={player.broadcastPath} style={{ width: '100%', aspectRatio: 16 / 9 }} />
+      <MoQVideoView player={player} style={{ width: '100%', aspectRatio: 16 / 9 }} />
       <Button title={state.isPaused ? 'Resume' : 'Pause'} onPress={state.isPaused ? player.play : player.pause} />
     </>
   );
@@ -139,18 +139,18 @@ Returns a `MoQPlayerState` object:
 
 ### `<MoQVideoView>`
 
-Native component that renders the video for a given broadcast path.
+Native component that renders the video for a given player handle.
 
 ```tsx
 <MoQVideoView
-  broadcastPath={broadcast.player.broadcastPath}
+  player={broadcast.player}
   style={{ width: '100%', aspectRatio: 16 / 9 }}
 />
 ```
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `broadcastPath` | `string` | Yes | Path of the broadcast to render |
+| `player` | `MoQPlayerHandle` | Yes | Player handle for the broadcast to render |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
 
 ---
