@@ -5,9 +5,9 @@ import UIKit
 public class MoQVideoView: UIView {
   private var displayLayer: AVSampleBufferDisplayLayer?
 
-  @objc var broadcastPath: String? {
+  @objc var playerId: Int = 0 {
     didSet {
-      attach(layer: broadcastPath.flatMap { MoQImpl.shared.videoLayer(for: $0) })
+      attach(layer: playerId > 0 ? MoQImpl.shared.videoLayer(forPlayerId: playerId) : nil)
     }
   }
 
@@ -36,10 +36,10 @@ public class MoQVideoView: UIView {
   }
 
   @objc private func playerDidChange(_ notification: Notification) {
-    let changedPath = notification.object as? String
-    // nil object = disconnect (all players removed); otherwise filter by path
-    guard changedPath == nil || changedPath == broadcastPath else { return }
-    attach(layer: broadcastPath.flatMap { MoQImpl.shared.videoLayer(for: $0) })
+    let changedId = (notification.object as? NSNumber)?.intValue
+    // nil object = disconnect (all players removed); otherwise filter by playerId
+    guard changedId == nil || changedId == playerId else { return }
+    attach(layer: playerId > 0 ? MoQImpl.shared.videoLayer(forPlayerId: playerId) : nil)
   }
 
   private func attach(layer newLayer: AVSampleBufferDisplayLayer?) {

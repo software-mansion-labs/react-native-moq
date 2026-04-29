@@ -18,6 +18,10 @@ Value PlayerHostObject::get(Runtime& rt, const PropNameID& name) {
     return String::createFromUtf8(rt, ref.broadcastPath.UTF8String);
   }
 
+  if (n == "playerId") {
+    return Value((double)ref.playerId);
+  }
+
   if (n == "play") {
     return Function::createFromHostFunction(
         rt, name, 0,
@@ -92,6 +96,7 @@ std::vector<PropNameID> PlayerHostObject::getPropertyNames(Runtime& rt) {
   std::vector<PropNameID> props;
   props.reserve(7);
   props.push_back(PropNameID::forAscii(rt, "broadcastPath"));
+  props.push_back(PropNameID::forAscii(rt, "playerId"));
   props.push_back(PropNameID::forAscii(rt, "play"));
   props.push_back(PropNameID::forAscii(rt, "pause"));
   props.push_back(PropNameID::forAscii(rt, "stop"));

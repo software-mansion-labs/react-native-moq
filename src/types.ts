@@ -30,40 +30,50 @@ export interface MoQAudioTrackInfo {
 export class MoQPlayerHandle {
   readonly broadcastPath: string;
   readonly #native: any;
+  readonly #nativePlayerId: number;
 
-  constructor(broadcastPath: string, native?: unknown) {
+  constructor(
+    broadcastPath: string,
+    native?: unknown,
+    nativePlayerId?: number
+  ) {
     this.broadcastPath = broadcastPath;
     this.#native = native;
+    this.#nativePlayerId = nativePlayerId ?? 0;
+  }
+
+  get playerId(): number {
+    return this.#native?.playerId ?? this.#nativePlayerId;
   }
 
   play() {
     if (this.#native) this.#native.play();
-    else NativeMoQ.play(this.broadcastPath);
+    else NativeMoQ.play(this.#nativePlayerId);
   }
 
   pause() {
     if (this.#native) this.#native.pause();
-    else NativeMoQ.pause(this.broadcastPath);
+    else NativeMoQ.pause(this.#nativePlayerId);
   }
 
   stop() {
     if (this.#native) this.#native.stop();
-    else NativeMoQ.stopPlayer(this.broadcastPath);
+    else NativeMoQ.stopPlayer(this.#nativePlayerId);
   }
 
   updateTargetLatency(ms: number) {
     if (this.#native) this.#native.updateTargetLatency(ms);
-    else NativeMoQ.updateTargetLatency(this.broadcastPath, ms);
+    else NativeMoQ.updateTargetLatency(this.#nativePlayerId, ms);
   }
 
   switchVideoTrack(trackName: string) {
     if (this.#native) this.#native.switchVideoTrack(trackName);
-    else NativeMoQ.switchVideoTrack(this.broadcastPath, trackName);
+    else NativeMoQ.switchVideoTrack(this.#nativePlayerId, trackName);
   }
 
   switchAudioTrack(trackName: string) {
     if (this.#native) this.#native.switchAudioTrack(trackName);
-    else NativeMoQ.switchAudioTrack(this.broadcastPath, trackName);
+    else NativeMoQ.switchAudioTrack(this.#nativePlayerId, trackName);
   }
 }
 

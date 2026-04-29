@@ -7,14 +7,14 @@ import android.view.SurfaceView
 
 class MoQVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
-  var broadcastPath: String? = null
+  var playerId: Int = 0
     set(value) {
       val old = field
       field = value
-      if (old != null) {
+      if (old != 0) {
         MoQModule.removePlayerListener(old, playerChangedCallback)
       }
-      if (value != null) {
+      if (value != 0) {
         MoQModule.addPlayerListener(value, playerChangedCallback)
         setSurface(holder.surface)
       }
@@ -43,12 +43,12 @@ class MoQVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callb
   }
 
   fun setSurface(surface: Surface?) {
-    broadcastPath?.let { path -> MoQModule.playerHandles[path]?.setSurface(surface) }
+    if (playerId != 0) MoQModule.playerHandlesById[playerId]?.setSurface(surface)
   }
 
   fun cleanup() {
     holder.removeCallback(this)
-    broadcastPath?.let { path -> MoQModule.removePlayerListener(path, playerChangedCallback) }
+    if (playerId != 0) MoQModule.removePlayerListener(playerId, playerChangedCallback)
     setSurface(null)
   }
 }

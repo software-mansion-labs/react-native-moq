@@ -16,8 +16,8 @@ import MoQKit
 
   static let playerChangedNotification = Notification.Name("MoQImpl.playerChanged")
 
-  @MainActor @objc public func videoLayer(for broadcastPath: String) -> AVSampleBufferDisplayLayer? {
-    playerRefs[broadcastPath]?.videoLayer
+  @MainActor @objc public func videoLayer(forPlayerId playerId: Int) -> AVSampleBufferDisplayLayer? {
+    playerRefsById[playerId]?.videoLayer
   }
 
   // MARK: - State (readable from any context)
@@ -30,7 +30,8 @@ import MoQKit
   private var subscription: BroadcastSubscription?
   private var targetLatencyMs: UInt64 = 200
 
-  private var playerRefs: [String: MoQPlayerRef] = [:]
+  private var playerIdsByPath: [String: Int] = [:]
+  private var playerRefsById: [Int: MoQPlayerRef] = [:]
   private var catalogTasks: [String: Task<Void, Never>] = [:]
 
   private var stateTask: Task<Void, Never>?
@@ -48,42 +49,43 @@ import MoQKit
   }
 
   @objc(play:)
-  public func play(broadcastPath: String) {
-    playerRefs[broadcastPath]?.play()
+  public func play(playerId: Int) {
+    playerRefsById[playerId]?.play()
   }
 
   @objc(pause:)
-  public func pause(broadcastPath: String) {
-    playerRefs[broadcastPath]?.pause()
+  public func pause(playerId: Int) {
+    playerRefsById[playerId]?.pause()
   }
 
   @objc(stopPlayer:)
-  public func stopPlayer(broadcastPath: String) {
+  public func stopPlayer(playerId: Int) {
     Task { @MainActor in
-      await self._removePlayer(for: broadcastPath)
+      guard let path = self.playerRefsById[playerId]?.broadcastPath else { return }
+      await self._removePlayer(for: path)
     }
   }
 
   @objc(updateTargetLatency:ms:)
-  public func updateTargetLatency(broadcastPath: String, ms: Int) {
-    playerRefs[broadcastPath]?.updateTargetLatency(ms: ms)
+  public func updateTargetLatency(playerId: Int, ms: Int) {
+    playerRefsById[playerId]?.updateTargetLatency(ms: ms)
   }
 
   @objc(switchVideoTrack:trackName:)
-  public func switchVideoTrack(broadcastPath: String, trackName: String) {
-    playerRefs[broadcastPath]?.switchVideoTrack(name: trackName)
+  public func switchVideoTrack(playerId: Int, trackName: String) {
+    playerRefsById[playerId]?.switchVideoTrack(name: trackName)
   }
 
   @objc(switchAudioTrack:trackName:)
-  public func switchAudioTrack(broadcastPath: String, trackName: String) {
-    playerRefs[broadcastPath]?.switchAudioTrack(name: trackName)
+  public func switchAudioTrack(playerId: Int, trackName: String) {
+    playerRefsById[playerId]?.switchAudioTrack(name: trackName)
   }
 
   // MARK: - JSI: called from MoQ.mm C++ getPlayer override
 
-  @objc(playerRefForPath:)
-  public func playerRef(for path: String) -> MoQPlayerRef? {
-    playerRefs[path]
+  @objc(playerRefForId:)
+  public func playerRef(forId id: Int) -> MoQPlayerRef? {
+    playerRefsById[id]
   }
 
   // MARK: - Private: connect / disconnect
@@ -129,9 +131,10 @@ import MoQKit
     currentState = .idle
 
     let s = session
-    let allRefs = playerRefs
+    let allRefs = Array(playerRefsById.values)
     session = nil
-    playerRefs = [:]
+    playerIdsByPath = [:]
+    playerRefsById = [:]
 
     for (path, _) in catalogTasks {
       catalogTasks[path]?.cancel()
@@ -141,7 +144,7 @@ import MoQKit
     NotificationCenter.default.post(name: MoQImpl.playerChangedNotification, object: nil)
 
     Task { @MainActor in
-      for (_, ref) in allRefs { await ref.stopAll() }
+      for ref in allRefs { await ref.stopAll() }
       await s?.close()
     }
   }
@@ -152,7 +155,7 @@ import MoQKit
   private func _handleBroadcastAvailable(_ catalog: Catalog) async {
     let path = catalog.path
 
-    let hadPlayer = playerRefs[path] != nil
+    let hadPlayer = playerIdsByPath[path] != nil
     await _removePlayer(for: path, notifyVideoViews: false, cancelCatalogTask: false)
 
     let sortedVideo = catalog.videoTracks.sorted {
@@ -172,9 +175,10 @@ import MoQKit
     if let p {
       let ref = MoQPlayerRef(player: p, broadcastPath: path, videoTrackName: videoTrackName, audioTrackName: audioTrackName)
       ref.onEvent = { [weak self] name, body in self?.onEvent?(name, body) }
-      playerRefs[path] = ref
+      playerIdsByPath[path] = ref.playerId
+      playerRefsById[ref.playerId] = ref
       NotificationCenter.default.post(
-        name: MoQImpl.playerChangedNotification, object: path)
+        name: MoQImpl.playerChangedNotification, object: NSNumber(value: ref.playerId))
       ref.startObservingEvents()
 
       if hadPlayer {
@@ -182,8 +186,10 @@ import MoQKit
       }
     }
 
+    let playerId = playerIdsByPath[path]
     onEvent?("broadcastAvailable", [
       "path": path,
+      "playerId": playerId as Any,
       "videoTracks": catalog.videoTracks.map { t -> [String: Any] in
         var d: [String: Any] = ["name": t.name, "codec": t.config.codec]
         if let size = t.config.coded {
@@ -219,15 +225,16 @@ import MoQKit
     notifyVideoViews: Bool = true,
     cancelCatalogTask: Bool = true
   ) async {
-    if let ref = playerRefs.removeValue(forKey: path) {
+    if let id = playerIdsByPath.removeValue(forKey: path),
+       let ref = playerRefsById.removeValue(forKey: id) {
       if cancelCatalogTask {
         catalogTasks.removeValue(forKey: path)?.cancel()
       }
       await ref.stopAll()
-    }
-    if notifyVideoViews {
-      NotificationCenter.default.post(
-        name: MoQImpl.playerChangedNotification, object: path)
+      if notifyVideoViews {
+        NotificationCenter.default.post(
+          name: MoQImpl.playerChangedNotification, object: NSNumber(value: id))
+      }
     }
   }
 }

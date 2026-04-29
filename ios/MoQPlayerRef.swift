@@ -2,8 +2,11 @@ import AVFoundation
 import MoQKit
 
 @objc public class MoQPlayerRef: NSObject {
+  private static var _nextId: Int = 1
+
   let player: Player
   @objc public let broadcastPath: String
+  @objc public let playerId: Int
 
   var currentVideoTrackName: String?
   var currentAudioTrackName: String?
@@ -16,6 +19,8 @@ import MoQKit
   init(player: Player, broadcastPath: String, videoTrackName: String? = nil, audioTrackName: String? = nil) {
     self.player = player
     self.broadcastPath = broadcastPath
+    self.playerId = MoQPlayerRef._nextId
+    MoQPlayerRef._nextId += 1
     self.currentVideoTrackName = videoTrackName
     self.currentAudioTrackName = audioTrackName
   }

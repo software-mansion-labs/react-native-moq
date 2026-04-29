@@ -118,7 +118,7 @@
   },
   "codegenConfig": {
     "name": "MoQSpec",
-    "type": "modules",
+    "type": "all",
     "jsSrcsDir": "src",
     "android": {
       "javaPackageName": "com.moq"

@@ -14,9 +14,9 @@ class MoQVideoViewManager : SimpleViewManager<MoQVideoView>() {
 
   override fun createViewInstance(context: ThemedReactContext) = MoQVideoView(context)
 
-  @ReactProp(name = "broadcastPath")
-  fun setBroadcastPath(view: MoQVideoView, broadcastPath: String?) {
-    view.broadcastPath = broadcastPath
+  @ReactProp(name = "playerId")
+  fun setPlayerId(view: MoQVideoView, playerId: Int) {
+    view.playerId = playerId
   }
 
   override fun onDropViewInstance(view: MoQVideoView) {

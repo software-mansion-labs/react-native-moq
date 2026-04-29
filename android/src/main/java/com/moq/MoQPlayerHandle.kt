@@ -8,6 +8,7 @@ import com.swmansion.moqkit.subscribe.Player
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicInteger
 
 class MoQPlayerHandle(
   val player: Player,
@@ -15,6 +16,11 @@ class MoQPlayerHandle(
   private val moduleScope: CoroutineScope,
   private val mainHandler: Handler,
 ) {
+  val playerId: Int = nextId.getAndIncrement()
+
+  companion object {
+    private val nextId = AtomicInteger(1)
+  }
   var onEvent: ((String, WritableMap) -> Unit)? = null
 
   @Volatile private var eventJob: Job? = null

@@ -31,28 +31,29 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private var stateJob: Job? = null
   private var broadcastsJob: Job? = null
 
-  // MARK: - Companion: shared handle map and listeners for MoQVideoView
+  // MARK: - Companion: shared handle maps and listeners for MoQVideoView
 
   companion object {
     const val NAME = NativeMoQSpec.NAME
 
-    val playerHandles = ConcurrentHashMap<String, MoQPlayerHandle>()
+    val playerHandlesById = ConcurrentHashMap<Int, MoQPlayerHandle>()
+    private val playerIdsByPath = ConcurrentHashMap<String, Int>()
     private val playerChangeListeners =
-      ConcurrentHashMap<String, CopyOnWriteArrayList<() -> Unit>>()
+      ConcurrentHashMap<Int, CopyOnWriteArrayList<() -> Unit>>()
 
-    fun addPlayerListener(broadcastPath: String, listener: () -> Unit) {
-      playerChangeListeners.getOrPut(broadcastPath) { CopyOnWriteArrayList() }.add(listener)
+    fun addPlayerListener(playerId: Int, listener: () -> Unit) {
+      playerChangeListeners.getOrPut(playerId) { CopyOnWriteArrayList() }.add(listener)
     }
 
-    fun removePlayerListener(broadcastPath: String, listener: () -> Unit) {
-      playerChangeListeners[broadcastPath]?.remove(listener)
+    fun removePlayerListener(playerId: Int, listener: () -> Unit) {
+      playerChangeListeners[playerId]?.remove(listener)
     }
 
-    fun notifyPlayerChanged(broadcastPath: String?) {
-      if (broadcastPath == null) {
+    fun notifyPlayerChanged(playerId: Int?) {
+      if (playerId == null) {
         playerChangeListeners.values.forEach { list -> list.forEach { it() } }
       } else {
-        playerChangeListeners[broadcastPath]?.forEach { it() }
+        playerChangeListeners[playerId]?.forEach { it() }
       }
     }
 
@@ -118,7 +119,9 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     subscription?.close()
     subscription = null
 
-    playerHandles.keys.toList().forEach { path -> removePlayer(path, notify = false) }
+    playerIdsByPath.keys.toList().forEach { path -> removePlayer(path, notify = false) }
+    playerHandlesById.clear()
+    playerIdsByPath.clear()
 
     val s = session
     session = null
@@ -128,27 +131,29 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     s?.close()
   }
 
-  override fun play(broadcastPath: String) {
-    playerHandles[broadcastPath]?.play()
+  override fun play(playerId: Double) {
+    playerHandlesById[playerId.toInt()]?.play()
   }
 
-  override fun pause(broadcastPath: String) {
-    playerHandles[broadcastPath]?.pause()
+  override fun pause(playerId: Double) {
+    playerHandlesById[playerId.toInt()]?.pause()
   }
 
-  override fun stopPlayer(broadcastPath: String) {
-    removePlayer(broadcastPath)
+  override fun stopPlayer(playerId: Double) {
+    val id = playerId.toInt()
+    val path = playerHandlesById[id]?.broadcastPath ?: return
+    removePlayer(path)
   }
 
-  override fun updateTargetLatency(broadcastPath: String, ms: Double) {
-    playerHandles[broadcastPath]?.updateTargetLatency(ms.toInt())
+  override fun updateTargetLatency(playerId: Double, ms: Double) {
+    playerHandlesById[playerId.toInt()]?.updateTargetLatency(ms.toInt())
   }
 
-  override fun switchVideoTrack(broadcastPath: String, trackName: String) {
-    playerHandles[broadcastPath]?.switchVideoTrack(trackName)
+  override fun switchVideoTrack(playerId: Double, trackName: String) {
+    playerHandlesById[playerId.toInt()]?.switchVideoTrack(trackName)
   }
 
-  override fun switchAudioTrack(broadcastPath: String, trackName: String) {
+  override fun switchAudioTrack(playerId: Double, trackName: String) {
     // Audio track switching is not supported on Android
   }
 
@@ -163,7 +168,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private fun handleBroadcastAvailable(catalog: Catalog, targetLatencyMs: Int) {
     val path = catalog.path
 
-    val hadPlayer = playerHandles[path] != null
+    val hadPlayer = playerIdsByPath[path] != null
     removePlayer(path, notify = false)
 
     val sortedVideo = catalog.videoTracks.sortedByDescending {
@@ -185,14 +190,15 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     if (p != null) {
       val handle = MoQPlayerHandle(p, path, moduleScope, mainHandler)
       handle.onEvent = { name, map -> emitEvent(name, map) }
-      playerHandles[path] = handle
+      playerIdsByPath[path] = handle.playerId
+      playerHandlesById[handle.playerId] = handle
       handle.startObservingEvents()
 
       if (hadPlayer) {
         p.play()
       }
 
-      mainHandler.post { notifyPlayerChanged(path) }
+      mainHandler.post { notifyPlayerChanged(handle.playerId) }
     }
 
     val videoArray = Arguments.createArray()
@@ -220,6 +226,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
     val map = Arguments.createMap()
     map.putString("path", path)
+    playerIdsByPath[path]?.let { map.putInt("playerId", it) }
     map.putArray("videoTracks", videoArray)
     map.putArray("audioTracks", audioArray)
     emitEvent("broadcastAvailable", map)
@@ -233,9 +240,11 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   }
 
   private fun removePlayer(path: String, notify: Boolean = true) {
-    playerHandles.remove(path)?.close()
-    if (notify) {
-      mainHandler.post { notifyPlayerChanged(path) }
+    val id = playerIdsByPath.remove(path)
+    val removed = id?.let { playerHandlesById.remove(it) }
+    removed?.close()
+    if (notify && id != null) {
+      mainHandler.post { notifyPlayerChanged(id) }
     }
   }
 

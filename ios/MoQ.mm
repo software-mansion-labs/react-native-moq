@@ -18,9 +18,8 @@ class MoQJSIModule : public facebook::react::NativeMoQSpecJSI {
           rt, name, 1,
           [](facebook::jsi::Runtime& rt, const facebook::jsi::Value&,
              const facebook::jsi::Value* args, size_t) -> facebook::jsi::Value {
-            NSString* path = [NSString
-                stringWithUTF8String:args[0].asString(rt).utf8(rt).c_str()];
-            MoQPlayerRef* ref = [[MoQImpl shared] playerRefForPath:path];
+            int playerId = (int)args[0].asNumber();
+            MoQPlayerRef* ref = [[MoQImpl shared] playerRefForId:playerId];
             if (!ref) return facebook::jsi::Value::undefined();
             auto hostObj = std::make_shared<moq::PlayerHostObject>(ref);
             return facebook::jsi::Object::createFromHostObject(rt, hostObj);
@@ -64,28 +63,28 @@ RCT_EXPORT_MODULE()
   [[MoQImpl shared] disconnect];
 }
 
-- (void)play:(NSString *)broadcastPath {
-  [[MoQImpl shared] play:broadcastPath];
+- (void)play:(double)playerId {
+  [[MoQImpl shared] play:(int)playerId];
 }
 
-- (void)pause:(NSString *)broadcastPath {
-  [[MoQImpl shared] pause:broadcastPath];
+- (void)pause:(double)playerId {
+  [[MoQImpl shared] pause:(int)playerId];
 }
 
-- (void)stopPlayer:(NSString *)broadcastPath {
-  [[MoQImpl shared] stopPlayer:broadcastPath];
+- (void)stopPlayer:(double)playerId {
+  [[MoQImpl shared] stopPlayer:(int)playerId];
 }
 
-- (void)updateTargetLatency:(NSString *)broadcastPath ms:(double)ms {
-  [[MoQImpl shared] updateTargetLatency:broadcastPath ms:(int)ms];
+- (void)updateTargetLatency:(double)playerId ms:(double)ms {
+  [[MoQImpl shared] updateTargetLatency:(int)playerId ms:(int)ms];
 }
 
-- (void)switchVideoTrack:(NSString *)broadcastPath trackName:(NSString *)trackName {
-  [[MoQImpl shared] switchVideoTrack:broadcastPath trackName:trackName];
+- (void)switchVideoTrack:(double)playerId trackName:(NSString *)trackName {
+  [[MoQImpl shared] switchVideoTrack:(int)playerId trackName:trackName];
 }
 
-- (void)switchAudioTrack:(NSString *)broadcastPath trackName:(NSString *)trackName {
-  [[MoQImpl shared] switchAudioTrack:broadcastPath trackName:trackName];
+- (void)switchAudioTrack:(double)playerId trackName:(NSString *)trackName {
+  [[MoQImpl shared] switchAudioTrack:(int)playerId trackName:trackName];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
