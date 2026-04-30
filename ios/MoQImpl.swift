@@ -182,7 +182,7 @@ import MoQKit
       }
     }
 
-    onEvent?("broadcastAvailable", [
+    var broadcastAvailableBody: [String: Any] = [
       "path": path,
       "videoTracks": catalog.videoTracks.map { t -> [String: Any] in
         var d: [String: Any] = ["name": t.name, "codec": t.config.codec]
@@ -204,7 +204,10 @@ import MoQKit
         if let bitrate = t.config.bitrate { d["bitrate"] = bitrate }
         return d
       },
-    ])
+    ]
+    if let name = videoTrackName { broadcastAvailableBody["initialVideoTrackName"] = name }
+    if let name = audioTrackName { broadcastAvailableBody["initialAudioTrackName"] = name }
+    onEvent?("broadcastAvailable", broadcastAvailableBody)
   }
 
   @MainActor

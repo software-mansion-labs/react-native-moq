@@ -220,6 +220,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
     val map = Arguments.createMap()
     map.putString("path", path)
+    videoTrackName?.let { map.putString("initialVideoTrackName", it) }
+    audioTrackName?.let { map.putString("initialAudioTrackName", it) }
     map.putArray("videoTracks", videoArray)
     map.putArray("audioTracks", audioArray)
     emitEvent("broadcastAvailable", map)

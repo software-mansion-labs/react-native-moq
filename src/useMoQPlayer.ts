@@ -1,32 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import NativeMoQ from './NativeMoQ';
-import type {
-  MoQPlaybackStats,
-  MoQPlayerState,
-  MoQVideoTrackInfo,
-} from './types';
+import type { MoQPlaybackStats, MoQPlayer } from './types';
 import { MoQPlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
-export interface UseMoQPlayerOptions {
-  /** Override the target buffering latency in milliseconds for this player. */
-  targetLatencyMs?: number;
-  /**
-   * Available video tracks for this broadcast. When provided, the hook
-   * initialises currentVideoTrackName to the first track, matching the
-   * default selection made by the native player.
-   */
-  videoTracks?: MoQVideoTrackInfo[];
-}
-
 export function useMoQPlayer(
   player: MoQPlayerHandle,
-  options: UseMoQPlayerOptions = {}
-): MoQPlayerState {
-  const { targetLatencyMs, videoTracks } = options;
-
+  setup?: (player: MoQPlayer) => void
+): MoQPlayer {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [playbackStats, setPlaybackStats] = useState<MoQPlaybackStats | null>(
@@ -34,21 +17,15 @@ export function useMoQPlayer(
   );
   const [currentVideoTrackName, setCurrentVideoTrackName] = useState<
     string | undefined
-  >(() => videoTracks?.[0]?.name);
+  >(player.initialVideoTrackName);
   const [currentAudioTrackName, setCurrentAudioTrackName] = useState<
     string | undefined
-  >(undefined);
+  >(player.initialAudioTrackName);
 
   const playerRef = useRef(player);
   playerRef.current = player;
 
   const { broadcastPath } = player;
-
-  useEffect(() => {
-    if (targetLatencyMs !== undefined) {
-      player.updateTargetLatency(targetLatencyMs);
-    }
-  }, [player, targetLatencyMs]);
 
   useEffect(() => {
     const subs = [
@@ -121,7 +98,8 @@ export function useMoQPlayer(
     playerRef.current.switchAudioTrack(trackName);
   }, []);
 
-  return {
+  const moqPlayer: MoQPlayer = {
+    broadcastPath,
     isPlaying,
     isPaused,
     playbackStats,
@@ -134,4 +112,15 @@ export function useMoQPlayer(
     switchVideoTrack,
     switchAudioTrack,
   };
+
+  const moqPlayerRef = useRef(moqPlayer);
+  moqPlayerRef.current = moqPlayer;
+
+  const setupRef = useRef(setup);
+
+  useEffect(() => {
+    setupRef.current?.(moqPlayerRef.current);
+  }, []);
+
+  return moqPlayer;
 }

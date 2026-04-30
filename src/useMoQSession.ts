@@ -37,12 +37,20 @@ export function useMoQSession(
       }),
 
       moqEmitter.addListener('broadcastAvailable', (event) => {
-        const raw = event as Omit<MoQBroadcastInfo, 'player'>;
+        const raw = event as Omit<MoQBroadcastInfo, 'player'> & {
+          initialVideoTrackName?: string;
+          initialAudioTrackName?: string;
+        };
         // getPlayer is provided by the C++ TurboModule override on iOS and
         // returns a JSI HostObject.  On Android it is undefined so the handle
         // falls back to bridge calls keyed by broadcastPath.
         const native = (NativeMoQ as any).getPlayer?.(raw.path);
-        const player = new MoQPlayerHandle(raw.path, native);
+        const player = new MoQPlayerHandle(
+          raw.path,
+          native,
+          raw.initialVideoTrackName,
+          raw.initialAudioTrackName
+        );
         const info: MoQBroadcastInfo = { ...raw, player };
         setBroadcasts((prev) => [
           ...prev.filter((b) => b.path !== info.path),

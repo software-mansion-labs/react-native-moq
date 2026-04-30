@@ -29,11 +29,20 @@ export interface MoQAudioTrackInfo {
 // on Android it falls back to bridge calls keyed by broadcastPath.
 export class MoQPlayerHandle {
   readonly broadcastPath: string;
+  readonly initialVideoTrackName?: string;
+  readonly initialAudioTrackName?: string;
   readonly #native: any;
 
-  constructor(broadcastPath: string, native?: unknown) {
+  constructor(
+    broadcastPath: string,
+    native?: unknown,
+    initialVideoTrackName?: string,
+    initialAudioTrackName?: string
+  ) {
     this.broadcastPath = broadcastPath;
     this.#native = native;
+    this.initialVideoTrackName = initialVideoTrackName;
+    this.initialAudioTrackName = initialAudioTrackName;
   }
 
   play() {
@@ -103,12 +112,13 @@ export interface MoQSession {
   disconnect(): void;
 }
 
-export interface MoQPlayerState {
-  isPlaying: boolean;
-  isPaused: boolean;
-  playbackStats: MoQPlaybackStats | null;
-  currentVideoTrackName?: string;
-  currentAudioTrackName?: string;
+export interface MoQPlayer {
+  readonly broadcastPath: string;
+  readonly isPlaying: boolean;
+  readonly isPaused: boolean;
+  readonly playbackStats: MoQPlaybackStats | null;
+  readonly currentVideoTrackName?: string;
+  readonly currentAudioTrackName?: string;
   play(): void;
   pause(): void;
   stop(): void;

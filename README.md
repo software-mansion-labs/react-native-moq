@@ -23,7 +23,7 @@ cd ios && pod install
 
 ```tsx
 import { MoQVideoView, useMoQSession, useMoQPlayer } from 'react-native-moq';
-import type { MoQPlayerHandle } from 'react-native-moq';
+import type { MoQPlayerHandle, MoQPlayer } from 'react-native-moq';
 
 function App() {
   const session = useMoQSession('http://relay.example.com:4443');
@@ -32,24 +32,21 @@ function App() {
     <>
       <Button title="Connect" onPress={session.connect} />
       {session.broadcasts.map((broadcast) => (
-        <BroadcastPlayer key={broadcast.path} player={broadcast.player} />
+        <BroadcastPlayer key={broadcast.path} handle={broadcast.player} />
       ))}
     </>
   );
 }
 
-function BroadcastPlayer({ player }: { player: MoQPlayerHandle }) {
-  const state = useMoQPlayer(player);
-
-  useEffect(() => {
-    player.play();
-    return () => player.pause();
-  }, [player]);
+function BroadcastPlayer({ handle }: { handle: MoQPlayerHandle }) {
+  const player = useMoQPlayer(handle, (p) => {
+    p.play();
+  });
 
   return (
     <>
       <MoQVideoView player={player} style={{ width: '100%', aspectRatio: 16 / 9 }} />
-      <Button title={state.isPaused ? 'Resume' : 'Pause'} onPress={state.isPaused ? player.play : player.pause} />
+      <Button title={player.isPaused ? 'Resume' : 'Pause'} onPress={player.isPaused ? player.play : player.pause} />
     </>
   );
 }
@@ -63,8 +60,8 @@ Manages the connection to a MoQ relay server and tracks available broadcasts.
 
 ```tsx
 const session = useMoQSession('http://relay.example.com:4443', {
-  prefix: '',          // track namespace prefix, default ''
-  targetLatencyMs: 200 // default buffering latency for players, default 200
+  prefix: '',           // track namespace prefix, default ''
+  targetLatencyMs: 200  // default buffering latency for players, default 200
 });
 ```
 
@@ -73,7 +70,7 @@ Returns a `MoQSession` object:
 | Property / Method | Type | Description |
 |---|---|---|
 | `sessionState` | `MoQSessionState` | Current connection state |
-| `broadcasts` | `MoQBroadcastInfo[]` | Currently available broadcasts, each with a `player` handle |
+| `broadcasts` | `MoQBroadcastInfo[]` | Currently available broadcasts |
 | `connect()` | `() => void` | Connect to the relay |
 | `disconnect()` | `() => void` | Disconnect and reset state |
 
@@ -83,46 +80,22 @@ Call `connect()` manually after mounting — the hook does not auto-connect.
 
 ---
 
-### `MoQPlayerHandle`
+### `useMoQPlayer(handle, setup?)`
 
-An opaque reference to a native player, returned as `broadcast.player` inside `MoQBroadcastInfo`. You can call playback methods on it directly or pass it to `useMoQPlayer` to track reactive state.
+Creates a reactive `MoQPlayer` from a `MoQPlayerHandle`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<MoQVideoView>`.
 
 ```tsx
-// Direct usage — no hook needed
-broadcast.player.play();
-broadcast.player.switchVideoTrack('1080p');
-broadcast.player.updateTargetLatency(100);
+const player = useMoQPlayer(broadcast.player, (p) => {
+  p.updateTargetLatency(300);
+  p.play();
+});
 ```
+
+Returns a `MoQPlayer` object:
 
 | Property / Method | Type | Description |
 |---|---|---|
 | `broadcastPath` | `string` | The broadcast path this player belongs to |
-| `play()` | `() => void` | Start or resume playback |
-| `pause()` | `() => void` | Pause playback |
-| `stop()` | `() => void` | Stop playback |
-| `updateTargetLatency(ms)` | `(ms: number) => void` | Change buffering latency at runtime |
-| `switchVideoTrack(name)` | `(name: string) => void` | Switch to a different video rendition |
-| `switchAudioTrack(name)` | `(name: string) => void` | Switch to a different audio track |
-
-On iOS the handle is backed by a JSI host object — method calls go directly to the native player without bridge serialisation. On Android they delegate to the TurboModule bridge.
-
----
-
-### `useMoQPlayer(player, options?)`
-
-Tracks reactive playback state for a given `MoQPlayerHandle`. Use this when you need `isPlaying`, `isPaused`, `playbackStats`, or current track names in your UI.
-
-```tsx
-const state = useMoQPlayer(broadcast.player, {
-  targetLatencyMs: 300,                  // override buffering latency for this player
-  videoTracks: broadcast.videoTracks     // pre-populate currentVideoTrackName
-});
-```
-
-Returns a `MoQPlayerState` object:
-
-| Property / Method | Type | Description |
-|---|---|---|
 | `isPlaying` | `boolean` | True while tracks are actively playing |
 | `isPaused` | `boolean` | True while paused |
 | `playbackStats` | `MoQPlaybackStats \| null` | Live metrics, updated every 500 ms |
@@ -139,19 +112,34 @@ Returns a `MoQPlayerState` object:
 
 ### `<MoQVideoView>`
 
-Native component that renders the video for a given player handle.
+Native component that renders the video for a given player.
 
 ```tsx
 <MoQVideoView
-  player={broadcast.player}
+  player={player}
   style={{ width: '100%', aspectRatio: 16 / 9 }}
 />
 ```
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `player` | `MoQPlayerHandle` | Yes | Player handle for the broadcast to render |
+| `player` | `MoQPlayer` | Yes | Player returned by `useMoQPlayer` |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
+
+---
+
+### `MoQPlayerHandle`
+
+An opaque reference to a native player, available as `broadcast.player` inside `MoQBroadcastInfo`. Pass it to `useMoQPlayer` to get a reactive `MoQPlayer`. You can also call playback methods on it directly without the hook.
+
+```tsx
+// Direct usage — no hook needed
+broadcast.player.play();
+broadcast.player.switchVideoTrack('1080p');
+broadcast.player.updateTargetLatency(100);
+```
+
+On iOS the handle is backed by a JSI host object — method calls go directly to the native player without bridge serialisation. On Android they delegate to the TurboModule bridge.
 
 ---
 
@@ -164,7 +152,7 @@ interface MoQBroadcastInfo {
   path: string;
   videoTracks: MoQVideoTrackInfo[];
   audioTracks: MoQAudioTrackInfo[];
-  player: MoQPlayerHandle; // native player reference, created automatically
+  player: MoQPlayerHandle; // pass to useMoQPlayer to get a MoQPlayer
 }
 ```
 
@@ -224,6 +212,8 @@ interface StallStats {
 ### Quality / rendition switching
 
 ```tsx
+const player = useMoQPlayer(broadcast.player, (p) => p.play());
+
 const sortedTracks = [...broadcast.videoTracks].sort(
   (a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0)
 );
@@ -232,7 +222,7 @@ sortedTracks.map((track) => (
   <Button
     key={track.name}
     title={track.height ? `${track.height}p` : track.name}
-    onPress={() => broadcast.player.switchVideoTrack(track.name)}
+    onPress={() => player.switchVideoTrack(track.name)}
   />
 ));
 ```
@@ -243,22 +233,25 @@ sortedTracks.map((track) => (
 // Set at session level (applies to all new players)
 const session = useMoQSession(url, { targetLatencyMs: 500 });
 
-// Override per player via the hook
-const state = useMoQPlayer(broadcast.player, { targetLatencyMs: 100 });
+// Override per player in the setup callback
+const player = useMoQPlayer(broadcast.player, (p) => {
+  p.updateTargetLatency(100);
+  p.play();
+});
 
-// Or change at runtime directly on the handle
-broadcast.player.updateTargetLatency(300);
+// Or change at runtime on the returned player
+player.updateTargetLatency(300);
 ```
 
 ### Displaying live stats
 
 ```tsx
-const { playbackStats: stats } = useMoQPlayer(broadcast.player);
+const player = useMoQPlayer(broadcast.player, (p) => p.play());
 
-if (stats) {
-  console.log(`Latency: ${stats.videoLatencyMs} ms`);
-  console.log(`Bitrate: ${stats.videoBitrateKbps} kbps`);
-  console.log(`FPS: ${stats.videoFps}`);
+if (player.playbackStats) {
+  console.log(`Latency: ${player.playbackStats.videoLatencyMs} ms`);
+  console.log(`Bitrate: ${player.playbackStats.videoBitrateKbps} kbps`);
+  console.log(`FPS: ${player.playbackStats.videoFps}`);
 }
 ```
 

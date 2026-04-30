@@ -1,12 +1,12 @@
 import { requireNativeComponent, type ViewProps } from 'react-native';
-import type { MoQPlayerHandle } from './types';
+import type { MoQPlayer } from './types';
 
 interface NativeMoQVideoViewProps extends ViewProps {
   broadcastPath: string;
 }
 
 export interface MoQVideoViewProps extends ViewProps {
-  player: MoQPlayerHandle;
+  player: MoQPlayer;
 }
 
 const NativeMoQVideoView =

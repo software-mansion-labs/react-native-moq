@@ -95,17 +95,9 @@ function BroadcastPlayer({
   broadcast: MoQBroadcastInfo;
   onRemove: () => void;
 }) {
-  const player = useMoQPlayer(broadcast.player, {
-    videoTracks: broadcast.videoTracks,
+  const player = useMoQPlayer(broadcast.player, (p) => {
+    p.play();
   });
-
-  useEffect(() => {
-    player.play();
-    return () => {
-      player.pause();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleRemove = () => {
     player.pause();
@@ -124,7 +116,7 @@ function BroadcastPlayer({
         <Button title="Disconnect" onPress={handleRemove} color="#ef4444" />
       </View>
 
-      <MoQVideoView player={broadcast.player} style={styles.video} />
+      <MoQVideoView player={player} style={styles.video} />
 
       {sortedVideoTracks.length > 1 && (
         <RenditionPicker
