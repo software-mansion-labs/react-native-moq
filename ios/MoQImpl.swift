@@ -155,12 +155,7 @@ import MoQKit
     let hadPlayer = playerRefs[path] != nil
     await _removePlayer(for: path, notifyVideoViews: false, cancelCatalogTask: false)
 
-    let sortedVideo = catalog.videoTracks.sorted {
-      let a = $0.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
-      let b = $1.config.coded.map { UInt64($0.width) * UInt64($0.height) } ?? 0
-      return a > b
-    }
-    let videoTrackName = sortedVideo.first?.name
+    let videoTrackName = catalog.videoTracks.first?.name
     let audioTrackName = catalog.audioTracks.first?.name
 
     let p = try? Player(

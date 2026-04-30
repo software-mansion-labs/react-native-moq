@@ -166,10 +166,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val hadPlayer = playerHandles[path] != null
     removePlayer(path, notify = false)
 
-    val sortedVideo = catalog.videoTracks.sortedByDescending {
-      it.config.coded?.let { d -> d.width.toLong() * d.height.toLong() } ?: 0L
-    }
-    val videoTrackName = sortedVideo.firstOrNull()?.name
+    val videoTrackName = catalog.videoTracks.firstOrNull()?.name
     val audioTrackName = catalog.audioTracks.firstOrNull()?.name
 
     val p = try {
