@@ -22,11 +22,11 @@ cd ios && pod install
 ## Quick start
 
 ```tsx
-import { MoQVideoView, useMoQSession, useMoQPlayer } from 'react-native-moq';
+import { VideoView, useSession, usePlayer } from 'react-native-moq';
 import type { MoQPlayerHandle, MoQPlayer } from 'react-native-moq';
 
 function App() {
-  const session = useMoQSession('http://relay.example.com:4443');
+  const session = useSession('http://relay.example.com:4443');
 
   return (
     <>
@@ -39,13 +39,13 @@ function App() {
 }
 
 function BroadcastPlayer({ handle }: { handle: MoQPlayerHandle }) {
-  const player = useMoQPlayer(handle, (p) => {
+  const player = usePlayer(handle, (p) => {
     p.play();
   });
 
   return (
     <>
-      <MoQVideoView player={player} style={{ width: '100%', aspectRatio: 16 / 9 }} />
+      <VideoView player={player} style={{ width: '100%', aspectRatio: 16 / 9 }} />
       <Button title={player.isPaused ? 'Resume' : 'Pause'} onPress={player.isPaused ? player.play : player.pause} />
     </>
   );
@@ -54,12 +54,12 @@ function BroadcastPlayer({ handle }: { handle: MoQPlayerHandle }) {
 
 ## API
 
-### `useMoQSession(url, options?)`
+### `useSession(url, options?)`
 
 Manages the connection to a MoQ relay server and tracks available broadcasts.
 
 ```tsx
-const session = useMoQSession('http://relay.example.com:4443', {
+const session = useSession('http://relay.example.com:4443', {
   prefix: '',           // track namespace prefix, default ''
   targetLatencyMs: 200  // default buffering latency for players, default 200
 });
@@ -80,12 +80,12 @@ Call `connect()` manually after mounting — the hook does not auto-connect.
 
 ---
 
-### `useMoQPlayer(handle, setup?)`
+### `usePlayer(handle, setup?)`
 
-Creates a reactive `MoQPlayer` from a `MoQPlayerHandle`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<MoQVideoView>`.
+Creates a reactive `MoQPlayer` from a `MoQPlayerHandle`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<VideoView>`.
 
 ```tsx
-const player = useMoQPlayer(broadcast.player, (p) => {
+const player = usePlayer(broadcast.player, (p) => {
   p.updateTargetLatency(300);
   p.play();
 });
@@ -110,12 +110,12 @@ Returns a `MoQPlayer` object:
 
 ---
 
-### `<MoQVideoView>`
+### `<VideoView>`
 
 Native component that renders the video for a given player.
 
 ```tsx
-<MoQVideoView
+<VideoView
   player={player}
   style={{ width: '100%', aspectRatio: 16 / 9 }}
 />
@@ -123,14 +123,14 @@ Native component that renders the video for a given player.
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `player` | `MoQPlayer` | Yes | Player returned by `useMoQPlayer` |
+| `player` | `MoQPlayer` | Yes | Player returned by `usePlayer` |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
 
 ---
 
 ### `MoQPlayerHandle`
 
-An opaque reference to a native player, available as `broadcast.player` inside `MoQBroadcastInfo`. Pass it to `useMoQPlayer` to get a reactive `MoQPlayer`. You can also call playback methods on it directly without the hook.
+An opaque reference to a native player, available as `broadcast.player` inside `MoQBroadcastInfo`. Pass it to `usePlayer` to get a reactive `MoQPlayer`. You can also call playback methods on it directly without the hook.
 
 ```tsx
 // Direct usage — no hook needed
@@ -152,7 +152,7 @@ interface MoQBroadcastInfo {
   path: string;
   videoTracks: MoQVideoTrackInfo[];
   audioTracks: MoQAudioTrackInfo[];
-  player: MoQPlayerHandle; // pass to useMoQPlayer to get a MoQPlayer
+  player: MoQPlayerHandle; // pass to usePlayer to get a MoQPlayer
 }
 ```
 
@@ -212,7 +212,7 @@ interface StallStats {
 ### Quality / rendition switching
 
 ```tsx
-const player = useMoQPlayer(broadcast.player, (p) => p.play());
+const player = usePlayer(broadcast.player, (p) => p.play());
 
 const sortedTracks = [...broadcast.videoTracks].sort(
   (a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0)
@@ -231,10 +231,10 @@ sortedTracks.map((track) => (
 
 ```tsx
 // Set at session level (applies to all new players)
-const session = useMoQSession(url, { targetLatencyMs: 500 });
+const session = useSession(url, { targetLatencyMs: 500 });
 
 // Override per player in the setup callback
-const player = useMoQPlayer(broadcast.player, (p) => {
+const player = usePlayer(broadcast.player, (p) => {
   p.updateTargetLatency(100);
   p.play();
 });
@@ -246,7 +246,7 @@ player.updateTargetLatency(300);
 ### Displaying live stats
 
 ```tsx
-const player = useMoQPlayer(broadcast.player, (p) => p.play());
+const player = usePlayer(broadcast.player, (p) => p.play());
 
 if (player.playbackStats) {
   console.log(`Latency: ${player.playbackStats.videoLatencyMs} ms`);

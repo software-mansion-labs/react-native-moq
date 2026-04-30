@@ -6,16 +6,16 @@ import { MoQPlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
-export interface UseMoQSessionOptions {
+export interface UseSessionOptions {
   /** Track namespace prefix passed to MoQSession. Defaults to `''`. */
   prefix?: string;
   /** Default target buffering latency in milliseconds for new players. Defaults to `200`. */
   targetLatencyMs?: number;
 }
 
-export function useMoQSession(
+export function useSession(
   url: string,
-  options: UseMoQSessionOptions = {}
+  options: UseSessionOptions = {}
 ): MoQSession {
   const { prefix = '', targetLatencyMs = 200 } = options;
 

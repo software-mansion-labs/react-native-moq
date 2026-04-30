@@ -5,13 +5,13 @@ interface NativeMoQVideoViewProps extends ViewProps {
   broadcastPath: string;
 }
 
-export interface MoQVideoViewProps extends ViewProps {
+export interface VideoViewProps extends ViewProps {
   player: MoQPlayer;
 }
 
 const NativeMoQVideoView =
   requireNativeComponent<NativeMoQVideoViewProps>('MoQVideoView');
 
-export function MoQVideoView({ player, ...rest }: MoQVideoViewProps) {
+export function VideoView({ player, ...rest }: VideoViewProps) {
   return <NativeMoQVideoView broadcastPath={player.broadcastPath} {...rest} />;
 }

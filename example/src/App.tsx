@@ -15,13 +15,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { MoQVideoView, useMoQPlayer, useMoQSession } from 'react-native-moq';
+import { VideoView, usePlayer, useSession } from 'react-native-moq';
 
 export default function App() {
   const [url, setUrl] = useState('http://192.168.1.48:4443');
   const [activePaths, setActivePaths] = useState<string[]>([]);
 
-  const session = useMoQSession(url);
+  const session = useSession(url);
 
   const canConnect =
     session.sessionState === 'idle' || session.sessionState === 'closed';
@@ -95,7 +95,7 @@ function BroadcastPlayer({
   broadcast: MoQBroadcastInfo;
   onRemove: () => void;
 }) {
-  const player = useMoQPlayer(broadcast.player, (p) => {
+  const player = usePlayer(broadcast.player, (p) => {
     p.play();
   });
 
@@ -116,7 +116,7 @@ function BroadcastPlayer({
         <Button title="Disconnect" onPress={handleRemove} color="#ef4444" />
       </View>
 
-      <MoQVideoView player={player} style={styles.video} />
+      <VideoView player={player} style={styles.video} />
 
       {sortedVideoTracks.length > 1 && (
         <RenditionPicker

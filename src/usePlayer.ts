@@ -6,7 +6,7 @@ import { MoQPlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
-export function useMoQPlayer(
+export function usePlayer(
   player: MoQPlayerHandle,
   setup?: (player: MoQPlayer) => void
 ): MoQPlayer {
