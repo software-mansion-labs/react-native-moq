@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/software-mansion-labs/moq-kit.git",
       "state" : {
-        "revision" : "f02c10afe7ede62177926facb5f8049015fc10cf",
-        "version" : "0.0.1-alpha4"
+        "revision" : "e8c6c16a1c712e559cca5d23b366ce5fe5abf388",
+        "version" : "0.0.1-alpha5"
       }
     }
   ],

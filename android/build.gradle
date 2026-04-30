@@ -64,5 +64,5 @@ android {
 
 dependencies {
   implementation "com.facebook.react:react-android"
-  implementation "com.swmansion.moqkit:moqkit:0.0.1-alpha4"
+  implementation "com.swmansion.moqkit:moqkit:0.0.1-alpha5"
 }
