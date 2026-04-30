@@ -30,7 +30,7 @@ function App() {
 
   return (
     <>
-      <Button title="Connect" onPress={session.connect} />
+      <Button title="Connect" onPress={() => session.connect()} />
       {session.broadcasts.map((broadcast) => (
         <BroadcastPlayer key={broadcast.path} handle={broadcast.player} />
       ))}
@@ -54,14 +54,21 @@ function BroadcastPlayer({ handle }: { handle: MoQPlayerHandle }) {
 
 ## API
 
-### `useSession(url, options?)`
+### `useSession(url, setup?)`
 
 Manages the connection to a MoQ relay server and tracks available broadcasts.
 
 ```tsx
-const session = useSession('http://relay.example.com:4443', {
-  prefix: '',           // track namespace prefix, default ''
-  targetLatencyMs: 200  // default buffering latency for players, default 200
+const session = useSession('http://relay.example.com:4443');
+
+// With setup callback — runs once on mount
+const session = useSession('http://relay.example.com:4443', (s) => {
+  s.connect();                  // auto-connect on mount
+});
+
+// With custom options
+const session = useSession('http://relay.example.com:4443', (s) => {
+  s.connect('my/prefix', 500); // prefix and target latency
 });
 ```
 
@@ -71,12 +78,12 @@ Returns a `MoQSession` object:
 |---|---|---|
 | `sessionState` | `MoQSessionState` | Current connection state |
 | `broadcasts` | `MoQBroadcastInfo[]` | Currently available broadcasts |
-| `connect()` | `() => void` | Connect to the relay |
+| `connect(prefix?, targetLatencyMs?)` | `(prefix?: string, targetLatencyMs?: number) => void` | Connect to the relay. Defaults: `prefix=''`, `targetLatencyMs=200` |
 | `disconnect()` | `() => void` | Disconnect and reset state |
 
 **`MoQSessionState`** is one of: `'idle'` · `'connecting'` · `'connected'` · `'closed'` · `` `error:${string}` ``
 
-Call `connect()` manually after mounting — the hook does not auto-connect.
+Call `connect()` manually — either in the setup callback or in response to user interaction. The hook does not auto-connect.
 
 ---
 
@@ -230,8 +237,10 @@ sortedTracks.map((track) => (
 ### Custom target latency
 
 ```tsx
-// Set at session level (applies to all new players)
-const session = useSession(url, { targetLatencyMs: 500 });
+// Set at session level via connect() (applies to all players created in this session)
+const session = useSession(url, (s) => {
+  s.connect('', 500);
+});
 
 // Override per player in the setup callback
 const player = usePlayer(broadcast.player, (p) => {

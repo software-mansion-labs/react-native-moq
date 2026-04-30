@@ -53,7 +53,7 @@ export default function App() {
 
           <Button
             title={canConnect ? 'Connect' : 'Disconnect'}
-            onPress={canConnect ? session.connect : session.disconnect}
+            onPress={canConnect ? () => session.connect() : session.disconnect}
           />
 
           <StateIndicator state={session.sessionState} />

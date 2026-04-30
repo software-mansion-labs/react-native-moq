@@ -108,7 +108,7 @@ export interface MoQPlaybackStats {
 export interface MoQSession {
   sessionState: MoQSessionState;
   broadcasts: MoQBroadcastInfo[];
-  connect(): void;
+  connect(prefix?: string, targetLatencyMs?: number): void;
   disconnect(): void;
 }
 

@@ -6,28 +6,15 @@ import { MoQPlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
-export interface UseSessionOptions {
-  /** Track namespace prefix passed to MoQSession. Defaults to `''`. */
-  prefix?: string;
-  /** Default target buffering latency in milliseconds for new players. Defaults to `200`. */
-  targetLatencyMs?: number;
-}
-
 export function useSession(
   url: string,
-  options: UseSessionOptions = {}
+  setup?: (session: MoQSession) => void
 ): MoQSession {
-  const { prefix = '', targetLatencyMs = 200 } = options;
-
   const [sessionState, setSessionState] = useState<MoQSessionState>('idle');
   const [broadcasts, setBroadcasts] = useState<MoQBroadcastInfo[]>([]);
 
   const urlRef = useRef(url);
-  const prefixRef = useRef(prefix);
-  const latencyRef = useRef(targetLatencyMs);
   urlRef.current = url;
-  prefixRef.current = prefix;
-  latencyRef.current = targetLatencyMs;
 
   useEffect(() => {
     const subs = [
@@ -70,8 +57,8 @@ export function useSession(
     };
   }, []);
 
-  const connect = useCallback(() => {
-    NativeMoQ.connect(urlRef.current, prefixRef.current, latencyRef.current);
+  const connect = useCallback((prefix = '', targetLatencyMs = 200) => {
+    NativeMoQ.connect(urlRef.current, prefix, targetLatencyMs);
   }, []);
 
   const disconnect = useCallback(() => {
@@ -80,5 +67,21 @@ export function useSession(
     setBroadcasts([]);
   }, []);
 
-  return { sessionState, broadcasts, connect, disconnect };
+  const moqSession: MoQSession = {
+    sessionState,
+    broadcasts,
+    connect,
+    disconnect,
+  };
+
+  const moqSessionRef = useRef(moqSession);
+  moqSessionRef.current = moqSession;
+
+  const setupRef = useRef(setup);
+
+  useEffect(() => {
+    setupRef.current?.(moqSessionRef.current);
+  }, []);
+
+  return moqSession;
 }
