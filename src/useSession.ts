@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
+import { EventEmitter } from './EventEmitter';
 import NativeMoQ from './NativeMoQ';
-import type { MoQBroadcastInfo, MoQSession, MoQSessionState } from './types';
+import type {
+  MoQBroadcastInfo,
+  MoQSession,
+  MoQSessionEvents,
+  MoQSessionState,
+} from './types';
 import { MoQPlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
@@ -16,11 +22,16 @@ export function useSession(
   const urlRef = useRef(url);
   urlRef.current = url;
 
+  const emitterRef = useRef(new EventEmitter<MoQSessionEvents>());
+
   useEffect(() => {
+    const emitter = emitterRef.current;
     const subs = [
       moqEmitter.addListener('sessionStateChanged', (event) => {
         const { state } = event as { state: string };
-        setSessionState(state as MoQSessionState);
+        const typedState = state as MoQSessionState;
+        setSessionState(typedState);
+        emitter.emit('stateChange', { state: typedState });
       }),
 
       moqEmitter.addListener('broadcastAvailable', (event) => {
@@ -43,11 +54,13 @@ export function useSession(
           ...prev.filter((b) => b.path !== info.path),
           info,
         ]);
+        emitter.emit('broadcastAvailable', info);
       }),
 
       moqEmitter.addListener('broadcastUnavailable', (event) => {
         const { path } = event as { path: string };
         setBroadcasts((prev) => prev.filter((b) => b.path !== path));
+        emitter.emit('broadcastUnavailable', { path });
       }),
     ];
 
@@ -70,6 +83,7 @@ export function useSession(
   const moqSession: MoQSession = {
     sessionState,
     broadcasts,
+    emitter: emitterRef.current,
     connect,
     disconnect,
   };

@@ -1,4 +1,5 @@
 import NativeMoQ from './NativeMoQ';
+import type { EventEmitter } from './EventEmitter';
 
 export type MoQSessionState =
   | 'idle'
@@ -105,9 +106,26 @@ export interface MoQPlaybackStats {
   audioStalls?: StallStats;
 }
 
+export type MoQPlayerEvents = {
+  playingChange: (event: { isPlaying: boolean; isPaused: boolean }) => void;
+  trackStopped: (event: Record<never, never>) => void;
+  trackSwitched: (event: {
+    trackKind: 'video' | 'audio';
+    trackName: string;
+  }) => void;
+  statsUpdate: (event: MoQPlaybackStats) => void;
+};
+
+export type MoQSessionEvents = {
+  stateChange: (event: { state: MoQSessionState }) => void;
+  broadcastAvailable: (event: MoQBroadcastInfo) => void;
+  broadcastUnavailable: (event: { path: string }) => void;
+};
+
 export interface MoQSession {
   sessionState: MoQSessionState;
   broadcasts: MoQBroadcastInfo[];
+  readonly emitter: EventEmitter<MoQSessionEvents>;
   connect(prefix?: string, targetLatencyMs?: number): void;
   disconnect(): void;
 }
@@ -119,6 +137,7 @@ export interface MoQPlayer {
   readonly playbackStats: MoQPlaybackStats | null;
   readonly currentVideoTrackName?: string;
   readonly currentAudioTrackName?: string;
+  readonly emitter: EventEmitter<MoQPlayerEvents>;
   play(): void;
   pause(): void;
   stop(): void;

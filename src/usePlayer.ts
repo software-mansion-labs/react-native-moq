@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
+import { EventEmitter } from './EventEmitter';
 import NativeMoQ from './NativeMoQ';
-import type { MoQPlaybackStats, MoQPlayer } from './types';
+import type { MoQPlaybackStats, MoQPlayer, MoQPlayerEvents } from './types';
 import { MoQPlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
@@ -25,9 +26,34 @@ export function usePlayer(
   const playerRef = useRef(player);
   playerRef.current = player;
 
+  const emitterRef = useRef(new EventEmitter<MoQPlayerEvents>());
+  const lastPlayingChangeRef = useRef<{
+    isPlaying: boolean;
+    isPaused: boolean;
+  } | null>(null);
+
   const { broadcastPath } = player;
 
   useEffect(() => {
+    // Reset dedup state when the player identity changes.
+    lastPlayingChangeRef.current = null;
+
+    const emitter = emitterRef.current;
+
+    const emitPlayingChange = (next: {
+      isPlaying: boolean;
+      isPaused: boolean;
+    }) => {
+      const last = lastPlayingChangeRef.current;
+      if (
+        last?.isPlaying === next.isPlaying &&
+        last?.isPaused === next.isPaused
+      )
+        return;
+      lastPlayingChangeRef.current = next;
+      emitter.emit('playingChange', next);
+    };
+
     const subs = [
       moqEmitter.addListener('playerEvent', (event) => {
         const e = event as {
@@ -40,20 +66,32 @@ export function usePlayer(
         if (e.type === 'trackPlaying') {
           setIsPlaying(true);
           setIsPaused(false);
+          emitPlayingChange({ isPlaying: true, isPaused: false });
         } else if (e.type === 'trackPaused') {
           setIsPaused(true);
           setIsPlaying(false);
+          emitPlayingChange({ isPlaying: false, isPaused: true });
         } else if (e.type === 'allTracksStopped') {
           setIsPlaying(false);
           setIsPaused(false);
           setPlaybackStats(null);
           setCurrentVideoTrackName(undefined);
           setCurrentAudioTrackName(undefined);
+          emitPlayingChange({ isPlaying: false, isPaused: false });
+          emitter.emit('trackStopped', {});
         } else if (e.type === 'trackSwitched') {
           if (e.trackKind === 'video' && e.trackName !== undefined) {
             setCurrentVideoTrackName(e.trackName);
+            emitter.emit('trackSwitched', {
+              trackKind: 'video',
+              trackName: e.trackName,
+            });
           } else if (e.trackKind === 'audio' && e.trackName !== undefined) {
             setCurrentAudioTrackName(e.trackName);
+            emitter.emit('trackSwitched', {
+              trackKind: 'audio',
+              trackName: e.trackName,
+            });
           }
         }
       }),
@@ -62,6 +100,7 @@ export function usePlayer(
         const e = event as MoQPlaybackStats & { broadcastPath: string };
         if (e.broadcastPath !== playerRef.current.broadcastPath) return;
         setPlaybackStats(e);
+        emitter.emit('statsUpdate', e);
       }),
     ];
 
@@ -105,6 +144,7 @@ export function usePlayer(
     playbackStats,
     currentVideoTrackName,
     currentAudioTrackName,
+    emitter: emitterRef.current,
     play,
     pause,
     stop,

@@ -3,8 +3,7 @@ import type {
   MoQPlaybackStats,
   MoQVideoTrackInfo,
 } from 'react-native-moq';
-import { useEffect } from 'react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Button,
   ScrollView,
@@ -15,7 +14,74 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { VideoView, usePlayer, useSession } from 'react-native-moq';
+import {
+  VideoView,
+  useEvent,
+  useEventListener,
+  usePlayer,
+  useSession,
+} from 'react-native-moq';
+
+// ── Event log ────────────────────────────────────────────────────────────────
+
+type LogEntry = {
+  id: number;
+  time: string;
+  source?: string;
+  label: string;
+  detail?: string;
+};
+
+type AddEntry = (label: string, detail?: string, source?: string) => void;
+
+function useEventLog(): [LogEntry[], AddEntry] {
+  const [entries, setEntries] = useState<LogEntry[]>([]);
+  const counterRef = useRef(0);
+
+  const addEntry = useCallback<AddEntry>((label, detail, source) => {
+    const id = counterRef.current++;
+    const time = new Date().toLocaleTimeString([], {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    setEntries((prev) =>
+      [{ id, time, source, label, detail }, ...prev].slice(0, 50)
+    );
+  }, []);
+
+  return [entries, addEntry];
+}
+
+function EventLog({ entries }: { entries: LogEntry[] }) {
+  if (entries.length === 0) return null;
+  return (
+    <View style={styles.logContainer}>
+      <Text style={styles.logTitle}>Event log</Text>
+      <ScrollView
+        style={styles.logScroll}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+      >
+        {entries.map((e) => (
+          <View key={e.id} style={styles.logRow}>
+            <Text style={styles.logTime}>{e.time}</Text>
+            {e.source != null && (
+              <Text style={styles.logSource}>{e.source}</Text>
+            )}
+            <Text style={styles.logLabel}>{e.label}</Text>
+            {e.detail != null && (
+              <Text style={styles.logDetail}>{e.detail}</Text>
+            )}
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [url, setUrl] = useState('http://192.168.1.48:4443');
@@ -33,9 +99,22 @@ export default function App() {
   }, [canConnect]);
 
   const addPlayer = (path: string) => setActivePaths((prev) => [...prev, path]);
-
   const removePlayer = (path: string) =>
     setActivePaths((prev) => prev.filter((p) => p !== path));
+
+  const [log, addEntry] = useEventLog();
+
+  useEventListener(session.emitter, 'stateChange', ({ state }) => {
+    addEntry('stateChange', state);
+  });
+
+  useEventListener(session.emitter, 'broadcastAvailable', ({ path }) => {
+    addEntry('broadcastAvailable', path);
+  });
+
+  useEventListener(session.emitter, 'broadcastUnavailable', ({ path }) => {
+    addEntry('broadcastUnavailable', path);
+  });
 
   return (
     <SafeAreaProvider>
@@ -58,6 +137,8 @@ export default function App() {
 
           <StateIndicator state={session.sessionState} />
 
+          <EventLog entries={log} />
+
           {session.sessionState === 'connected' &&
             session.broadcasts.length === 0 && (
               <Text style={styles.noBroadcasts}>No broadcasts available</Text>
@@ -69,6 +150,7 @@ export default function App() {
                 key={broadcast.path}
                 broadcast={broadcast}
                 onRemove={() => removePlayer(broadcast.path)}
+                addEntry={addEntry}
               />
             ) : (
               <View key={broadcast.path} style={styles.availableCard}>
@@ -91,9 +173,11 @@ export default function App() {
 function BroadcastPlayer({
   broadcast,
   onRemove,
+  addEntry,
 }: {
   broadcast: MoQBroadcastInfo;
   onRemove: () => void;
+  addEntry: AddEntry;
 }) {
   const player = usePlayer(broadcast.player, (p) => {
     p.play();
@@ -108,6 +192,32 @@ function BroadcastPlayer({
     const px = (t: MoQVideoTrackInfo) => (t.width ?? 0) * (t.height ?? 0);
     return px(b) - px(a);
   });
+
+  const lastSwitch = useEvent(player.emitter, 'trackSwitched');
+
+  useEventListener(
+    player.emitter,
+    'playingChange',
+    ({ isPlaying, isPaused }) => {
+      addEntry(
+        'playingChange',
+        `isPlaying=${isPlaying} isPaused=${isPaused}`,
+        broadcast.path
+      );
+    }
+  );
+
+  useEventListener(player.emitter, 'trackStopped', () => {
+    addEntry('trackStopped', undefined, broadcast.path);
+  });
+
+  useEventListener(
+    player.emitter,
+    'trackSwitched',
+    ({ trackKind, trackName }) => {
+      addEntry('trackSwitched', `${trackKind} → ${trackName}`, broadcast.path);
+    }
+  );
 
   return (
     <View style={styles.broadcastCard}>
@@ -124,6 +234,12 @@ function BroadcastPlayer({
           currentTrackName={player.currentVideoTrackName}
           onSelect={(name: string) => player.switchVideoTrack(name)}
         />
+      )}
+
+      {lastSwitch != null && (
+        <Text style={styles.lastSwitch}>
+          Last switch: {lastSwitch.trackKind} → {lastSwitch.trackName}
+        </Text>
       )}
 
       {(player.isPlaying || player.isPaused) && (
@@ -327,6 +443,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#000',
   },
+  lastSwitch: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontFamily: 'Menlo',
+  },
   stats: {
     borderRadius: 8,
     backgroundColor: '#f3f4f6',
@@ -374,5 +495,51 @@ const styles = StyleSheet.create({
   renditionBtnTextActive: {
     color: '#ffffff',
     fontWeight: '600',
+  },
+  logContainer: {
+    borderRadius: 8,
+    backgroundColor: '#0f172a',
+    padding: 10,
+    gap: 6,
+  },
+  logTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  logScroll: {
+    maxHeight: 180,
+  },
+  logRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingVertical: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#1e293b',
+  },
+  logTime: {
+    fontSize: 11,
+    fontFamily: 'Menlo',
+    color: '#475569',
+  },
+  logSource: {
+    fontSize: 11,
+    fontFamily: 'Menlo',
+    color: '#fb923c',
+  },
+  logLabel: {
+    fontSize: 11,
+    fontFamily: 'Menlo',
+    color: '#7dd3fc',
+    fontWeight: '600',
+  },
+  logDetail: {
+    fontSize: 11,
+    fontFamily: 'Menlo',
+    color: '#cbd5e1',
+    flexShrink: 1,
   },
 });

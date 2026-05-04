@@ -78,6 +78,7 @@ Returns a `MoQSession` object:
 |---|---|---|
 | `sessionState` | `MoQSessionState` | Current connection state |
 | `broadcasts` | `MoQBroadcastInfo[]` | Currently available broadcasts |
+| `emitter` | `EventEmitter<MoQSessionEvents>` | Stable emitter for session events (see [`useEvent`](#useeventemitter-eventname-initialvalue)) |
 | `connect(prefix?, targetLatencyMs?)` | `(prefix?: string, targetLatencyMs?: number) => void` | Connect to the relay. Defaults: `prefix=''`, `targetLatencyMs=200` |
 | `disconnect()` | `() => void` | Disconnect and reset state |
 
@@ -108,12 +109,60 @@ Returns a `MoQPlayer` object:
 | `playbackStats` | `MoQPlaybackStats \| null` | Live metrics, updated every 500 ms |
 | `currentVideoTrackName` | `string \| undefined` | Name of the active video track |
 | `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
+| `emitter` | `EventEmitter<MoQPlayerEvents>` | Stable emitter for player events (see [`useEvent`](#useeventemitter-eventname-initialvalue)) |
 | `play()` | `() => void` | Start or resume playback |
 | `pause()` | `() => void` | Pause playback |
 | `stop()` | `() => void` | Stop playback and reset state |
 | `updateTargetLatency(ms)` | `(ms: number) => void` | Change buffering latency at runtime |
 | `switchVideoTrack(name)` | `(name: string) => void` | Switch to a different video rendition |
 | `switchAudioTrack(name)` | `(name: string) => void` | Switch to a different audio track |
+
+---
+
+### `useEvent(emitter, eventName, initialValue?)`
+
+Returns reactive state that re-renders the component whenever the named event fires.
+
+```tsx
+const { isPlaying } = useEvent(
+  player.emitter,
+  'playingChange',
+  { isPlaying: false, isPaused: false }
+);
+```
+
+Without an initial value the return type includes `undefined`.
+
+---
+
+### `useEventListener(emitter, eventName, listener)`
+
+Registers a listener without creating React state. Use this for side effects (logging, analytics, etc.) rather than driving UI.
+
+```tsx
+useEventListener(player.emitter, 'trackSwitched', ({ trackKind, trackName }) => {
+  console.log(`Switched ${trackKind} track to ${trackName}`);
+});
+```
+
+No `useCallback` is needed — the listener is kept in a ref internally.
+
+**`player.emitter` events**
+
+| Event | Payload | Description |
+|---|---|---|
+| `playingChange` | `{ isPlaying, isPaused }` | Playback started, paused, or resumed |
+| `trackStopped` | — | All tracks stopped (broadcast ended or `stop()` called) |
+| `trackSwitched` | `{ trackKind, trackName }` | Active video or audio track changed |
+| `statsUpdate` | `MoQPlaybackStats` | Playback metrics updated (~every 500 ms) |
+
+**`session.emitter` events**
+
+| Event | Payload | Description |
+|---|---|---|
+| `stateChange` | `{ state }` | Session state transitioned |
+| `broadcastAvailable` | `MoQBroadcastInfo` | A new broadcast is available |
+| `broadcastUnavailable` | `{ path }` | A broadcast is no longer available |
 
 ---
 
@@ -151,6 +200,45 @@ On iOS the handle is backed by a JSI host object — method calls go directly to
 ---
 
 ### Types
+
+#### `MoQPlayerEvents`
+
+Event map for `player.emitter`. Each key is an event name; the value is the event payload type.
+
+```ts
+type MoQPlayerEvents = {
+  // Fires when playback starts, pauses, or resumes.
+  // Deduplicated — only one emission per state transition even when multiple
+  // tracks (video + audio) change simultaneously.
+  playingChange: (event: { isPlaying: boolean; isPaused: boolean }) => void;
+
+  // Fires when all tracks stop (end of broadcast or explicit stop).
+  trackStopped: (event: Record<never, never>) => void;
+
+  // Fires when the active video or audio track changes.
+  trackSwitched: (event: { trackKind: 'video' | 'audio'; trackName: string }) => void;
+
+  // Fires every ~500 ms with updated playback metrics.
+  statsUpdate: (event: MoQPlaybackStats) => void;
+};
+```
+
+#### `MoQSessionEvents`
+
+Event map for `session.emitter`.
+
+```ts
+type MoQSessionEvents = {
+  // Fires on every session state transition.
+  stateChange: (event: { state: MoQSessionState }) => void;
+
+  // Fires when a new broadcast becomes available.
+  broadcastAvailable: (event: MoQBroadcastInfo) => void;
+
+  // Fires when a broadcast is no longer available.
+  broadcastUnavailable: (event: { path: string }) => void;
+};
+```
 
 #### `MoQBroadcastInfo`
 
@@ -262,6 +350,12 @@ if (player.playbackStats) {
   console.log(`Bitrate: ${player.playbackStats.videoBitrateKbps} kbps`);
   console.log(`FPS: ${player.playbackStats.videoFps}`);
 }
+```
+
+Alternatively, subscribe to `statsUpdate` directly:
+
+```tsx
+const stats = useEvent(player.emitter, 'statsUpdate');
 ```
 
 ## Contributing
