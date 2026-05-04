@@ -46,7 +46,7 @@ function BroadcastPlayer({ handle }: { handle: MoQPlayerHandle }) {
   return (
     <>
       <VideoView player={player} style={{ width: '100%', aspectRatio: 16 / 9 }} />
-      <Button title={player.isPaused ? 'Resume' : 'Pause'} onPress={player.isPaused ? player.play : player.pause} />
+      <Button title={player.isPlaying ? 'Pause' : 'Resume'} onPress={player.isPlaying ? player.pause : player.play} />
     </>
   );
 }
@@ -105,7 +105,6 @@ Returns a `MoQPlayer` object:
 |---|---|---|
 | `broadcastPath` | `string` | The broadcast path this player belongs to |
 | `isPlaying` | `boolean` | True while tracks are actively playing |
-| `isPaused` | `boolean` | True while paused |
 | `playbackStats` | `MoQPlaybackStats \| null` | Live metrics, updated every 500 ms |
 | `currentVideoTrackName` | `string \| undefined` | Name of the active video track |
 | `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
@@ -127,7 +126,7 @@ Returns reactive state that re-renders the component whenever the named event fi
 const { isPlaying } = useEvent(
   player.emitter,
   'playingChange',
-  { isPlaying: false, isPaused: false }
+  { isPlaying: false }
 );
 ```
 
@@ -151,7 +150,7 @@ No `useCallback` is needed — the listener is kept in a ref internally.
 
 | Event | Payload | Description |
 |---|---|---|
-| `playingChange` | `{ isPlaying, isPaused }` | Playback started, paused, or resumed |
+| `playingChange` | `{ isPlaying }` | Playback started, paused, or resumed |
 | `trackStopped` | — | All tracks stopped (broadcast ended or `stop()` called) |
 | `trackSwitched` | `{ trackKind, trackName }` | Active video or audio track changed |
 | `statsUpdate` | `MoQPlaybackStats` | Playback metrics updated (~every 500 ms) |
@@ -210,7 +209,7 @@ type MoQPlayerEvents = {
   // Fires when playback starts, pauses, or resumes.
   // Deduplicated — only one emission per state transition even when multiple
   // tracks (video + audio) change simultaneously.
-  playingChange: (event: { isPlaying: boolean; isPaused: boolean }) => void;
+  playingChange: (event: { isPlaying: boolean }) => void;
 
   // Fires when all tracks stop (end of broadcast or explicit stop).
   trackStopped: (event: Record<never, never>) => void;

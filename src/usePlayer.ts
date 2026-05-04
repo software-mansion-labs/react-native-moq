@@ -12,7 +12,6 @@ export function usePlayer(
   setup?: (player: MoQPlayer) => void
 ): MoQPlayer {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [playbackStats, setPlaybackStats] = useState<MoQPlaybackStats | null>(
     null
   );
@@ -27,10 +26,7 @@ export function usePlayer(
   playerRef.current = player;
 
   const emitterRef = useRef(new EventEmitter<MoQPlayerEvents>());
-  const lastPlayingChangeRef = useRef<{
-    isPlaying: boolean;
-    isPaused: boolean;
-  } | null>(null);
+  const lastPlayingChangeRef = useRef<{ isPlaying: boolean } | null>(null);
 
   const { broadcastPath } = player;
 
@@ -40,16 +36,9 @@ export function usePlayer(
 
     const emitter = emitterRef.current;
 
-    const emitPlayingChange = (next: {
-      isPlaying: boolean;
-      isPaused: boolean;
-    }) => {
+    const emitPlayingChange = (next: { isPlaying: boolean }) => {
       const last = lastPlayingChangeRef.current;
-      if (
-        last?.isPlaying === next.isPlaying &&
-        last?.isPaused === next.isPaused
-      )
-        return;
+      if (last?.isPlaying === next.isPlaying) return;
       lastPlayingChangeRef.current = next;
       emitter.emit('playingChange', next);
     };
@@ -65,19 +54,16 @@ export function usePlayer(
         if (e.broadcastPath !== playerRef.current.broadcastPath) return;
         if (e.type === 'trackPlaying') {
           setIsPlaying(true);
-          setIsPaused(false);
-          emitPlayingChange({ isPlaying: true, isPaused: false });
+          emitPlayingChange({ isPlaying: true });
         } else if (e.type === 'trackPaused') {
-          setIsPaused(true);
           setIsPlaying(false);
-          emitPlayingChange({ isPlaying: false, isPaused: true });
+          emitPlayingChange({ isPlaying: false });
         } else if (e.type === 'allTracksStopped') {
           setIsPlaying(false);
-          setIsPaused(false);
           setPlaybackStats(null);
           setCurrentVideoTrackName(undefined);
           setCurrentAudioTrackName(undefined);
-          emitPlayingChange({ isPlaying: false, isPaused: false });
+          emitPlayingChange({ isPlaying: false });
           emitter.emit('trackStopped', {});
         } else if (e.type === 'trackSwitched') {
           if (e.trackKind === 'video' && e.trackName !== undefined) {
@@ -113,12 +99,10 @@ export function usePlayer(
 
   const play = useCallback(() => {
     playerRef.current.play();
-    setIsPaused(false);
   }, []);
 
   const pause = useCallback(() => {
     playerRef.current.pause();
-    setIsPaused(true);
   }, []);
 
   const stop = useCallback(() => {
@@ -140,7 +124,6 @@ export function usePlayer(
   const moqPlayer: MoQPlayer = {
     broadcastPath,
     isPlaying,
-    isPaused,
     playbackStats,
     currentVideoTrackName,
     currentAudioTrackName,

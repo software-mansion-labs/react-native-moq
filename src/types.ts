@@ -107,7 +107,7 @@ export interface MoQPlaybackStats {
 }
 
 export type MoQPlayerEvents = {
-  playingChange: (event: { isPlaying: boolean; isPaused: boolean }) => void;
+  playingChange: (event: { isPlaying: boolean }) => void;
   trackStopped: (event: Record<never, never>) => void;
   trackSwitched: (event: {
     trackKind: 'video' | 'audio';
@@ -133,7 +133,6 @@ export interface MoQSession {
 export interface MoQPlayer {
   readonly broadcastPath: string;
   readonly isPlaying: boolean;
-  readonly isPaused: boolean;
   readonly playbackStats: MoQPlaybackStats | null;
   readonly currentVideoTrackName?: string;
   readonly currentAudioTrackName?: string;

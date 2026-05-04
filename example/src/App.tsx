@@ -195,17 +195,9 @@ function BroadcastPlayer({
 
   const lastSwitch = useEvent(player.emitter, 'trackSwitched');
 
-  useEventListener(
-    player.emitter,
-    'playingChange',
-    ({ isPlaying, isPaused }) => {
-      addEntry(
-        'playingChange',
-        `isPlaying=${isPlaying} isPaused=${isPaused}`,
-        broadcast.path
-      );
-    }
-  );
+  useEventListener(player.emitter, 'playingChange', ({ isPlaying }) => {
+    addEntry('playingChange', `isPlaying=${isPlaying}`, broadcast.path);
+  });
 
   useEventListener(player.emitter, 'trackStopped', () => {
     addEntry('trackStopped', undefined, broadcast.path);
@@ -242,12 +234,10 @@ function BroadcastPlayer({
         </Text>
       )}
 
-      {(player.isPlaying || player.isPaused) && (
-        <Button
-          title={player.isPaused ? 'Resume' : 'Pause'}
-          onPress={player.isPaused ? player.play : player.pause}
-        />
-      )}
+      <Button
+        title={player.isPlaying ? 'Pause' : 'Resume'}
+        onPress={player.isPlaying ? player.pause : player.play}
+      />
 
       {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
     </View>
