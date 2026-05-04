@@ -3,39 +3,39 @@ import { NativeEventEmitter } from 'react-native';
 import { EventEmitter } from './EventEmitter';
 import NativeMoQ from './NativeMoQ';
 import type {
-  MoQBroadcastInfo,
-  MoQSession,
-  MoQSessionEvents,
-  MoQSessionState,
+  BroadcastInfo,
+  Session,
+  SessionEvents,
+  SessionState,
 } from './types';
-import { MoQPlayerHandle } from './types';
+import { PlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
 export function useSession(
   url: string,
-  setup?: (session: MoQSession) => void
-): MoQSession {
-  const [sessionState, setSessionState] = useState<MoQSessionState>('idle');
-  const [broadcasts, setBroadcasts] = useState<MoQBroadcastInfo[]>([]);
+  setup?: (session: Session) => void
+): Session {
+  const [sessionState, setSessionState] = useState<SessionState>('idle');
+  const [broadcasts, setBroadcasts] = useState<BroadcastInfo[]>([]);
 
   const urlRef = useRef(url);
   urlRef.current = url;
 
-  const emitterRef = useRef(new EventEmitter<MoQSessionEvents>());
+  const emitterRef = useRef(new EventEmitter<SessionEvents>());
 
   useEffect(() => {
     const emitter = emitterRef.current;
     const subs = [
       moqEmitter.addListener('sessionStateChanged', (event) => {
         const { state } = event as { state: string };
-        const typedState = state as MoQSessionState;
+        const typedState = state as SessionState;
         setSessionState(typedState);
         emitter.emit('stateChange', { state: typedState });
       }),
 
       moqEmitter.addListener('broadcastAvailable', (event) => {
-        const raw = event as Omit<MoQBroadcastInfo, 'player'> & {
+        const raw = event as Omit<BroadcastInfo, 'player'> & {
           initialVideoTrackName?: string;
           initialAudioTrackName?: string;
         };
@@ -43,13 +43,13 @@ export function useSession(
         // returns a JSI HostObject.  On Android it is undefined so the handle
         // falls back to bridge calls keyed by broadcastPath.
         const native = (NativeMoQ as any).getPlayer?.(raw.path);
-        const player = new MoQPlayerHandle(
+        const player = new PlayerHandle(
           raw.path,
           native,
           raw.initialVideoTrackName,
           raw.initialAudioTrackName
         );
-        const info: MoQBroadcastInfo = { ...raw, player };
+        const info: BroadcastInfo = { ...raw, player };
         setBroadcasts((prev) => [
           ...prev.filter((b) => b.path !== info.path),
           info,
@@ -80,7 +80,7 @@ export function useSession(
     setBroadcasts([]);
   }, []);
 
-  const moqSession: MoQSession = {
+  const moqSession: Session = {
     sessionState,
     broadcasts,
     emitter: emitterRef.current,

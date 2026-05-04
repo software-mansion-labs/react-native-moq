@@ -1,14 +1,14 @@
 import NativeMoQ from './NativeMoQ';
 import type { EventEmitter } from './EventEmitter';
 
-export type MoQSessionState =
+export type SessionState =
   | 'idle'
   | 'connecting'
   | 'connected'
   | 'closed'
   | `error:${string}`;
 
-export interface MoQVideoTrackInfo {
+export interface VideoTrackInfo {
   name: string;
   codec: string;
   width?: number;
@@ -17,7 +17,7 @@ export interface MoQVideoTrackInfo {
   framerate?: number;
 }
 
-export interface MoQAudioTrackInfo {
+export interface AudioTrackInfo {
   name: string;
   codec: string;
   sampleRate: number;
@@ -28,7 +28,7 @@ export interface MoQAudioTrackInfo {
 // Opaque handle returned in broadcastAvailable events.
 // On iOS the native field is a JSI HostObject with direct methods;
 // on Android it falls back to bridge calls keyed by broadcastPath.
-export class MoQPlayerHandle {
+export class PlayerHandle {
   readonly broadcastPath: string;
   readonly initialVideoTrackName?: string;
   readonly initialAudioTrackName?: string;
@@ -77,11 +77,11 @@ export class MoQPlayerHandle {
   }
 }
 
-export interface MoQBroadcastInfo {
+export interface BroadcastInfo {
   path: string;
-  videoTracks: MoQVideoTrackInfo[];
-  audioTracks: MoQAudioTrackInfo[];
-  player: MoQPlayerHandle;
+  videoTracks: VideoTrackInfo[];
+  audioTracks: AudioTrackInfo[];
+  player: PlayerHandle;
 }
 
 export interface StallStats {
@@ -90,7 +90,7 @@ export interface StallStats {
   rebufferingRatio: number;
 }
 
-export interface MoQPlaybackStats {
+export interface PlaybackStats {
   videoLatencyMs?: number;
   audioLatencyMs?: number;
   videoBitrateKbps?: number;
@@ -106,37 +106,37 @@ export interface MoQPlaybackStats {
   audioStalls?: StallStats;
 }
 
-export type MoQPlayerEvents = {
+export type PlayerEvents = {
   playingChange: (event: { isPlaying: boolean }) => void;
   trackStopped: (event: Record<never, never>) => void;
   trackSwitched: (event: {
     trackKind: 'video' | 'audio';
     trackName: string;
   }) => void;
-  statsUpdate: (event: MoQPlaybackStats) => void;
+  statsUpdate: (event: PlaybackStats) => void;
 };
 
-export type MoQSessionEvents = {
-  stateChange: (event: { state: MoQSessionState }) => void;
-  broadcastAvailable: (event: MoQBroadcastInfo) => void;
+export type SessionEvents = {
+  stateChange: (event: { state: SessionState }) => void;
+  broadcastAvailable: (event: BroadcastInfo) => void;
   broadcastUnavailable: (event: { path: string }) => void;
 };
 
-export interface MoQSession {
-  sessionState: MoQSessionState;
-  broadcasts: MoQBroadcastInfo[];
-  readonly emitter: EventEmitter<MoQSessionEvents>;
+export interface Session {
+  sessionState: SessionState;
+  broadcasts: BroadcastInfo[];
+  readonly emitter: EventEmitter<SessionEvents>;
   connect(prefix?: string, targetLatencyMs?: number): void;
   disconnect(): void;
 }
 
-export interface MoQPlayer {
+export interface Player {
   readonly broadcastPath: string;
   readonly isPlaying: boolean;
-  readonly playbackStats: MoQPlaybackStats | null;
+  readonly playbackStats: PlaybackStats | null;
   readonly currentVideoTrackName?: string;
   readonly currentAudioTrackName?: string;
-  readonly emitter: EventEmitter<MoQPlayerEvents>;
+  readonly emitter: EventEmitter<PlayerEvents>;
   play(): void;
   pause(): void;
   stop(): void;

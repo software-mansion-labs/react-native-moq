@@ -1,7 +1,7 @@
 import type {
-  MoQBroadcastInfo,
-  MoQPlaybackStats,
-  MoQVideoTrackInfo,
+  BroadcastInfo,
+  PlaybackStats,
+  VideoTrackInfo,
 } from 'react-native-moq';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -175,7 +175,7 @@ function BroadcastPlayer({
   onRemove,
   addEntry,
 }: {
-  broadcast: MoQBroadcastInfo;
+  broadcast: BroadcastInfo;
   onRemove: () => void;
   addEntry: AddEntry;
 }) {
@@ -189,7 +189,7 @@ function BroadcastPlayer({
   };
 
   const sortedVideoTracks = [...broadcast.videoTracks].sort((a, b) => {
-    const px = (t: MoQVideoTrackInfo) => (t.width ?? 0) * (t.height ?? 0);
+    const px = (t: VideoTrackInfo) => (t.width ?? 0) * (t.height ?? 0);
     return px(b) - px(a);
   });
 
@@ -246,7 +246,7 @@ function BroadcastPlayer({
 
 // ── Rendition picker ────────────────────────────────────────────────────────
 
-function trackLabel(track: MoQVideoTrackInfo): string {
+function trackLabel(track: VideoTrackInfo): string {
   if (track.height) return `${track.height}p`;
   return track.name;
 }
@@ -256,7 +256,7 @@ function RenditionPicker({
   currentTrackName,
   onSelect,
 }: {
-  tracks: MoQVideoTrackInfo[];
+  tracks: VideoTrackInfo[];
   currentTrackName: string | undefined;
   onSelect: (name: string) => void;
 }) {
@@ -310,7 +310,7 @@ function StateIndicator({ state }: { state: string }) {
 
 // ── Stats panel ──────────────────────────────────────────────────────────────
 
-function StatsPanel({ stats }: { stats: MoQPlaybackStats }) {
+function StatsPanel({ stats }: { stats: PlaybackStats }) {
   return (
     <View style={styles.stats}>
       <Text style={styles.statsTitle}>Playback stats</Text>

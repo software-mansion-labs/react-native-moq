@@ -2,17 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import { EventEmitter } from './EventEmitter';
 import NativeMoQ from './NativeMoQ';
-import type { MoQPlaybackStats, MoQPlayer, MoQPlayerEvents } from './types';
-import { MoQPlayerHandle } from './types';
+import type { PlaybackStats, Player, PlayerEvents } from './types';
+import { PlayerHandle } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
 export function usePlayer(
-  player: MoQPlayerHandle,
-  setup?: (player: MoQPlayer) => void
-): MoQPlayer {
+  player: PlayerHandle,
+  setup?: (player: Player) => void
+): Player {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackStats, setPlaybackStats] = useState<MoQPlaybackStats | null>(
+  const [playbackStats, setPlaybackStats] = useState<PlaybackStats | null>(
     null
   );
   const [currentVideoTrackName, setCurrentVideoTrackName] = useState<
@@ -25,7 +25,7 @@ export function usePlayer(
   const playerRef = useRef(player);
   playerRef.current = player;
 
-  const emitterRef = useRef(new EventEmitter<MoQPlayerEvents>());
+  const emitterRef = useRef(new EventEmitter<PlayerEvents>());
   const lastPlayingChangeRef = useRef<{ isPlaying: boolean } | null>(null);
 
   const { broadcastPath } = player;
@@ -83,7 +83,7 @@ export function usePlayer(
       }),
 
       moqEmitter.addListener('playbackStatsUpdated', (event) => {
-        const e = event as MoQPlaybackStats & { broadcastPath: string };
+        const e = event as PlaybackStats & { broadcastPath: string };
         if (e.broadcastPath !== playerRef.current.broadcastPath) return;
         setPlaybackStats(e);
         emitter.emit('statsUpdate', e);
@@ -121,7 +121,7 @@ export function usePlayer(
     playerRef.current.switchAudioTrack(trackName);
   }, []);
 
-  const moqPlayer: MoQPlayer = {
+  const moqPlayer: Player = {
     broadcastPath,
     isPlaying,
     playbackStats,

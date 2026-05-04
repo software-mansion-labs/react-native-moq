@@ -5,16 +5,16 @@ export { usePlayer } from './usePlayer';
 export { useEvent, useEventListener } from './useEvent';
 export { EventEmitter } from './EventEmitter';
 export type { EventSubscription } from './EventEmitter';
-export { MoQPlayerHandle } from './types';
+export { PlayerHandle } from './types';
 export type {
-  MoQAudioTrackInfo,
-  MoQBroadcastInfo,
-  MoQPlaybackStats,
-  MoQPlayer,
-  MoQPlayerEvents,
-  MoQSession,
-  MoQSessionEvents,
-  MoQSessionState,
-  MoQVideoTrackInfo,
+  AudioTrackInfo,
+  BroadcastInfo,
+  PlaybackStats,
+  Player,
+  PlayerEvents,
+  Session,
+  SessionEvents,
+  SessionState,
+  VideoTrackInfo,
   StallStats,
 } from './types';
