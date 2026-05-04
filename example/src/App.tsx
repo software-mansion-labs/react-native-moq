@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   logScroll: {
-    maxHeight: 180,
+    height: 160,
   },
   logRow: {
     flexDirection: 'row',
