@@ -121,6 +121,14 @@ export function usePlayer(
     playerRef.current.switchAudioTrack(trackName);
   }, []);
 
+  const addListener = useCallback(
+    <TEventName extends keyof PlayerEvents>(
+      eventName: TEventName,
+      listener: PlayerEvents[TEventName]
+    ) => emitterRef.current.addListener(eventName, listener),
+    []
+  );
+
   const moqPlayer: Player = {
     broadcastPath,
     isPlaying,
@@ -128,6 +136,7 @@ export function usePlayer(
     currentVideoTrackName,
     currentAudioTrackName,
     emitter: emitterRef.current,
+    addListener,
     play,
     pause,
     stop,

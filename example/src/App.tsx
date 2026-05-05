@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { useEventListener, useSession } from 'react-native-moq';
+import { useEvent, useEventListener, useSession } from 'react-native-moq';
 import { BroadcastPlayer } from './BroadcastPlayer';
 import { EventLog, useEventLog } from './EventLog';
 import { StateIndicator } from './StateIndicator';
@@ -38,13 +38,19 @@ export default function App() {
     addEntry('stateChange', state);
   });
 
-  useEventListener(session, 'broadcastAvailable', ({ path }) => {
-    addEntry('broadcastAvailable', path);
-  });
+  useEffect(() => {
+    const sub = session.addListener('broadcastAvailable', ({ path }) => {
+      addEntry('broadcastAvailable', path);
+    });
+    return () => sub.remove();
+  }, [session, addEntry]);
 
-  useEventListener(session, 'broadcastUnavailable', ({ path }) => {
-    addEntry('broadcastUnavailable', path);
-  });
+  const broadcastUnavailableEvent = useEvent(session, 'broadcastUnavailable');
+  useEffect(() => {
+    if (broadcastUnavailableEvent !== undefined) {
+      addEntry('broadcastUnavailable', broadcastUnavailableEvent.path);
+    }
+  }, [broadcastUnavailableEvent, addEntry]);
 
   return (
     <SafeAreaProvider>

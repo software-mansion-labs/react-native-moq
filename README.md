@@ -79,6 +79,7 @@ Returns a `Session` object:
 | `sessionState` | `SessionState` | Current connection state |
 | `broadcasts` | `BroadcastInfo[]` | Currently available broadcasts |
 | `emitter` | `EventEmitter<SessionEvents>` | Stable emitter for session events |
+| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a session event imperatively; call `.remove()` to unsubscribe |
 | `connect(prefix?, targetLatencyMs?)` | `(prefix?: string, targetLatencyMs?: number) => void` | Connect to the relay. Defaults: `prefix=''`, `targetLatencyMs=200` |
 | `disconnect()` | `() => void` | Disconnect and reset state |
 
@@ -109,6 +110,7 @@ Returns a `Player` object:
 | `currentVideoTrackName` | `string \| undefined` | Name of the active video track |
 | `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
 | `emitter` | `EventEmitter<PlayerEvents>` | Stable emitter for player events |
+| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a player event imperatively; call `.remove()` to unsubscribe |
 | `play()` | `() => void` | Start or resume playback |
 | `pause()` | `() => void` | Pause playback |
 | `stop()` | `() => void` | Stop playback and reset state |
@@ -145,6 +147,26 @@ useEventListener(session, 'stateChange', ({ state }) => {
 ```
 
 No `useCallback` is needed — the listener is kept in a ref internally.
+
+---
+
+### `player.addListener(eventName, listener)` / `session.addListener(eventName, listener)`
+
+Subscribes to an event outside of the React lifecycle. Returns an `EventSubscription` whose `.remove()` method cancels the subscription.
+
+```ts
+// Subscribe
+const sub = player.addListener('playingChange', ({ isPlaying }) => {
+  console.log('Playing:', isPlaying);
+});
+
+// Later — unsubscribe manually
+sub.remove();
+```
+
+Use this when you need to subscribe from non-component code (stores, services, callbacks) or when you want full control over the subscription lifetime. Inside components, prefer `useEvent` or `useEventListener` instead — they clean up automatically.
+
+---
 
 **`player` events**
 

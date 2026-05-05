@@ -1,5 +1,5 @@
 import NativeMoQ from './NativeMoQ';
-import type { EventEmitter } from './EventEmitter';
+import type { EventEmitter, EventSubscription } from './EventEmitter';
 
 export type SessionState =
   | 'idle'
@@ -126,6 +126,10 @@ export interface Session {
   sessionState: SessionState;
   broadcasts: BroadcastInfo[];
   readonly emitter: EventEmitter<SessionEvents>;
+  addListener<TEventName extends keyof SessionEvents>(
+    eventName: TEventName,
+    listener: SessionEvents[TEventName]
+  ): EventSubscription;
   connect(prefix?: string, targetLatencyMs?: number): void;
   disconnect(): void;
 }
@@ -137,6 +141,10 @@ export interface Player {
   readonly currentVideoTrackName?: string;
   readonly currentAudioTrackName?: string;
   readonly emitter: EventEmitter<PlayerEvents>;
+  addListener<TEventName extends keyof PlayerEvents>(
+    eventName: TEventName,
+    listener: PlayerEvents[TEventName]
+  ): EventSubscription;
   play(): void;
   pause(): void;
   stop(): void;

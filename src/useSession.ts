@@ -80,10 +80,19 @@ export function useSession(
     setBroadcasts([]);
   }, []);
 
+  const addListener = useCallback(
+    <TEventName extends keyof SessionEvents>(
+      eventName: TEventName,
+      listener: SessionEvents[TEventName]
+    ) => emitterRef.current.addListener(eventName, listener),
+    []
+  );
+
   const moqSession: Session = {
     sessionState,
     broadcasts,
     emitter: emitterRef.current,
+    addListener,
     connect,
     disconnect,
   };

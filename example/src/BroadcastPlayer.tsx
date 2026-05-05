@@ -1,6 +1,12 @@
 import type { BroadcastInfo } from 'react-native-moq';
+import { useEffect } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
-import { VideoView, useEventListener, usePlayer } from 'react-native-moq';
+import {
+  VideoView,
+  useEvent,
+  useEventListener,
+  usePlayer,
+} from 'react-native-moq';
 import type { AddEntry } from './EventLog';
 import { RenditionPicker } from './RenditionPicker';
 import { StatsPanel } from './StatsPanel';
@@ -28,17 +34,34 @@ export function BroadcastPlayer({
     return px(b) - px(a);
   });
 
-  useEventListener(player, 'playingChange', ({ isPlaying }) => {
-    addEntry('playingChange', `isPlaying=${isPlaying}`, broadcast.path);
-  });
+  const playingChangeEvent = useEvent(player, 'playingChange');
+  useEffect(() => {
+    if (playingChangeEvent !== undefined) {
+      addEntry(
+        'playingChange',
+        `isPlaying=${playingChangeEvent.isPlaying}`,
+        broadcast.path
+      );
+    }
+  }, [playingChangeEvent, addEntry, broadcast.path]);
 
   useEventListener(player, 'trackStopped', () => {
     addEntry('trackStopped', undefined, broadcast.path);
   });
 
-  useEventListener(player, 'trackSwitched', ({ trackKind, trackName }) => {
-    addEntry('trackSwitched', `${trackKind} → ${trackName}`, broadcast.path);
-  });
+  useEffect(() => {
+    const sub = player.addListener(
+      'trackSwitched',
+      ({ trackKind, trackName }) => {
+        addEntry(
+          'trackSwitched',
+          `${trackKind} → ${trackName}`,
+          broadcast.path
+        );
+      }
+    );
+    return () => sub.remove();
+  }, [player, addEntry, broadcast.path]);
 
   return (
     <View style={styles.broadcastCard}>
