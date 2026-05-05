@@ -51,6 +51,10 @@ export class PlayerHandle {
     else NativeMoQ.play(this.broadcastPath);
   }
 
+  playAudioOnly() {
+    NativeMoQ.playAudioOnly(this.broadcastPath);
+  }
+
   pause() {
     if (this.#native) this.#native.pause();
     else NativeMoQ.pause(this.broadcastPath);
@@ -150,5 +154,22 @@ export interface Player {
   stop(): void;
   updateTargetLatency(ms: number): void;
   switchVideoTrack(trackName: string): void;
+  switchAudioTrack(trackName: string): void;
+}
+
+export interface AudioPlayer {
+  readonly broadcastPath: string;
+  readonly isPlaying: boolean;
+  readonly playbackStats: PlaybackStats | null;
+  readonly currentAudioTrackName?: string;
+  readonly emitter: EventEmitter<PlayerEvents>;
+  addListener<TEventName extends keyof PlayerEvents>(
+    eventName: TEventName,
+    listener: PlayerEvents[TEventName]
+  ): EventSubscription;
+  play(): void;
+  pause(): void;
+  stop(): void;
+  updateTargetLatency(ms: number): void;
   switchAudioTrack(trackName: string): void;
 }

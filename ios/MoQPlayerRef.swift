@@ -2,7 +2,7 @@ import AVFoundation
 import MoQKit
 
 @objc public class MoQPlayerRef: NSObject {
-  let player: Player
+  var player: Player
   @objc public let broadcastPath: String
 
   var currentVideoTrackName: String?
@@ -144,6 +144,22 @@ import MoQKit
   func stopStatsPolling() {
     statsTimer?.invalidate()
     statsTimer = nil
+  }
+
+  // MARK: - Reconfigure (swap inner Player, keep this ref alive for JSI)
+
+  @MainActor
+  func reconfigurePlayer(_ newPlayer: Player, autoPlay: Bool) async {
+    eventsTask?.cancel(); eventsTask = nil
+    statsTimer?.invalidate(); statsTimer = nil
+    await player.stopAll()
+
+    player = newPlayer
+    currentVideoTrackName = nil
+    pendingVideoTrackName = nil
+
+    startObservingEvents()
+    if autoPlay { try? await player.play() }
   }
 
   // MARK: - Full stop (awaitable, called on MainActor)

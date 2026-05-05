@@ -1,15 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import type { Player } from './types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { AudioPlayer } from './types';
 import { PlayerHandle } from './types';
 import { usePlayerBase } from './usePlayerBase';
 
-export function usePlayer(
+export function useAudioPlayer(
   player: PlayerHandle,
-  setup?: (player: Player) => void
-): Player {
-  const [currentVideoTrackName, setCurrentVideoTrackName] = useState<
-    string | undefined
-  >(player.initialVideoTrackName);
+  setup?: (player: AudioPlayer) => void
+): AudioPlayer {
   const [currentAudioTrackName, setCurrentAudioTrackName] = useState<
     string | undefined
   >(player.initialAudioTrackName);
@@ -17,39 +14,41 @@ export function usePlayer(
   const base = usePlayerBase(
     player,
     (kind, trackName) => {
-      if (kind === 'video') setCurrentVideoTrackName(trackName);
-      else setCurrentAudioTrackName(trackName);
+      if (kind === 'audio') setCurrentAudioTrackName(trackName);
     },
     () => {
-      setCurrentVideoTrackName(undefined);
       setCurrentAudioTrackName(undefined);
     }
   );
 
-  const moqPlayer: Player = {
+  const play = useCallback(
+    () => base.playerRef.current.playAudioOnly(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  const audioPlayer: AudioPlayer = {
     broadcastPath: base.broadcastPath,
     isPlaying: base.isPlaying,
     playbackStats: base.playbackStats,
-    currentVideoTrackName,
     currentAudioTrackName,
     emitter: base.emitterRef.current,
     addListener: base.addListener,
-    play: base.play,
+    play,
     pause: base.pause,
     stop: base.stop,
     updateTargetLatency: base.updateTargetLatency,
-    switchVideoTrack: base.switchVideoTrack,
     switchAudioTrack: base.switchAudioTrack,
   };
 
-  const moqPlayerRef = useRef(moqPlayer);
-  moqPlayerRef.current = moqPlayer;
+  const audioPlayerRef = useRef(audioPlayer);
+  audioPlayerRef.current = audioPlayer;
 
   const setupRef = useRef(setup);
 
   useEffect(() => {
-    setupRef.current?.(moqPlayerRef.current);
+    setupRef.current?.(audioPlayerRef.current);
   }, []);
 
-  return moqPlayer;
+  return audioPlayer;
 }

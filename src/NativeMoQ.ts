@@ -10,6 +10,7 @@ export interface Spec extends TurboModule {
 
   // Player controls (per broadcast)
   play(broadcastPath: string): void;
+  playAudioOnly(broadcastPath: string): void;
   pause(broadcastPath: string): void;
   stopPlayer(broadcastPath: string): void;
   updateTargetLatency(broadcastPath: string, ms: number): void;

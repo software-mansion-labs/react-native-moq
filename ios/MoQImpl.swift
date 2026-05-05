@@ -31,6 +31,8 @@ import MoQKit
   private var targetLatencyMs: UInt64 = 200
 
   private var playerRefs: [String: MoQPlayerRef] = [:]
+  private var catalogs: [String: Catalog] = [:]
+  private var audioOnlyPaths: Set<String> = []
   private var catalogTasks: [String: Task<Void, Never>] = [:]
 
   private var stateTask: Task<Void, Never>?
@@ -77,6 +79,44 @@ import MoQKit
   @objc(switchAudioTrack:trackName:)
   public func switchAudioTrack(broadcastPath: String, trackName: String) {
     playerRefs[broadcastPath]?.switchAudioTrack(name: trackName)
+  }
+
+  @objc(playAudioOnly:)
+  public func playAudioOnly(broadcastPath: String) {
+    Task { @MainActor in
+      let alreadyAudioOnly = self.audioOnlyPaths.contains(broadcastPath)
+      self.audioOnlyPaths.insert(broadcastPath)
+
+      if alreadyAudioOnly, let ref = self.playerRefs[broadcastPath] {
+        ref.play()
+        return
+      }
+
+      guard let catalog = self.catalogs[broadcastPath] else { return }
+      let audioTrackName = catalog.audioTracks.first?.name
+      guard let newPlayer = try? Player(
+        catalog: catalog,
+        videoTrackName: nil,
+        audioTrackName: audioTrackName,
+        targetBufferingMs: self.targetLatencyMs
+      ) else { return }
+
+      if let ref = self.playerRefs[broadcastPath] {
+        await ref.reconfigurePlayer(newPlayer, autoPlay: true)
+      } else {
+        let ref = MoQPlayerRef(
+          player: newPlayer,
+          broadcastPath: broadcastPath,
+          videoTrackName: nil,
+          audioTrackName: audioTrackName
+        )
+        ref.onEvent = { [weak self] name, body in self?.onEvent?(name, body) }
+        self.playerRefs[broadcastPath] = ref
+        NotificationCenter.default.post(name: MoQImpl.playerChangedNotification, object: broadcastPath)
+        ref.startObservingEvents()
+        try? await newPlayer.play()
+      }
+    }
   }
 
   // MARK: - JSI: called from MoQ.mm C++ getPlayer override
@@ -132,6 +172,8 @@ import MoQKit
     let allRefs = playerRefs
     session = nil
     playerRefs = [:]
+    catalogs = [:]
+    audioOnlyPaths = []
 
     for (path, _) in catalogTasks {
       catalogTasks[path]?.cancel()
@@ -155,7 +197,8 @@ import MoQKit
     let hadPlayer = playerRefs[path] != nil
     await _removePlayer(for: path, notifyVideoViews: false, cancelCatalogTask: false)
 
-    let videoTrackName = catalog.videoTracks.first?.name
+    catalogs[path] = catalog
+    let videoTrackName = audioOnlyPaths.contains(path) ? nil : catalog.videoTracks.first?.name
     let audioTrackName = catalog.audioTracks.first?.name
 
     let p = try? Player(

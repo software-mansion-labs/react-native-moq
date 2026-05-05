@@ -68,6 +68,10 @@ RCT_EXPORT_MODULE()
   [[MoQImpl shared] play:broadcastPath];
 }
 
+- (void)playAudioOnly:(NSString *)broadcastPath {
+  [[MoQImpl shared] playAudioOnly:broadcastPath];
+}
+
 - (void)pause:(NSString *)broadcastPath {
   [[MoQImpl shared] pause:broadcastPath];
 }

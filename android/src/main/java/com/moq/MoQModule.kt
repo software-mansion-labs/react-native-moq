@@ -30,6 +30,9 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private var subscription: BroadcastSubscription? = null
   private var stateJob: Job? = null
   private var broadcastsJob: Job? = null
+  private var targetLatencyMs: Int = 200
+  private val catalogs = ConcurrentHashMap<String, Catalog>()
+  private val audioOnlyPaths = ConcurrentHashMap.newKeySet<String>()
 
   // MARK: - Companion: shared handle map and listeners for MoQVideoView
 
@@ -74,6 +77,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun connect(url: String, prefix: String, targetLatencyMs: Double) {
     val latencyMs = targetLatencyMs.toInt()
+    this.targetLatencyMs = latencyMs
     moduleScope.launch {
       val s = Session(url = url, parentScope = moduleScope)
       session = s
@@ -119,6 +123,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     subscription = null
 
     playerHandles.keys.toList().forEach { path -> removePlayer(path, notify = false) }
+    catalogs.clear()
+    audioOnlyPaths.clear()
 
     val s = session
     session = null
@@ -130,6 +136,38 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun play(broadcastPath: String) {
     playerHandles[broadcastPath]?.play()
+  }
+
+  override fun playAudioOnly(broadcastPath: String) {
+    val alreadyAudioOnly = audioOnlyPaths.contains(broadcastPath)
+    audioOnlyPaths.add(broadcastPath)
+
+    if (alreadyAudioOnly && playerHandles.containsKey(broadcastPath)) {
+      playerHandles[broadcastPath]?.play()
+      return
+    }
+
+    val catalog = catalogs[broadcastPath] ?: return
+    val audioTrackName = catalog.audioTracks.firstOrNull()?.name
+    val p = try {
+      Player(
+        catalog = catalog,
+        videoTrackName = null,
+        audioTrackName = audioTrackName,
+        targetLatencyMs = targetLatencyMs,
+        parentScope = moduleScope,
+      )
+    } catch (_: Exception) { return }
+
+    removePlayer(broadcastPath, notify = false)
+
+    val handle = MoQPlayerHandle(p, broadcastPath, moduleScope, mainHandler)
+    handle.onEvent = { name, map -> emitEvent(name, map) }
+    playerHandles[broadcastPath] = handle
+    handle.startObservingEvents()
+    p.play()
+
+    mainHandler.post { notifyPlayerChanged(broadcastPath) }
   }
 
   override fun pause(broadcastPath: String) {
@@ -166,7 +204,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val hadPlayer = playerHandles[path] != null
     removePlayer(path, notify = false)
 
-    val videoTrackName = catalog.videoTracks.firstOrNull()?.name
+    catalogs[path] = catalog
+    val videoTrackName = if (audioOnlyPaths.contains(path)) null else catalog.videoTracks.firstOrNull()?.name
     val audioTrackName = catalog.audioTracks.firstOrNull()?.name
 
     val p = try {
