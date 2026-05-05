@@ -23,7 +23,7 @@ cd ios && pod install
 
 ```tsx
 import { VideoView, useSession, usePlayer } from 'react-native-moq';
-import type { MoQPlayerHandle, MoQPlayer } from 'react-native-moq';
+import type { PlayerHandle } from 'react-native-moq';
 
 function App() {
   const session = useSession('http://relay.example.com:4443');
@@ -38,7 +38,7 @@ function App() {
   );
 }
 
-function BroadcastPlayer({ handle }: { handle: MoQPlayerHandle }) {
+function BroadcastPlayer({ handle }: { handle: PlayerHandle }) {
   const player = usePlayer(handle, (p) => {
     p.play();
   });
@@ -72,17 +72,17 @@ const session = useSession('http://relay.example.com:4443', (s) => {
 });
 ```
 
-Returns a `MoQSession` object:
+Returns a `Session` object:
 
 | Property / Method | Type | Description |
 |---|---|---|
-| `sessionState` | `MoQSessionState` | Current connection state |
-| `broadcasts` | `MoQBroadcastInfo[]` | Currently available broadcasts |
-| `emitter` | `EventEmitter<MoQSessionEvents>` | Stable emitter for session events (see [`useEvent`](#useeventemitter-eventname-initialvalue)) |
+| `sessionState` | `SessionState` | Current connection state |
+| `broadcasts` | `BroadcastInfo[]` | Currently available broadcasts |
+| `emitter` | `EventEmitter<SessionEvents>` | Stable emitter for session events |
 | `connect(prefix?, targetLatencyMs?)` | `(prefix?: string, targetLatencyMs?: number) => void` | Connect to the relay. Defaults: `prefix=''`, `targetLatencyMs=200` |
 | `disconnect()` | `() => void` | Disconnect and reset state |
 
-**`MoQSessionState`** is one of: `'idle'` · `'connecting'` · `'connected'` · `'closed'` · `` `error:${string}` ``
+**`SessionState`** is one of: `'idle'` · `'connecting'` · `'connected'` · `'closed'` · `` `error:${string}` ``
 
 Call `connect()` manually — either in the setup callback or in response to user interaction. The hook does not auto-connect.
 
@@ -90,7 +90,7 @@ Call `connect()` manually — either in the setup callback or in response to use
 
 ### `usePlayer(handle, setup?)`
 
-Creates a reactive `MoQPlayer` from a `MoQPlayerHandle`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<VideoView>`.
+Creates a reactive `Player` from a `PlayerHandle`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<VideoView>`.
 
 ```tsx
 const player = usePlayer(broadcast.player, (p) => {
@@ -99,16 +99,16 @@ const player = usePlayer(broadcast.player, (p) => {
 });
 ```
 
-Returns a `MoQPlayer` object:
+Returns a `Player` object:
 
 | Property / Method | Type | Description |
 |---|---|---|
 | `broadcastPath` | `string` | The broadcast path this player belongs to |
 | `isPlaying` | `boolean` | True while tracks are actively playing |
-| `playbackStats` | `MoQPlaybackStats \| null` | Live metrics, updated every 500 ms |
+| `playbackStats` | `PlaybackStats \| null` | Live metrics, updated every 500 ms |
 | `currentVideoTrackName` | `string \| undefined` | Name of the active video track |
 | `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
-| `emitter` | `EventEmitter<MoQPlayerEvents>` | Stable emitter for player events (see [`useEvent`](#useeventemitter-eventname-initialvalue)) |
+| `emitter` | `EventEmitter<PlayerEvents>` | Stable emitter for player events |
 | `play()` | `() => void` | Start or resume playback |
 | `pause()` | `() => void` | Pause playback |
 | `stop()` | `() => void` | Stop playback and reset state |
@@ -118,49 +118,49 @@ Returns a `MoQPlayer` object:
 
 ---
 
-### `useEvent(emitter, eventName, initialValue?)`
+### `useEvent(source, eventName, initialValue?)`
 
-Returns reactive state that re-renders the component whenever the named event fires.
+Returns reactive state that re-renders the component whenever the named event fires. `source` can be a `Player`, `Session`, or any `EventEmitter`.
 
 ```tsx
-const { isPlaying } = useEvent(
-  player.emitter,
-  'playingChange',
-  { isPlaying: false }
-);
+const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: false });
 ```
 
 Without an initial value the return type includes `undefined`.
 
 ---
 
-### `useEventListener(emitter, eventName, listener)`
+### `useEventListener(source, eventName, listener)`
 
-Registers a listener without creating React state. Use this for side effects (logging, analytics, etc.) rather than driving UI.
+Registers a listener without creating React state. Use this for side effects (logging, analytics, etc.) rather than driving UI. `source` can be a `Player`, `Session`, or any `EventEmitter`.
 
 ```tsx
-useEventListener(player.emitter, 'trackSwitched', ({ trackKind, trackName }) => {
+useEventListener(player, 'trackSwitched', ({ trackKind, trackName }) => {
   console.log(`Switched ${trackKind} track to ${trackName}`);
+});
+
+useEventListener(session, 'stateChange', ({ state }) => {
+  console.log('Session state:', state);
 });
 ```
 
 No `useCallback` is needed — the listener is kept in a ref internally.
 
-**`player.emitter` events**
+**`player` events**
 
 | Event | Payload | Description |
 |---|---|---|
 | `playingChange` | `{ isPlaying }` | Playback started, paused, or resumed |
 | `trackStopped` | — | All tracks stopped (broadcast ended or `stop()` called) |
 | `trackSwitched` | `{ trackKind, trackName }` | Active video or audio track changed |
-| `statsUpdate` | `MoQPlaybackStats` | Playback metrics updated (~every 500 ms) |
+| `statsUpdate` | `PlaybackStats` | Playback metrics updated (~every 500 ms) |
 
-**`session.emitter` events**
+**`session` events**
 
 | Event | Payload | Description |
 |---|---|---|
 | `stateChange` | `{ state }` | Session state transitioned |
-| `broadcastAvailable` | `MoQBroadcastInfo` | A new broadcast is available |
+| `broadcastAvailable` | `BroadcastInfo` | A new broadcast is available |
 | `broadcastUnavailable` | `{ path }` | A broadcast is no longer available |
 
 ---
@@ -178,14 +178,14 @@ Native component that renders the video for a given player.
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `player` | `MoQPlayer` | Yes | Player returned by `usePlayer` |
+| `player` | `Player` | Yes | Player returned by `usePlayer` |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
 
 ---
 
-### `MoQPlayerHandle`
+### `PlayerHandle`
 
-An opaque reference to a native player, available as `broadcast.player` inside `MoQBroadcastInfo`. Pass it to `usePlayer` to get a reactive `MoQPlayer`. You can also call playback methods on it directly without the hook.
+An opaque reference to a native player, available as `broadcast.player` inside `BroadcastInfo`. Pass it to `usePlayer` to get a reactive `Player`. You can also call playback methods on it directly without the hook.
 
 ```tsx
 // Direct usage — no hook needed
@@ -200,12 +200,12 @@ On iOS the handle is backed by a JSI host object — method calls go directly to
 
 ### Types
 
-#### `MoQPlayerEvents`
+#### `PlayerEvents`
 
 Event map for `player.emitter`. Each key is an event name; the value is the event payload type.
 
 ```ts
-type MoQPlayerEvents = {
+type PlayerEvents = {
   // Fires when playback starts, pauses, or resumes.
   // Deduplicated — only one emission per state transition even when multiple
   // tracks (video + audio) change simultaneously.
@@ -218,42 +218,42 @@ type MoQPlayerEvents = {
   trackSwitched: (event: { trackKind: 'video' | 'audio'; trackName: string }) => void;
 
   // Fires every ~500 ms with updated playback metrics.
-  statsUpdate: (event: MoQPlaybackStats) => void;
+  statsUpdate: (event: PlaybackStats) => void;
 };
 ```
 
-#### `MoQSessionEvents`
+#### `SessionEvents`
 
 Event map for `session.emitter`.
 
 ```ts
-type MoQSessionEvents = {
+type SessionEvents = {
   // Fires on every session state transition.
-  stateChange: (event: { state: MoQSessionState }) => void;
+  stateChange: (event: { state: SessionState }) => void;
 
   // Fires when a new broadcast becomes available.
-  broadcastAvailable: (event: MoQBroadcastInfo) => void;
+  broadcastAvailable: (event: BroadcastInfo) => void;
 
   // Fires when a broadcast is no longer available.
   broadcastUnavailable: (event: { path: string }) => void;
 };
 ```
 
-#### `MoQBroadcastInfo`
+#### `BroadcastInfo`
 
 ```ts
-interface MoQBroadcastInfo {
+interface BroadcastInfo {
   path: string;
-  videoTracks: MoQVideoTrackInfo[];
-  audioTracks: MoQAudioTrackInfo[];
-  player: MoQPlayerHandle; // pass to usePlayer to get a MoQPlayer
+  videoTracks: VideoTrackInfo[];
+  audioTracks: AudioTrackInfo[];
+  player: PlayerHandle; // pass to usePlayer to get a Player
 }
 ```
 
-#### `MoQVideoTrackInfo`
+#### `VideoTrackInfo`
 
 ```ts
-interface MoQVideoTrackInfo {
+interface VideoTrackInfo {
   name: string;
   codec: string;
   width?: number;
@@ -263,10 +263,10 @@ interface MoQVideoTrackInfo {
 }
 ```
 
-#### `MoQAudioTrackInfo`
+#### `AudioTrackInfo`
 
 ```ts
-interface MoQAudioTrackInfo {
+interface AudioTrackInfo {
   name: string;
   codec: string;
   sampleRate: number;
@@ -275,10 +275,10 @@ interface MoQAudioTrackInfo {
 }
 ```
 
-#### `MoQPlaybackStats`
+#### `PlaybackStats`
 
 ```ts
-interface MoQPlaybackStats {
+interface PlaybackStats {
   videoLatencyMs?: number;
   audioLatencyMs?: number;
   videoBitrateKbps?: number;
@@ -354,7 +354,7 @@ if (player.playbackStats) {
 Alternatively, subscribe to `statsUpdate` directly:
 
 ```tsx
-const stats = useEvent(player.emitter, 'statsUpdate');
+const stats = useEvent(player, 'statsUpdate');
 ```
 
 ## Contributing

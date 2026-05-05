@@ -34,15 +34,15 @@ export default function App() {
 
   const [log, addEntry] = useEventLog();
 
-  useEventListener(session.emitter, 'stateChange', ({ state }) => {
+  useEventListener(session, 'stateChange', ({ state }) => {
     addEntry('stateChange', state);
   });
 
-  useEventListener(session.emitter, 'broadcastAvailable', ({ path }) => {
+  useEventListener(session, 'broadcastAvailable', ({ path }) => {
     addEntry('broadcastAvailable', path);
   });
 
-  useEventListener(session.emitter, 'broadcastUnavailable', ({ path }) => {
+  useEventListener(session, 'broadcastUnavailable', ({ path }) => {
     addEntry('broadcastUnavailable', path);
   });
 

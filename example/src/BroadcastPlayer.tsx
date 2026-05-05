@@ -28,21 +28,17 @@ export function BroadcastPlayer({
     return px(b) - px(a);
   });
 
-  useEventListener(player.emitter, 'playingChange', ({ isPlaying }) => {
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
     addEntry('playingChange', `isPlaying=${isPlaying}`, broadcast.path);
   });
 
-  useEventListener(player.emitter, 'trackStopped', () => {
+  useEventListener(player, 'trackStopped', () => {
     addEntry('trackStopped', undefined, broadcast.path);
   });
 
-  useEventListener(
-    player.emitter,
-    'trackSwitched',
-    ({ trackKind, trackName }) => {
-      addEntry('trackSwitched', `${trackKind} → ${trackName}`, broadcast.path);
-    }
-  );
+  useEventListener(player, 'trackSwitched', ({ trackKind, trackName }) => {
+    addEntry('trackSwitched', `${trackKind} → ${trackName}`, broadcast.path);
+  });
 
   return (
     <View style={styles.broadcastCard}>
