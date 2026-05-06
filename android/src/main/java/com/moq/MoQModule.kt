@@ -21,6 +21,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
+private const val AUDIO_KEY_SUFFIX = "_audio"
+
 class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactContext) {
 
   private val moduleScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -30,6 +32,9 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private var subscription: BroadcastSubscription? = null
   private var stateJob: Job? = null
   private var broadcastsJob: Job? = null
+
+  private var targetLatencyMs: Int = 200
+  private val catalogs = ConcurrentHashMap<String, Catalog>()
 
   // MARK: - Companion: shared handle map and listeners for MoQVideoView
 
@@ -74,6 +79,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun connect(url: String, prefix: String, targetLatencyMs: Double) {
     val latencyMs = targetLatencyMs.toInt()
+    this.targetLatencyMs = latencyMs
     moduleScope.launch {
       val s = Session(url = url, parentScope = moduleScope)
       session = s
@@ -119,6 +125,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     subscription = null
 
     playerHandles.keys.toList().forEach { path -> removePlayer(path, notify = false) }
+    catalogs.clear()
 
     val s = session
     session = null
@@ -149,7 +156,33 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   }
 
   override fun switchAudioTrack(broadcastPath: String, trackName: String) {
-    // Audio track switching is not supported on Android
+    playerHandles[broadcastPath]?.switchAudioTrack(trackName)
+  }
+
+  override fun createAudioOnlyPlayer(broadcastPath: String) {
+    val catalog = catalogs[broadcastPath] ?: return
+    val audioTrackName = catalog.audioTracks.firstOrNull()?.name ?: return
+    val audioKey = broadcastPath + AUDIO_KEY_SUFFIX
+
+    // Run synchronously so `playerHandles[audioKey]` is populated before this
+    // call returns to JS — otherwise a follow-up `play(audioKey)` from the
+    // hook's setup callback would no-op against an empty map.
+    removePlayer(audioKey, notify = false)
+
+    val p = try {
+      Player(
+        catalog = catalog,
+        videoTrackName = null,
+        audioTrackName = audioTrackName,
+        targetLatencyMs = targetLatencyMs,
+        parentScope = moduleScope,
+      )
+    } catch (_: Exception) { return }
+
+    val handle = MoQPlayerHandle(p, audioKey, moduleScope, mainHandler)
+    handle.onEvent = { name, map -> emitEvent(name, map) }
+    playerHandles[audioKey] = handle
+    handle.startObservingEvents()
   }
 
   override fun invalidate() {
@@ -162,6 +195,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   private fun handleBroadcastAvailable(catalog: Catalog, targetLatencyMs: Int) {
     val path = catalog.path
+
+    catalogs[path] = catalog
 
     val hadPlayer = playerHandles[path] != null
     removePlayer(path, notify = false)
@@ -187,6 +222,12 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
       if (hadPlayer) {
         p.play()
+      }
+
+      // Re-create the audio-only player if one was previously active.
+      val audioKey = path + AUDIO_KEY_SUFFIX
+      if (playerHandles[audioKey] != null) {
+        createAudioOnlyPlayer(path)
       }
 
       mainHandler.post { notifyPlayerChanged(path) }
@@ -226,6 +267,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   private fun handleBroadcastUnavailable(path: String) {
     removePlayer(path)
+    removePlayer(path + AUDIO_KEY_SUFFIX)
+    catalogs.remove(path)
     val map = Arguments.createMap()
     map.putString("path", path)
     emitEvent("broadcastUnavailable", map)

@@ -88,6 +88,10 @@ RCT_EXPORT_MODULE()
   [[MoQImpl shared] switchAudioTrack:broadcastPath trackName:trackName];
 }
 
+- (void)createAudioOnlyPlayer:(NSString *)broadcastPath {
+  [[MoQImpl shared] createAudioOnlyPlayer:broadcastPath];
+}
+
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
 {

@@ -2,6 +2,8 @@ import AVFoundation
 import Foundation
 import MoQKit
 
+private let audioKeySuffix = "_audio"
+
 @objc public class MoQImpl: NSObject {
   // MARK: - Singleton
 
@@ -31,6 +33,7 @@ import MoQKit
   private var targetLatencyMs: UInt64 = 200
 
   private var playerRefs: [String: MoQPlayerRef] = [:]
+  private var catalogs: [String: Catalog] = [:]
   private var catalogTasks: [String: Task<Void, Never>] = [:]
 
   private var stateTask: Task<Void, Never>?
@@ -47,14 +50,19 @@ import MoQKit
     Task { @MainActor in self._disconnect() }
   }
 
+  // All control methods route through MainActor so they observe writes from
+  // _handleBroadcastAvailable / _createAudioOnlyPlayer in submission order.
+  // Without this, a follow-up play(audioKey) right after createAudioOnlyPlayer
+  // would race the create Task and find an empty playerRefs map.
+
   @objc(play:)
   public func play(broadcastPath: String) {
-    playerRefs[broadcastPath]?.play()
+    Task { @MainActor in self.playerRefs[broadcastPath]?.play() }
   }
 
   @objc(pause:)
   public func pause(broadcastPath: String) {
-    playerRefs[broadcastPath]?.pause()
+    Task { @MainActor in self.playerRefs[broadcastPath]?.pause() }
   }
 
   @objc(stopPlayer:)
@@ -66,17 +74,24 @@ import MoQKit
 
   @objc(updateTargetLatency:ms:)
   public func updateTargetLatency(broadcastPath: String, ms: Int) {
-    playerRefs[broadcastPath]?.updateTargetLatency(ms: ms)
+    Task { @MainActor in self.playerRefs[broadcastPath]?.updateTargetLatency(ms: ms) }
   }
 
   @objc(switchVideoTrack:trackName:)
   public func switchVideoTrack(broadcastPath: String, trackName: String) {
-    playerRefs[broadcastPath]?.switchVideoTrack(name: trackName)
+    Task { @MainActor in self.playerRefs[broadcastPath]?.switchVideoTrack(name: trackName) }
   }
 
   @objc(switchAudioTrack:trackName:)
   public func switchAudioTrack(broadcastPath: String, trackName: String) {
-    playerRefs[broadcastPath]?.switchAudioTrack(name: trackName)
+    Task { @MainActor in self.playerRefs[broadcastPath]?.switchAudioTrack(name: trackName) }
+  }
+
+  @objc(createAudioOnlyPlayer:)
+  public func createAudioOnlyPlayer(broadcastPath: String) {
+    Task { @MainActor in
+      await self._createAudioOnlyPlayer(broadcastPath: broadcastPath)
+    }
   }
 
   // MARK: - JSI: called from MoQ.mm C++ getPlayer override
@@ -132,6 +147,7 @@ import MoQKit
     let allRefs = playerRefs
     session = nil
     playerRefs = [:]
+    catalogs = [:]
 
     for (path, _) in catalogTasks {
       catalogTasks[path]?.cancel()
@@ -151,6 +167,8 @@ import MoQKit
   @MainActor
   private func _handleBroadcastAvailable(_ catalog: Catalog) async {
     let path = catalog.path
+
+    catalogs[path] = catalog
 
     let hadPlayer = playerRefs[path] != nil
     await _removePlayer(for: path, notifyVideoViews: false, cancelCatalogTask: false)
@@ -174,6 +192,12 @@ import MoQKit
 
       if hadPlayer {
         try? await p.play()
+      }
+
+      // Re-create the audio-only player if one was previously active.
+      let audioKey = path + audioKeySuffix
+      if playerRefs[audioKey] != nil {
+        await _createAudioOnlyPlayer(broadcastPath: path)
       }
     }
 
@@ -208,7 +232,32 @@ import MoQKit
   @MainActor
   private func _handleBroadcastUnavailable(path: String) async {
     await _removePlayer(for: path)
+    await _removePlayer(for: path + audioKeySuffix, notifyVideoViews: false, cancelCatalogTask: false)
+    catalogs.removeValue(forKey: path)
     onEvent?("broadcastUnavailable", ["path": path])
+  }
+
+  @MainActor
+  private func _createAudioOnlyPlayer(broadcastPath: String) async {
+    guard let catalog = catalogs[broadcastPath],
+          let audioTrackName = catalog.audioTracks.first?.name
+    else { return }
+
+    let audioKey = broadcastPath + audioKeySuffix
+    await _removePlayer(for: audioKey, notifyVideoViews: false, cancelCatalogTask: false)
+
+    let p = try? Player(
+      catalog: catalog,
+      videoTrackName: nil,
+      audioTrackName: audioTrackName,
+      targetBufferingMs: targetLatencyMs
+    )
+    if let p {
+      let ref = MoQPlayerRef(player: p, broadcastPath: audioKey, videoTrackName: nil, audioTrackName: audioTrackName)
+      ref.onEvent = { [weak self] name, body in self?.onEvent?(name, body) }
+      playerRefs[audioKey] = ref
+      ref.startObservingEvents()
+    }
   }
 
   @MainActor

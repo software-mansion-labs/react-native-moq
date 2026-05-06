@@ -23,7 +23,7 @@ cd ios && pod install
 
 ```tsx
 import { VideoView, useSession, usePlayer } from 'react-native-moq';
-import type { PlayerHandle } from 'react-native-moq';
+import type { BroadcastInfo } from 'react-native-moq';
 
 function App() {
   const session = useSession('http://relay.example.com:4443');
@@ -32,14 +32,14 @@ function App() {
     <>
       <Button title="Connect" onPress={() => session.connect()} />
       {session.broadcasts.map((broadcast) => (
-        <BroadcastPlayer key={broadcast.path} handle={broadcast.player} />
+        <BroadcastPlayer key={broadcast.path} broadcast={broadcast} />
       ))}
     </>
   );
 }
 
-function BroadcastPlayer({ handle }: { handle: PlayerHandle }) {
-  const player = usePlayer(handle, (p) => {
+function BroadcastPlayer({ broadcast }: { broadcast: BroadcastInfo }) {
+  const player = usePlayer(broadcast.player, (p) => {
     p.play();
   });
 
@@ -51,6 +51,8 @@ function BroadcastPlayer({ handle }: { handle: PlayerHandle }) {
   );
 }
 ```
+
+For audio-only streaming, use `useAudioPlayer(broadcast)` instead of `usePlayer(broadcast.player)` — the video track is never subscribed, so no video bandwidth is consumed. See [`useAudioPlayer`](#useaudioplayerbroadcast-setup) below.
 
 ## API
 
@@ -117,6 +119,47 @@ Returns a `Player` object:
 | `updateTargetLatency(ms)` | `(ms: number) => void` | Change buffering latency at runtime |
 | `switchVideoTrack(name)` | `(name: string) => void` | Switch to a different video rendition |
 | `switchAudioTrack(name)` | `(name: string) => void` | Switch to a different audio track |
+
+---
+
+### `useAudioPlayer(broadcast, setup?)`
+
+Creates a reactive `AudioPlayer` that streams **audio only** for a broadcast — the video track is never subscribed and no video pipeline is started natively. Useful for background-audio modes, music broadcasts, or low-bandwidth contexts. The hook lazily creates a dedicated native player on mount and tears it down on unmount. The video+audio player from `broadcast.player` is independent and can run alongside if you also call `usePlayer`.
+
+```tsx
+import { useAudioPlayer } from 'react-native-moq';
+
+const audio = useAudioPlayer(broadcast, (p) => {
+  p.play();
+});
+
+return (
+  <Button
+    title={audio.isPlaying ? 'Pause' : 'Resume'}
+    onPress={audio.isPlaying ? audio.pause : audio.play}
+  />
+);
+```
+
+Returns an `AudioPlayer` object — same shape as `Player` minus the video-only members:
+
+| Property / Method | Type | Description |
+|---|---|---|
+| `broadcastPath` | `string` | Internal key for this audio-only player (broadcast path with an `_audio` suffix) |
+| `isPlaying` | `boolean` | True while audio is actively playing |
+| `playbackStats` | `PlaybackStats \| null` | Live metrics, updated every 500 ms (only audio fields are populated) |
+| `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
+| `emitter` | `EventEmitter<PlayerEvents>` | Stable emitter for player events |
+| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a player event imperatively |
+| `play()` | `() => void` | Start or resume playback |
+| `pause()` | `() => void` | Pause playback |
+| `stop()` | `() => void` | Stop playback and reset state |
+| `updateTargetLatency(ms)` | `(ms: number) => void` | Change buffering latency at runtime |
+| `switchAudioTrack(name)` | `(name: string) => void` | Switch to a different audio track |
+
+The same `PlayerEvents` apply (`playingChange`, `trackStopped`, `trackSwitched`, `statsUpdate`); `trackSwitched` only fires with `trackKind: 'audio'`. The audio-only stream uses a separate native player from the video+audio one, so both can run alongside each other for the same broadcast.
+
+Passing an `AudioPlayer` to `<VideoView>` is a type error — the audio-only mode has no video output by design.
 
 ---
 
@@ -261,6 +304,26 @@ type SessionEvents = {
 };
 ```
 
+#### `AudioPlayer`
+
+Returned by `useAudioPlayer`. A `Player` shape narrowed to audio-only — no `currentVideoTrackName`, no `switchVideoTrack`.
+
+```ts
+interface AudioPlayer {
+  readonly broadcastPath: string;
+  readonly isPlaying: boolean;
+  readonly playbackStats: PlaybackStats | null;
+  readonly currentAudioTrackName?: string;
+  readonly emitter: EventEmitter<PlayerEvents>;
+  addListener<T extends keyof PlayerEvents>(eventName: T, listener: PlayerEvents[T]): EventSubscription;
+  play(): void;
+  pause(): void;
+  stop(): void;
+  updateTargetLatency(ms: number): void;
+  switchAudioTrack(trackName: string): void;
+}
+```
+
 #### `BroadcastInfo`
 
 ```ts
@@ -268,7 +331,7 @@ interface BroadcastInfo {
   path: string;
   videoTracks: VideoTrackInfo[];
   audioTracks: AudioTrackInfo[];
-  player: PlayerHandle; // pass to usePlayer to get a Player
+  player: PlayerHandle; // pass to usePlayer to get a Player; pass the broadcast itself to useAudioPlayer for audio-only
 }
 ```
 

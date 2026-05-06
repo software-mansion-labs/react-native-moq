@@ -37,6 +37,16 @@ class MoQPlayerHandle(
     onEvent?.invoke("playerEvent", map)
   }
 
+  fun switchAudioTrack(trackName: String) {
+    player.switchAudioTrack(trackName)
+    val map = Arguments.createMap()
+    map.putString("broadcastPath", broadcastPath)
+    map.putString("type", "trackSwitched")
+    map.putString("trackKind", "audio")
+    map.putString("trackName", trackName)
+    onEvent?.invoke("playerEvent", map)
+  }
+
   // MARK: - Event observation
 
   fun startObservingEvents() {

@@ -25,6 +25,8 @@ export interface AudioTrackInfo {
   bitrate?: number;
 }
 
+export const AUDIO_PLAYER_KEY_SUFFIX = '_audio';
+
 // Opaque handle returned in broadcastAvailable events.
 // On iOS the native field is a JSI HostObject with direct methods;
 // on Android it falls back to bridge calls keyed by broadcastPath.
@@ -150,5 +152,22 @@ export interface Player {
   stop(): void;
   updateTargetLatency(ms: number): void;
   switchVideoTrack(trackName: string): void;
+  switchAudioTrack(trackName: string): void;
+}
+
+export interface AudioPlayer {
+  readonly broadcastPath: string;
+  readonly isPlaying: boolean;
+  readonly playbackStats: PlaybackStats | null;
+  readonly currentAudioTrackName?: string;
+  readonly emitter: EventEmitter<PlayerEvents>;
+  addListener<TEventName extends keyof PlayerEvents>(
+    eventName: TEventName,
+    listener: PlayerEvents[TEventName]
+  ): EventSubscription;
+  play(): void;
+  pause(): void;
+  stop(): void;
+  updateTargetLatency(ms: number): void;
   switchAudioTrack(trackName: string): void;
 }

@@ -13,9 +13,12 @@ import { BroadcastPlayer } from './BroadcastPlayer';
 import { EventLog, useEventLog } from './EventLog';
 import { StateIndicator } from './StateIndicator';
 
+type Mode = 'video' | 'audio';
+type ActivePlayer = { path: string; initialMode: Mode };
+
 export default function App() {
   const [url, setUrl] = useState('http://192.168.1.48:4443');
-  const [activePaths, setActivePaths] = useState<string[]>([]);
+  const [activePlayers, setActivePlayers] = useState<ActivePlayer[]>([]);
 
   const session = useSession(url);
 
@@ -24,13 +27,18 @@ export default function App() {
 
   useEffect(() => {
     if (canConnect) {
-      setActivePaths([]);
+      setActivePlayers([]);
     }
   }, [canConnect]);
 
-  const addPlayer = (path: string) => setActivePaths((prev) => [...prev, path]);
+  const addPlayer = (path: string, initialMode: Mode) =>
+    setActivePlayers((prev) =>
+      prev.some((p) => p.path === path)
+        ? prev
+        : [...prev, { path, initialMode }]
+    );
   const removePlayer = (path: string) =>
-    setActivePaths((prev) => prev.filter((p) => p !== path));
+    setActivePlayers((prev) => prev.filter((p) => p.path !== path));
 
   const [log, addEntry] = useEventLog();
 
@@ -80,24 +88,35 @@ export default function App() {
               <Text style={styles.noBroadcasts}>No broadcasts available</Text>
             )}
 
-          {session.broadcasts.map((broadcast) =>
-            activePaths.includes(broadcast.path) ? (
-              <BroadcastPlayer
-                key={broadcast.path}
-                broadcast={broadcast}
-                onRemove={() => removePlayer(broadcast.path)}
-                addEntry={addEntry}
-              />
-            ) : (
+          {session.broadcasts.map((broadcast) => {
+            const active = activePlayers.find((p) => p.path === broadcast.path);
+            if (active) {
+              return (
+                <BroadcastPlayer
+                  key={broadcast.path}
+                  broadcast={broadcast}
+                  initialMode={active.initialMode}
+                  onRemove={() => removePlayer(broadcast.path)}
+                  addEntry={addEntry}
+                />
+              );
+            }
+            return (
               <View key={broadcast.path} style={styles.availableCard}>
                 <Text style={styles.broadcastPath}>{broadcast.path}</Text>
-                <Button
-                  title="Show player"
-                  onPress={() => addPlayer(broadcast.path)}
-                />
+                <View style={styles.availableButtons}>
+                  <Button
+                    title="Video"
+                    onPress={() => addPlayer(broadcast.path, 'video')}
+                  />
+                  <Button
+                    title="Audio only"
+                    onPress={() => addPlayer(broadcast.path, 'audio')}
+                  />
+                </View>
               </View>
-            )
-          )}
+            );
+          })}
         </ScrollView>
       </SafeAreaView>
     </SafeAreaProvider>
@@ -135,8 +154,14 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     borderRadius: 8,
     padding: 12,
+    gap: 8,
+  },
+  availableButtons: {
+    flexDirection: 'row',
+    gap: 8,
   },
   broadcastPath: {
+    flex: 1,
     fontSize: 13,
     fontWeight: '600',
     color: '#374151',
