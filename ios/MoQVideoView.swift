@@ -43,10 +43,17 @@ public class MoQVideoView: UIView {
   }
 
   private func attach(layer newLayer: AVSampleBufferDisplayLayer?) {
-    displayLayer?.removeFromSuperlayer()
+    // The video layer is shared via MoQPlayerRef and may currently be hosted
+    // by a sibling MoQVideoView (e.g. the inline copy while we mount the
+    // fullscreen one). Only detach if it's still parented to us — otherwise
+    // we'd yank it out of the new owner.
+    if let current = displayLayer, current.superlayer === self.layer {
+      current.removeFromSuperlayer()
+    }
     displayLayer = newLayer
     if let newLayer {
-      self.layer.addSublayer(newLayer)
+      // Insert at the back so RN-managed subviews stay on top of the video.
+      self.layer.insertSublayer(newLayer, at: 0)
       newLayer.frame = bounds
     }
   }

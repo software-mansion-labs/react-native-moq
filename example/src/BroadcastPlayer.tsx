@@ -1,6 +1,6 @@
-import type { BroadcastInfo } from 'react-native-moq';
-import { useEffect, useState } from 'react';
-import { Button, StyleSheet, Text, View } from 'react-native';
+import type { BroadcastInfo, VideoViewRef } from 'react-native-moq';
+import { useEffect, useRef, useState } from 'react';
+import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   VideoView,
   useAudioPlayer,
@@ -8,6 +8,7 @@ import {
   useEventListener,
   usePlayer,
 } from 'react-native-moq';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AddEntry } from './EventLog';
 import { RenditionPicker } from './RenditionPicker';
 import { StatsPanel } from './StatsPanel';
@@ -65,6 +66,9 @@ function VideoSection({
   const player = usePlayer(broadcast.player, (p) => {
     p.play();
   });
+  const videoViewRef = useRef<VideoViewRef>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   // Pause when this section unmounts (mode switch or full disconnect) so the
   // video stream stops while audio mode is active.
@@ -77,6 +81,18 @@ function VideoSection({
     const px = (t: typeof a) => (t.width ?? 0) * (t.height ?? 0);
     return px(b) - px(a);
   });
+
+  // Aspect ratio of the active video track (or the largest one we know of).
+  // Passed to VideoView so the fullscreen modal letterboxes correctly on
+  // Android, where SurfaceView would otherwise stretch the video.
+  const activeTrack =
+    broadcast.videoTracks.find(
+      (t) => t.name === player.currentVideoTrackName
+    ) ?? sortedVideoTracks[0];
+  const videoAspectRatio =
+    activeTrack && activeTrack.width && activeTrack.height
+      ? activeTrack.width / activeTrack.height
+      : undefined;
 
   const playingChangeEvent = useEvent(player, 'playingChange');
   useEffect(() => {
@@ -109,7 +125,48 @@ function VideoSection({
 
   return (
     <>
-      <VideoView player={player} style={styles.video} />
+      <VideoView
+        ref={videoViewRef}
+        player={player}
+        style={styles.video}
+        videoAspectRatio={videoAspectRatio}
+        onFullscreenEnter={() => setIsFullscreen(true)}
+        onFullscreenExit={() => setIsFullscreen(false)}
+      >
+        {/* Children render alongside the native video — both inline and inside
+            the fullscreen modal — so we conditionally mount the overlay only
+            while fullscreen. Padding follows the device safe area so the
+            button clears the notch / status bar. */}
+        {isFullscreen && (
+          <View
+            style={[
+              styles.fullscreenOverlay,
+              {
+                paddingTop: insets.top + 16,
+                paddingRight: insets.right + 16,
+                paddingBottom: insets.bottom + 16,
+                paddingLeft: insets.left + 16,
+              },
+            ]}
+            pointerEvents="box-none"
+          >
+            {/* Custom Pressable instead of <Button> — RN's <Button> ignores
+                color for text on Android (it sets the background instead),
+                which makes the title invisible against a light backdrop. */}
+            <Pressable
+              onPress={() => videoViewRef.current?.exitFullscreen()}
+              style={({ pressed }) => [
+                styles.fullscreenExitButton,
+                pressed && styles.fullscreenExitButtonPressed,
+              ]}
+            >
+              <Text style={styles.fullscreenExitButtonText}>
+                Exit fullscreen
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </VideoView>
 
       {sortedVideoTracks.length > 1 && (
         <RenditionPicker
@@ -119,10 +176,16 @@ function VideoSection({
         />
       )}
 
-      <Button
-        title={player.isPlaying ? 'Pause' : 'Resume'}
-        onPress={player.isPlaying ? player.pause : player.play}
-      />
+      <View style={styles.controlsRow}>
+        <Button
+          title={player.isPlaying ? 'Pause' : 'Resume'}
+          onPress={player.isPlaying ? player.pause : player.play}
+        />
+        <Button
+          title="Fullscreen"
+          onPress={() => videoViewRef.current?.enterFullscreen()}
+        />
+      </View>
 
       {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
     </>
@@ -231,6 +294,32 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#000',
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  // Overlay rendered as a child of the native VideoView so it follows the
+  // view when it gets reparented into the fullscreen container. Padding is
+  // applied inline so it can include the device safe-area insets.
+  fullscreenOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+  },
+  fullscreenExitButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  fullscreenExitButtonPressed: {
+    opacity: 0.7,
+  },
+  fullscreenExitButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   audioStatus: {
     flexDirection: 'row',

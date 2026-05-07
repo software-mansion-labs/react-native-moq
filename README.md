@@ -232,7 +232,7 @@ Use this when you need to subscribe from non-component code (stores, services, c
 
 ### `<VideoView>`
 
-Native component that renders the video for a given player.
+Native component that renders the video for a given player. Accepts children — render overlay UI (controls, exit-fullscreen buttons, etc.) as children and they will be laid out on top of the video both inline and inside the fullscreen modal.
 
 ```tsx
 <VideoView
@@ -245,6 +245,29 @@ Native component that renders the video for a given player.
 |---|---|---|---|
 | `player` | `Player` | Yes | Player returned by `usePlayer` |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
+| `children` | `ReactNode` | No | Overlay content rendered above the video, inline and in fullscreen |
+| `videoAspectRatio` | `number` | No | Source video aspect ratio (`width / height`). Used to letterbox the video inside the fullscreen modal so it isn't stretched on Android. Defaults to `16 / 9` |
+| `onFullscreenEnter` | `() => void` | No | Fired after the fullscreen modal opens |
+| `onFullscreenExit` | `() => void` | No | Fired after the fullscreen modal closes (including dismissal via the Android hardware back button) |
+
+Imperative methods on the ref:
+
+| Method | Description |
+|---|---|
+| `enterFullscreen()` | Show the player in a fullscreen modal |
+| `exitFullscreen()` | Dismiss the fullscreen modal |
+
+```tsx
+import { useRef } from 'react';
+import { VideoView, type VideoViewRef } from 'react-native-moq';
+
+const ref = useRef<VideoViewRef>(null);
+// ...
+ref.current?.enterFullscreen();
+ref.current?.exitFullscreen();
+```
+
+See [Fullscreen playback](#fullscreen-playback) for a complete example with an in-modal exit button.
 
 ---
 
@@ -405,6 +428,93 @@ sortedTracks.map((track) => (
   />
 ));
 ```
+
+### Fullscreen playback
+
+`VideoView` exposes imperative `enterFullscreen()` / `exitFullscreen()` methods on its ref. Internally it renders the video into an RN `<Modal>` so children are still part of RN's tree — overlay buttons remain tappable, and rendering works on both iOS and Android (where the underlying `SurfaceView` cannot host child views directly).
+
+```tsx
+import { useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  VideoView,
+  usePlayer,
+  type BroadcastInfo,
+  type VideoViewRef,
+} from 'react-native-moq';
+
+function VideoSection({ broadcast }: { broadcast: BroadcastInfo }) {
+  const player = usePlayer(broadcast.player, (p) => p.play());
+  const ref = useRef<VideoViewRef>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const insets = useSafeAreaInsets();
+
+  // Pass the active track's aspect to letterbox correctly in fullscreen
+  // (Android's SurfaceView would otherwise stretch the video).
+  const active =
+    broadcast.videoTracks.find((t) => t.name === player.currentVideoTrackName) ??
+    broadcast.videoTracks[0];
+  const videoAspectRatio =
+    active?.width && active?.height ? active.width / active.height : undefined;
+
+  return (
+    <>
+      <VideoView
+        ref={ref}
+        player={player}
+        style={{ width: '100%', aspectRatio: 16 / 9 }}
+        videoAspectRatio={videoAspectRatio}
+        onFullscreenEnter={() => setIsFullscreen(true)}
+        onFullscreenExit={() => setIsFullscreen(false)}
+      >
+        {/* Overlay only mounts in fullscreen; padding clears the safe area. */}
+        {isFullscreen && (
+          <View
+            pointerEvents="box-none"
+            style={[
+              StyleSheet.absoluteFill,
+              {
+                paddingTop: insets.top + 16,
+                paddingRight: insets.right + 16,
+                alignItems: 'flex-end',
+              },
+            ]}
+          >
+            <Pressable
+              onPress={() => ref.current?.exitFullscreen()}
+              style={styles.exitButton}
+            >
+              <Text style={styles.exitButtonText}>Exit fullscreen</Text>
+            </Pressable>
+          </View>
+        )}
+      </VideoView>
+
+      <Pressable onPress={() => ref.current?.enterFullscreen()}>
+        <Text>Fullscreen</Text>
+      </Pressable>
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  exitButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  exitButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
+});
+```
+
+A few things worth knowing:
+
+- `onFullscreenEnter` / `onFullscreenExit` fire on every transition, including dismissal via the Android hardware back button — your local `isFullscreen` state stays in sync without manual back-button handling.
+- Children render alongside the native video (not inside it) on both platforms, so use absolute positioning for overlays.
+- The native view briefly remounts on fullscreen toggle. The shared video output (the `AVSampleBufferDisplayLayer` on iOS, the player `Surface` on Android) is keyed by `broadcastPath` and re-attaches automatically; expect at most one frame of black during the transition.
+- `videoAspectRatio` is only consulted in fullscreen. Inline layout is driven by the `style` prop as usual.
 
 ### Custom target latency
 
