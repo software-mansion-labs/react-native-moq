@@ -1,13 +1,12 @@
 import { useEffect, useRef } from 'react';
-import type { Player } from './types';
-import { PlayerHandle } from './types';
+import type { BroadcastInfo, Player } from './types';
 import { usePlayerBase } from './usePlayerBase';
 
 export function usePlayer(
-  player: PlayerHandle,
+  broadcast: BroadcastInfo,
   setup?: (player: Player) => void
 ): Player {
-  const moqPlayer = usePlayerBase(player);
+  const moqPlayer = usePlayerBase(broadcast.player);
 
   const moqPlayerRef = useRef(moqPlayer);
   moqPlayerRef.current = moqPlayer;

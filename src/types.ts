@@ -125,7 +125,7 @@ export type SessionEvents = {
 };
 
 export interface Session {
-  sessionState: SessionState;
+  state: SessionState;
   broadcasts: BroadcastInfo[];
   readonly emitter: EventEmitter<SessionEvents>;
   addListener<TEventName extends keyof SessionEvents>(

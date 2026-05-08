@@ -63,7 +63,7 @@ function VideoSection({
   broadcast: BroadcastInfo;
   addEntry: AddEntry;
 }) {
-  const player = usePlayer(broadcast.player, (p) => {
+  const player = usePlayer(broadcast, (p) => {
     p.play();
   });
   const videoViewRef = useRef<VideoViewRef>(null);

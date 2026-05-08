@@ -23,9 +23,8 @@ export default function App() {
 
   const session = useSession(url);
 
-  const canConnect =
-    session.sessionState === 'idle' || session.sessionState === 'closed';
-  const isConnected = session.sessionState === 'connected';
+  const canConnect = session.state === 'idle' || session.state === 'closed';
+  const isConnected = session.state === 'connected';
 
   useEffect(() => {
     if (canConnect) {
@@ -82,7 +81,7 @@ export default function App() {
             onPress={canConnect ? () => session.connect() : session.disconnect}
           />
 
-          <StateIndicator state={session.sessionState} />
+          <StateIndicator state={session.state} />
 
           {isConnected && (
             <Button

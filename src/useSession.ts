@@ -16,7 +16,7 @@ export function useSession(
   url: string,
   setup?: (session: Session) => void
 ): Session {
-  const [sessionState, setSessionState] = useState<SessionState>('idle');
+  const [state, setState] = useState<SessionState>('idle');
   const [broadcasts, setBroadcasts] = useState<BroadcastInfo[]>([]);
 
   const urlRef = useRef(url);
@@ -28,9 +28,9 @@ export function useSession(
     const emitter = emitterRef.current;
     const subs = [
       moqEmitter.addListener('sessionStateChanged', (event) => {
-        const { state } = event as { state: string };
-        const typedState = state as SessionState;
-        setSessionState(typedState);
+        const { state: rawState } = event as { state: string };
+        const typedState = rawState as SessionState;
+        setState(typedState);
         emitter.emit('stateChange', { state: typedState });
       }),
 
@@ -76,7 +76,7 @@ export function useSession(
 
   const disconnect = useCallback(() => {
     NativeMoQ.disconnect();
-    setSessionState('idle');
+    setState('idle');
     setBroadcasts([]);
   }, []);
 
@@ -98,7 +98,7 @@ export function useSession(
   );
 
   const moqSession: Session = {
-    sessionState,
+    state,
     broadcasts,
     emitter: emitterRef.current,
     addListener,

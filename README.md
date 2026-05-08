@@ -40,7 +40,7 @@ function App() {
 }
 
 function BroadcastPlayer({ broadcast }: { broadcast: BroadcastInfo }) {
-  const player = usePlayer(broadcast.player, (p) => {
+  const player = usePlayer(broadcast, (p) => {
     p.play();
   });
 
@@ -53,7 +53,7 @@ function BroadcastPlayer({ broadcast }: { broadcast: BroadcastInfo }) {
 }
 ```
 
-For audio-only streaming, use `useAudioPlayer(broadcast)` instead of `usePlayer(broadcast.player)` — the video track is never subscribed, so no video bandwidth is consumed. See [`useAudioPlayer`](#useaudioplayerbroadcast-setup) below.
+For audio-only streaming, use `useAudioPlayer(broadcast)` instead of `usePlayer(broadcast)` — the video track is never subscribed, so no video bandwidth is consumed. See [`useAudioPlayer`](#useaudioplayerbroadcast-setup) below.
 
 ## API
 
@@ -81,7 +81,7 @@ Returns a `Session` object:
 
 | Property / Method | Type | Description |
 |---|---|---|
-| `sessionState` | `SessionState` | Current connection state |
+| `state` | `SessionState` | Current connection state |
 | `broadcasts` | `BroadcastInfo[]` | Currently available broadcasts (populated only while subscribed) |
 | `emitter` | `EventEmitter<SessionEvents>` | Stable emitter for session events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a session event imperatively; call `.remove()` to unsubscribe |
@@ -96,12 +96,12 @@ Call `connect()` and `subscribe()` manually — either in the setup callback or 
 
 ---
 
-### `usePlayer(handle, setup?)`
+### `usePlayer(broadcast, setup?)`
 
-Creates a reactive `Player` from a `PlayerHandle`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<VideoView>`.
+Creates a reactive `Player` from a `BroadcastInfo`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<VideoView>`.
 
 ```tsx
-const player = usePlayer(broadcast.player, (p) => {
+const player = usePlayer(broadcast, (p) => {
   p.updateTargetLatency(300);
   p.play();
 });
@@ -278,7 +278,7 @@ See [Fullscreen playback](#fullscreen-playback) for a complete example with an i
 
 ### `PlayerHandle`
 
-An opaque reference to a native player, available as `broadcast.player` inside `BroadcastInfo`. Pass it to `usePlayer` to get a reactive `Player`. You can also call playback methods on it directly without the hook.
+An opaque reference to a native player, available as `broadcast.player` inside `BroadcastInfo`. `usePlayer(broadcast)` consumes this internally to produce a reactive `Player`. You can also call playback methods on the handle directly without the hook.
 
 ```tsx
 // Direct usage — no hook needed
@@ -359,7 +359,7 @@ interface BroadcastInfo {
   path: string;
   videoTracks: VideoTrackInfo[];
   audioTracks: AudioTrackInfo[];
-  player: PlayerHandle; // pass to usePlayer to get a Player; pass the broadcast itself to useAudioPlayer for audio-only
+  player: PlayerHandle; // opaque native handle — call methods directly, or pass the broadcast to usePlayer / useAudioPlayer
 }
 ```
 
@@ -419,7 +419,7 @@ interface StallStats {
 ### Quality / rendition switching
 
 ```tsx
-const player = usePlayer(broadcast.player, (p) => p.play());
+const player = usePlayer(broadcast, (p) => p.play());
 
 const sortedTracks = [...broadcast.videoTracks].sort(
   (a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0)
@@ -450,7 +450,7 @@ import {
 } from 'react-native-moq';
 
 function VideoSection({ broadcast }: { broadcast: BroadcastInfo }) {
-  const player = usePlayer(broadcast.player, (p) => p.play());
+  const player = usePlayer(broadcast, (p) => p.play());
   const ref = useRef<VideoViewRef>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const insets = useSafeAreaInsets();
@@ -531,7 +531,7 @@ const session = useSession(url, (s) => {
 });
 
 // Override per player in the setup callback
-const player = usePlayer(broadcast.player, (p) => {
+const player = usePlayer(broadcast, (p) => {
   p.updateTargetLatency(100);
   p.play();
 });
@@ -543,7 +543,7 @@ player.updateTargetLatency(300);
 ### Displaying live stats
 
 ```tsx
-const player = usePlayer(broadcast.player, (p) => p.play());
+const player = usePlayer(broadcast, (p) => p.play());
 
 if (player.playbackStats) {
   console.log(`Latency: ${player.playbackStats.videoLatencyMs} ms`);
