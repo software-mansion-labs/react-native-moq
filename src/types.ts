@@ -132,8 +132,10 @@ export interface Session {
     eventName: TEventName,
     listener: SessionEvents[TEventName]
   ): EventSubscription;
-  connect(prefix?: string, targetLatencyMs?: number): void;
+  connect(targetLatencyMs?: number): void;
   disconnect(): void;
+  subscribe(prefix?: string): void;
+  unsubscribe(): void;
 }
 
 export interface Player {

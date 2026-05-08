@@ -77,9 +77,10 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun removeListeners(count: Double) {}
 
-  override fun connect(url: String, prefix: String, targetLatencyMs: Double) {
+  override fun connect(url: String, targetLatencyMs: Double) {
     val latencyMs = targetLatencyMs.toInt()
     this.targetLatencyMs = latencyMs
+    if (session != null) return
     moduleScope.launch {
       val s = Session(url = url, parentScope = moduleScope)
       session = s
@@ -95,8 +96,41 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       try {
         s.connect()
       } catch (_: Exception) {}
+    }
+  }
 
-      val sub = s.subscribe(prefix = prefix)
+  override fun disconnect() {
+    stateJob?.cancel()
+    stateJob = null
+    teardownSubscription()
+
+    val s = session
+    session = null
+
+    s?.close()
+  }
+
+  override fun subscribe(prefix: String) {
+    val s = session ?: return
+    val latencyMs = targetLatencyMs
+
+    // Replace any existing subscription so callers can re-subscribe with a
+    // different prefix without first calling unsubscribe() explicitly.
+    broadcastsJob?.cancel()
+    broadcastsJob = null
+    subscription?.close()
+    subscription = null
+
+    moduleScope.launch {
+      val sub = try {
+        s.subscribe(prefix = prefix)
+      } catch (_: Exception) { return@launch }
+
+      // Bail out if the user disconnected or re-subscribed while we awaited.
+      if (session !== s || subscription != null) {
+        sub.close()
+        return@launch
+      }
       subscription = sub
 
       broadcastsJob = launch {
@@ -115,9 +149,11 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
   }
 
-  override fun disconnect() {
-    stateJob?.cancel()
-    stateJob = null
+  override fun unsubscribe() {
+    teardownSubscription()
+  }
+
+  private fun teardownSubscription() {
     broadcastsJob?.cancel()
     broadcastsJob = null
 
@@ -127,12 +163,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     playerHandles.keys.toList().forEach { path -> removePlayer(path, notify = false) }
     catalogs.clear()
 
-    val s = session
-    session = null
-
     mainHandler.post { notifyPlayerChanged(null) }
-
-    s?.close()
   }
 
   override fun play(broadcastPath: String) {

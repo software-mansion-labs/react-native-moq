@@ -56,12 +56,20 @@ RCT_EXPORT_MODULE()
   [MoQImpl shared].onEvent = nil;
 }
 
-- (void)connect:(NSString *)url prefix:(NSString *)prefix targetLatencyMs:(double)targetLatencyMs {
-  [[MoQImpl shared] connect:url prefix:prefix targetLatencyMs:(int)targetLatencyMs];
+- (void)connect:(NSString *)url targetLatencyMs:(double)targetLatencyMs {
+  [[MoQImpl shared] connect:url targetLatencyMs:(int)targetLatencyMs];
 }
 
 - (void)disconnect {
   [[MoQImpl shared] disconnect];
+}
+
+- (void)subscribe:(NSString *)prefix {
+  [[MoQImpl shared] subscribe:prefix];
+}
+
+- (void)unsubscribe {
+  [[MoQImpl shared] unsubscribe];
 }
 
 - (void)play:(NSString *)broadcastPath {

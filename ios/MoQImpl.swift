@@ -41,13 +41,22 @@ private let audioKeySuffix = "_audio"
 
   // MARK: - Public API
 
-  @objc(connect:prefix:targetLatencyMs:)
-  public func connect(url: String, prefix: String, targetLatencyMs: Int) {
-    Task { @MainActor in self._connect(url: url, prefix: prefix, targetLatencyMs: UInt64(targetLatencyMs)) }
+  @objc(connect:targetLatencyMs:)
+  public func connect(url: String, targetLatencyMs: Int) {
+    Task { @MainActor in self._connect(url: url, targetLatencyMs: UInt64(targetLatencyMs)) }
   }
 
   @objc public func disconnect() {
     Task { @MainActor in self._disconnect() }
+  }
+
+  @objc(subscribe:)
+  public func subscribe(prefix: String) {
+    Task { @MainActor in self._subscribe(prefix: prefix) }
+  }
+
+  @objc public func unsubscribe() {
+    Task { @MainActor in await self._unsubscribe() }
   }
 
   // All control methods route through MainActor so they observe writes from
@@ -104,7 +113,7 @@ private let audioKeySuffix = "_audio"
   // MARK: - Private: connect / disconnect
 
   @MainActor
-  private func _connect(url: String, prefix: String, targetLatencyMs: UInt64) {
+  private func _connect(url: String, targetLatencyMs: UInt64) {
     guard session == nil else { return }
     self.targetLatencyMs = targetLatencyMs
 
@@ -120,7 +129,24 @@ private let audioKeySuffix = "_audio"
 
     Task { @MainActor in
       try? await s.connect()
+    }
+  }
+
+  @MainActor
+  private func _subscribe(prefix: String) {
+    guard let s = session else { return }
+    // Replace any existing subscription so callers can re-subscribe with a
+    // different prefix without first calling unsubscribe() explicitly.
+    broadcastsTask?.cancel(); broadcastsTask = nil
+    subscription?.cancel(); subscription = nil
+
+    Task { @MainActor in
       guard let sub = try? await s.subscribe(prefix: prefix) else { return }
+      // Bail out if the user disconnected or re-subscribed while we awaited.
+      guard self.session === s, self.subscription == nil else {
+        sub.cancel()
+        return
+      }
       self.subscription = sub
       self.broadcastsTask = Task { @MainActor in
         for await broadcast in sub.broadcasts {
@@ -137,15 +163,11 @@ private let audioKeySuffix = "_audio"
   }
 
   @MainActor
-  private func _disconnect() {
-    stateTask?.cancel(); stateTask = nil
+  private func _unsubscribe() async {
     broadcastsTask?.cancel(); broadcastsTask = nil
     subscription?.cancel(); subscription = nil
-    currentState = .idle
 
-    let s = session
     let allRefs = playerRefs
-    session = nil
     playerRefs = [:]
     catalogs = [:]
 
@@ -156,8 +178,19 @@ private let audioKeySuffix = "_audio"
 
     NotificationCenter.default.post(name: MoQImpl.playerChangedNotification, object: nil)
 
+    for (_, ref) in allRefs { await ref.stopAll() }
+  }
+
+  @MainActor
+  private func _disconnect() {
+    stateTask?.cancel(); stateTask = nil
+    currentState = .idle
+
+    let s = session
+    session = nil
+
     Task { @MainActor in
-      for (_, ref) in allRefs { await ref.stopAll() }
+      await self._unsubscribe()
       await s?.close()
     }
   }

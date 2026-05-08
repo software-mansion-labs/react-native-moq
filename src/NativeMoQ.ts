@@ -5,8 +5,12 @@ export interface Spec extends TurboModule {
   removeListeners(count: number): void;
 
   // Session
-  connect(url: string, prefix: string, targetLatencyMs: number): void;
+  connect(url: string, targetLatencyMs: number): void;
   disconnect(): void;
+
+  // Broadcast subscription
+  subscribe(prefix: string): void;
+  unsubscribe(): void;
 
   // Player controls (per broadcast)
   play(broadcastPath: string): void;

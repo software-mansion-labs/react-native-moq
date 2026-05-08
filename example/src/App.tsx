@@ -19,15 +19,18 @@ type ActivePlayer = { path: string; initialMode: Mode };
 export default function App() {
   const [url, setUrl] = useState('http://192.168.1.48:4443');
   const [activePlayers, setActivePlayers] = useState<ActivePlayer[]>([]);
+  const [isSubscribed, setIsSubscribed] = useState(false);
 
   const session = useSession(url);
 
   const canConnect =
     session.sessionState === 'idle' || session.sessionState === 'closed';
+  const isConnected = session.sessionState === 'connected';
 
   useEffect(() => {
     if (canConnect) {
       setActivePlayers([]);
+      setIsSubscribed(false);
     }
   }, [canConnect]);
 
@@ -81,12 +84,33 @@ export default function App() {
 
           <StateIndicator state={session.sessionState} />
 
+          {isConnected && (
+            <Button
+              title={isSubscribed ? 'Unsubscribe' : 'Subscribe'}
+              onPress={() => {
+                if (isSubscribed) {
+                  session.unsubscribe();
+                  setIsSubscribed(false);
+                  setActivePlayers([]);
+                } else {
+                  session.subscribe();
+                  setIsSubscribed(true);
+                }
+              }}
+            />
+          )}
+
           <EventLog entries={log} />
 
-          {session.sessionState === 'connected' &&
-            session.broadcasts.length === 0 && (
-              <Text style={styles.noBroadcasts}>No broadcasts available</Text>
-            )}
+          {isConnected && !isSubscribed && (
+            <Text style={styles.noBroadcasts}>
+              Subscribe to discover broadcasts
+            </Text>
+          )}
+
+          {isConnected && isSubscribed && session.broadcasts.length === 0 && (
+            <Text style={styles.noBroadcasts}>No broadcasts available</Text>
+          )}
 
           {session.broadcasts.map((broadcast) => {
             const active = activePlayers.find((p) => p.path === broadcast.path);

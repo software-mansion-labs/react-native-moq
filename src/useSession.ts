@@ -70,13 +70,22 @@ export function useSession(
     };
   }, []);
 
-  const connect = useCallback((prefix = '', targetLatencyMs = 200) => {
-    NativeMoQ.connect(urlRef.current, prefix, targetLatencyMs);
+  const connect = useCallback((targetLatencyMs = 200) => {
+    NativeMoQ.connect(urlRef.current, targetLatencyMs);
   }, []);
 
   const disconnect = useCallback(() => {
     NativeMoQ.disconnect();
     setSessionState('idle');
+    setBroadcasts([]);
+  }, []);
+
+  const subscribe = useCallback((prefix = '') => {
+    NativeMoQ.subscribe(prefix);
+  }, []);
+
+  const unsubscribe = useCallback(() => {
+    NativeMoQ.unsubscribe();
     setBroadcasts([]);
   }, []);
 
@@ -95,6 +104,8 @@ export function useSession(
     addListener,
     connect,
     disconnect,
+    subscribe,
+    unsubscribe,
   };
 
   const moqSessionRef = useRef(moqSession);

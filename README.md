@@ -31,6 +31,7 @@ function App() {
   return (
     <>
       <Button title="Connect" onPress={() => session.connect()} />
+      <Button title="Subscribe" onPress={() => session.subscribe()} />
       {session.broadcasts.map((broadcast) => (
         <BroadcastPlayer key={broadcast.path} broadcast={broadcast} />
       ))}
@@ -58,19 +59,21 @@ For audio-only streaming, use `useAudioPlayer(broadcast)` instead of `usePlayer(
 
 ### `useSession(url, setup?)`
 
-Manages the connection to a MoQ relay server and tracks available broadcasts.
+Manages the connection to a MoQ relay server and tracks available broadcasts. Connecting and subscribing are two independent steps: `connect()` opens the relay session, and `subscribe(prefix?)` starts emitting `broadcastAvailable` events for paths under the given prefix. Either step can be deferred until the user opts in.
 
 ```tsx
 const session = useSession('http://relay.example.com:4443');
 
 // With setup callback — runs once on mount
 const session = useSession('http://relay.example.com:4443', (s) => {
-  s.connect();                  // auto-connect on mount
+  s.connect();      // auto-connect on mount
+  s.subscribe();    // discover all broadcasts (empty prefix matches everything)
 });
 
 // With custom options
 const session = useSession('http://relay.example.com:4443', (s) => {
-  s.connect('my/prefix', 500); // prefix and target latency
+  s.connect(500);            // target latency in ms
+  s.subscribe('my/prefix');  // only discover broadcasts under this prefix
 });
 ```
 
@@ -79,15 +82,17 @@ Returns a `Session` object:
 | Property / Method | Type | Description |
 |---|---|---|
 | `sessionState` | `SessionState` | Current connection state |
-| `broadcasts` | `BroadcastInfo[]` | Currently available broadcasts |
+| `broadcasts` | `BroadcastInfo[]` | Currently available broadcasts (populated only while subscribed) |
 | `emitter` | `EventEmitter<SessionEvents>` | Stable emitter for session events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a session event imperatively; call `.remove()` to unsubscribe |
-| `connect(prefix?, targetLatencyMs?)` | `(prefix?: string, targetLatencyMs?: number) => void` | Connect to the relay. Defaults: `prefix=''`, `targetLatencyMs=200` |
-| `disconnect()` | `() => void` | Disconnect and reset state |
+| `connect(targetLatencyMs?)` | `(targetLatencyMs?: number) => void` | Open the relay session. Default: `targetLatencyMs=200` |
+| `disconnect()` | `() => void` | Close the session (also tears down any active broadcast subscription) and reset state |
+| `subscribe(prefix?)` | `(prefix?: string) => void` | Begin discovering broadcasts under `prefix`. Default: `prefix=''` (match all). Call again to switch prefixes — the previous subscription is replaced |
+| `unsubscribe()` | `() => void` | Stop discovering broadcasts and clear `broadcasts`. The relay session stays open |
 
 **`SessionState`** is one of: `'idle'` · `'connecting'` · `'connected'` · `'closed'` · `` `error:${string}` ``
 
-Call `connect()` manually — either in the setup callback or in response to user interaction. The hook does not auto-connect.
+Call `connect()` and `subscribe()` manually — either in the setup callback or in response to user interaction. The hook does not auto-connect or auto-subscribe. `subscribe()` requires an open session; call it after `connect()` (or from a `stateChange` listener once `state === 'connected'`). `disconnect()` will clean up any active subscription, so callers don't need to call `unsubscribe()` first.
 
 ---
 
@@ -521,7 +526,8 @@ A few things worth knowing:
 ```tsx
 // Set at session level via connect() (applies to all players created in this session)
 const session = useSession(url, (s) => {
-  s.connect('', 500);
+  s.connect(500);
+  s.subscribe();
 });
 
 // Override per player in the setup callback
