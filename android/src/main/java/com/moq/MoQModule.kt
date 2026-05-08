@@ -7,7 +7,6 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.swmansion.moqkit.Session
-import com.swmansion.moqkit.subscribe.BroadcastSubscription
 import com.swmansion.moqkit.subscribe.Catalog
 import com.swmansion.moqkit.subscribe.PlaybackStats
 import com.swmansion.moqkit.subscribe.Player
@@ -29,12 +28,19 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private val mainHandler = Handler(Looper.getMainLooper())
 
   private var session: Session? = null
-  private var subscription: BroadcastSubscription? = null
   private var stateJob: Job? = null
-  private var broadcastsJob: Job? = null
 
   private var targetLatencyMs: Int = 200
   private val catalogs = ConcurrentHashMap<String, Catalog>()
+
+  // One MoQPrefixSubscription per active prefix.  JS-side ref-counting in
+  // useBroadcasts ensures that calls to subscribe/unsubscribe are balanced.
+  private val subscriptions = ConcurrentHashMap<String, MoQPrefixSubscription>()
+  // path → prefix that introduced it.  Players are still keyed by path; when
+  // the owning prefix's subscription tears down we tear down the player too.
+  // Overlapping prefixes that match the same broadcast are not supported and
+  // give last-writer-wins on player ownership.
+  private val prefixForPath = ConcurrentHashMap<String, String>()
 
   // MARK: - Companion: shared handle map and listeners for MoQVideoView
 
@@ -102,7 +108,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   override fun disconnect() {
     stateJob?.cancel()
     stateJob = null
-    teardownSubscription()
+    unsubscribeAll()
 
     val s = session
     session = null
@@ -112,58 +118,62 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun subscribe(prefix: String) {
     val s = session ?: return
-    val latencyMs = targetLatencyMs
+    // Idempotent: a JS-side ref-count already ensures this call only fires
+    // once per prefix going from 0 → 1 subscribers, but guard anyway in case
+    // the relay had pending state.
+    if (subscriptions.containsKey(prefix)) return
 
-    // Replace any existing subscription so callers can re-subscribe with a
-    // different prefix without first calling unsubscribe() explicitly.
-    broadcastsJob?.cancel()
-    broadcastsJob = null
-    subscription?.close()
-    subscription = null
+    val latencyMs = targetLatencyMs
 
     moduleScope.launch {
       val sub = try {
         s.subscribe(prefix = prefix)
       } catch (_: Exception) { return@launch }
 
-      // Bail out if the user disconnected or re-subscribed while we awaited.
-      if (session !== s || subscription != null) {
+      // Bail out if the user disconnected or already subscribed while we awaited.
+      if (session !== s || subscriptions.containsKey(prefix)) {
         sub.close()
         return@launch
       }
-      subscription = sub
 
-      broadcastsJob = launch {
-        sub.broadcasts.collect { broadcast ->
-          val path = broadcast.path
-          launch {
-            broadcast.use { broadcast ->
-              broadcast.catalogs().collect { catalog ->
-                handleBroadcastAvailable(catalog, latencyMs)
-              }
-            }
-            handleBroadcastUnavailable(path)
-          }
-        }
-      }
+      val ps = MoQPrefixSubscription(
+        prefix = prefix,
+        subscription = sub,
+        scope = moduleScope,
+        onBroadcastAvailable = { p, catalog ->
+          handleBroadcastAvailable(p, catalog, latencyMs)
+        },
+        onBroadcastUnavailable = { p, path ->
+          handleBroadcastUnavailable(p, path)
+        },
+      )
+      subscriptions[prefix] = ps
+      ps.start()
     }
   }
 
-  override fun unsubscribe() {
-    teardownSubscription()
+  override fun unsubscribe(prefix: String) {
+    val ps = subscriptions.remove(prefix) ?: return
+    val paths = ps.cancel()
+
+    // Tear down players for the paths this prefix owned.  We don't emit
+    // broadcastUnavailable events here — the JS-side useBroadcasts already
+    // cleared its local state synchronously when its ref count hit zero.
+    for (path in paths) {
+      if (prefixForPath[path] == prefix) {
+        prefixForPath.remove(path)
+        catalogs.remove(path)
+        removePlayer(path, notify = false)
+        removePlayer(path + AUDIO_KEY_SUFFIX, notify = false)
+      }
+    }
+    mainHandler.post { notifyPlayerChanged(null) }
   }
 
-  private fun teardownSubscription() {
-    broadcastsJob?.cancel()
-    broadcastsJob = null
-
-    subscription?.close()
-    subscription = null
-
-    playerHandles.keys.toList().forEach { path -> removePlayer(path, notify = false) }
-    catalogs.clear()
-
-    mainHandler.post { notifyPlayerChanged(null) }
+  private fun unsubscribeAll() {
+    for (prefix in subscriptions.keys.toList()) {
+      unsubscribe(prefix)
+    }
   }
 
   override fun play(broadcastPath: String) {
@@ -224,10 +234,11 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   // MARK: - Broadcast events
 
-  private fun handleBroadcastAvailable(catalog: Catalog, targetLatencyMs: Int) {
+  private fun handleBroadcastAvailable(prefix: String, catalog: Catalog, targetLatencyMs: Int) {
     val path = catalog.path
 
     catalogs[path] = catalog
+    prefixForPath[path] = prefix
 
     val hadPlayer = playerHandles[path] != null
     removePlayer(path, notify = false)
@@ -288,6 +299,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       audioArray.pushMap(item)
     }
     val map = Arguments.createMap()
+    map.putString("prefix", prefix)
     map.putString("path", path)
     videoTrackName?.let { map.putString("initialVideoTrackName", it) }
     audioTrackName?.let { map.putString("initialAudioTrackName", it) }
@@ -296,17 +308,28 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     emitEvent("broadcastAvailable", map)
   }
 
-  private fun handleBroadcastUnavailable(path: String) {
+  private fun handleBroadcastUnavailable(prefix: String, path: String) {
+    // If the prefix's subscription was already torn down (e.g. by unsubscribe)
+    // we already handled cleanup; skip double-emit / double-tear-down.
+    if (prefixForPath[path] != prefix) return
+
     removePlayer(path)
-    removePlayer(path + AUDIO_KEY_SUFFIX)
+    removePlayer(path + AUDIO_KEY_SUFFIX, notify = false)
     catalogs.remove(path)
+    prefixForPath.remove(path)
     val map = Arguments.createMap()
+    map.putString("prefix", prefix)
     map.putString("path", path)
     emitEvent("broadcastUnavailable", map)
   }
 
   private fun removePlayer(path: String, notify: Boolean = true) {
-    playerHandles.remove(path)?.close()
+    val handle = playerHandles.remove(path) ?: return
+    // Cancel the catalog job so it stops emitting events for this path.
+    prefixForPath[path]?.let { owningPrefix ->
+      subscriptions[owningPrefix]?.cancelCatalogJob(path)
+    }
+    handle.close()
     if (notify) {
       mainHandler.post { notifyPlayerChanged(path) }
     }

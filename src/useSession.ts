@@ -2,13 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import { EventEmitter } from './EventEmitter';
 import NativeMoQ from './NativeMoQ';
-import type {
-  BroadcastInfo,
-  Session,
-  SessionEvents,
-  SessionState,
-} from './types';
-import { PlayerHandle } from './types';
+import type { Session, SessionEvents, SessionState } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
@@ -17,7 +11,6 @@ export function useSession(
   setup?: (session: Session) => void
 ): Session {
   const [state, setState] = useState<SessionState>('idle');
-  const [broadcasts, setBroadcasts] = useState<BroadcastInfo[]>([]);
 
   const urlRef = useRef(url);
   urlRef.current = url;
@@ -26,46 +19,15 @@ export function useSession(
 
   useEffect(() => {
     const emitter = emitterRef.current;
-    const subs = [
-      moqEmitter.addListener('sessionStateChanged', (event) => {
-        const { state: rawState } = event as { state: string };
-        const typedState = rawState as SessionState;
-        setState(typedState);
-        emitter.emit('stateChange', { state: typedState });
-      }),
-
-      moqEmitter.addListener('broadcastAvailable', (event) => {
-        const raw = event as Omit<BroadcastInfo, 'player'> & {
-          initialVideoTrackName?: string;
-          initialAudioTrackName?: string;
-        };
-        // getPlayer is provided by the C++ TurboModule override on iOS and
-        // returns a JSI HostObject.  On Android it is undefined so the handle
-        // falls back to bridge calls keyed by broadcastPath.
-        const native = (NativeMoQ as any).getPlayer?.(raw.path);
-        const player = new PlayerHandle(
-          raw.path,
-          native,
-          raw.initialVideoTrackName,
-          raw.initialAudioTrackName
-        );
-        const info: BroadcastInfo = { ...raw, player };
-        setBroadcasts((prev) => [
-          ...prev.filter((b) => b.path !== info.path),
-          info,
-        ]);
-        emitter.emit('broadcastAvailable', info);
-      }),
-
-      moqEmitter.addListener('broadcastUnavailable', (event) => {
-        const { path } = event as { path: string };
-        setBroadcasts((prev) => prev.filter((b) => b.path !== path));
-        emitter.emit('broadcastUnavailable', { path });
-      }),
-    ];
+    const sub = moqEmitter.addListener('sessionStateChanged', (event) => {
+      const { state: rawState } = event as { state: string };
+      const typedState = rawState as SessionState;
+      setState(typedState);
+      emitter.emit('stateChange', { state: typedState });
+    });
 
     return () => {
-      subs.forEach((s) => s.remove());
+      sub.remove();
       NativeMoQ.disconnect();
     };
   }, []);
@@ -77,16 +39,6 @@ export function useSession(
   const disconnect = useCallback(() => {
     NativeMoQ.disconnect();
     setState('idle');
-    setBroadcasts([]);
-  }, []);
-
-  const subscribe = useCallback((prefix = '') => {
-    NativeMoQ.subscribe(prefix);
-  }, []);
-
-  const unsubscribe = useCallback(() => {
-    NativeMoQ.unsubscribe();
-    setBroadcasts([]);
   }, []);
 
   const addListener = useCallback(
@@ -99,13 +51,10 @@ export function useSession(
 
   const moqSession: Session = {
     state,
-    broadcasts,
     emitter: emitterRef.current,
     addListener,
     connect,
     disconnect,
-    subscribe,
-    unsubscribe,
   };
 
   const moqSessionRef = useRef(moqSession);

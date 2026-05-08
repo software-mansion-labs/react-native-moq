@@ -22,17 +22,17 @@ cd ios && pod install
 ## Quick start
 
 ```tsx
-import { VideoView, useSession, usePlayer } from 'react-native-moq';
+import { VideoView, useSession, useBroadcasts, usePlayer } from 'react-native-moq';
 import type { BroadcastInfo } from 'react-native-moq';
 
 function App() {
   const session = useSession('http://relay.example.com:4443');
+  const broadcasts = useBroadcasts(session); // empty prefix → match all
 
   return (
     <>
       <Button title="Connect" onPress={() => session.connect()} />
-      <Button title="Subscribe" onPress={() => session.subscribe()} />
-      {session.broadcasts.map((broadcast) => (
+      {broadcasts.map((broadcast) => (
         <BroadcastPlayer key={broadcast.path} broadcast={broadcast} />
       ))}
     </>
@@ -59,21 +59,19 @@ For audio-only streaming, use `useAudioPlayer(broadcast)` instead of `usePlayer(
 
 ### `useSession(url, setup?)`
 
-Manages the connection to a MoQ relay server and tracks available broadcasts. Connecting and subscribing are two independent steps: `connect()` opens the relay session, and `subscribe(prefix?)` starts emitting `broadcastAvailable` events for paths under the given prefix. Either step can be deferred until the user opts in.
+Manages the connection to a MoQ relay server. `connect()` opens the relay session; broadcast discovery is a separate step driven by [`useBroadcasts`](#usebroadcastssession-prefix). Either step can be deferred until the user opts in.
 
 ```tsx
 const session = useSession('http://relay.example.com:4443');
 
 // With setup callback — runs once on mount
 const session = useSession('http://relay.example.com:4443', (s) => {
-  s.connect();      // auto-connect on mount
-  s.subscribe();    // discover all broadcasts (empty prefix matches everything)
+  s.connect(); // auto-connect on mount
 });
 
-// With custom options
+// With a custom target latency
 const session = useSession('http://relay.example.com:4443', (s) => {
-  s.connect(500);            // target latency in ms
-  s.subscribe('my/prefix');  // only discover broadcasts under this prefix
+  s.connect(500); // target latency in ms
 });
 ```
 
@@ -82,17 +80,44 @@ Returns a `Session` object:
 | Property / Method | Type | Description |
 |---|---|---|
 | `state` | `SessionState` | Current connection state |
-| `broadcasts` | `BroadcastInfo[]` | Currently available broadcasts (populated only while subscribed) |
 | `emitter` | `EventEmitter<SessionEvents>` | Stable emitter for session events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a session event imperatively; call `.remove()` to unsubscribe |
 | `connect(targetLatencyMs?)` | `(targetLatencyMs?: number) => void` | Open the relay session. Default: `targetLatencyMs=200` |
-| `disconnect()` | `() => void` | Close the session (also tears down any active broadcast subscription) and reset state |
-| `subscribe(prefix?)` | `(prefix?: string) => void` | Begin discovering broadcasts under `prefix`. Default: `prefix=''` (match all). Call again to switch prefixes — the previous subscription is replaced |
-| `unsubscribe()` | `() => void` | Stop discovering broadcasts and clear `broadcasts`. The relay session stays open |
+| `disconnect()` | `() => void` | Close the session (also tears down all active broadcast subscriptions) and reset state |
 
 **`SessionState`** is one of: `'idle'` · `'connecting'` · `'connected'` · `'closed'` · `` `error:${string}` ``
 
-Call `connect()` and `subscribe()` manually — either in the setup callback or in response to user interaction. The hook does not auto-connect or auto-subscribe. `subscribe()` requires an open session; call it after `connect()` (or from a `stateChange` listener once `state === 'connected'`). `disconnect()` will clean up any active subscription, so callers don't need to call `unsubscribe()` first.
+Call `connect()` manually — either in the setup callback or in response to user interaction. The hook does not auto-connect. To start receiving broadcasts, call [`useBroadcasts(session, prefix?)`](#usebroadcastssession-prefix) — it begins the underlying native subscription on mount and tears it down on unmount.
+
+---
+
+### `useBroadcasts(session, prefix?)`
+
+Subscribes to broadcasts under a given prefix and returns the current `BroadcastInfo[]`. The hook starts the underlying native subscription on mount and tears it down on unmount; multiple components calling `useBroadcasts(session, prefix)` with the same prefix share a single underlying subscription via JS-side ref-counting.
+
+```tsx
+// All broadcasts the relay exposes (empty prefix matches everything)
+const all = useBroadcasts(session);
+
+// Just the broadcasts under a specific prefix
+const streams = useBroadcasts(session, '/streams');
+```
+
+The returned array is empty until `session.state === 'connected'` and re-populates automatically on reconnect. Different prefixes produce independent broadcast lists, each backed by its own native `BroadcastSubscription`; overlapping prefixes that match the same broadcast path are not supported.
+
+```tsx
+function CamerasGrid({ session }) {
+  const cameras = useBroadcasts(session, '/cameras');
+  return cameras.map((b) => <BroadcastPlayer key={b.path} broadcast={b} />);
+}
+
+function MicrophonesList({ session }) {
+  const mics = useBroadcasts(session, '/microphones');
+  return mics.map((b) => <AudioOnly key={b.path} broadcast={b} />);
+}
+```
+
+To discover when broadcasts appear or disappear without rendering them directly, diff the returned array between renders, or — for imperative side effects — wrap the hook in a small component that compares the previous and current path sets in `useEffect`.
 
 ---
 
@@ -230,8 +255,6 @@ Use this when you need to subscribe from non-component code (stores, services, c
 | Event | Payload | Description |
 |---|---|---|
 | `stateChange` | `{ state }` | Session state transitioned |
-| `broadcastAvailable` | `BroadcastInfo` | A new broadcast is available |
-| `broadcastUnavailable` | `{ path }` | A broadcast is no longer available |
 
 ---
 
@@ -323,14 +346,10 @@ Event map for `session.emitter`.
 type SessionEvents = {
   // Fires on every session state transition.
   stateChange: (event: { state: SessionState }) => void;
-
-  // Fires when a new broadcast becomes available.
-  broadcastAvailable: (event: BroadcastInfo) => void;
-
-  // Fires when a broadcast is no longer available.
-  broadcastUnavailable: (event: { path: string }) => void;
 };
 ```
+
+Broadcast availability is observed reactively via [`useBroadcasts`](#usebroadcastssession-prefix) rather than imperative session events.
 
 #### `AudioPlayer`
 
@@ -525,10 +544,8 @@ A few things worth knowing:
 
 ```tsx
 // Set at session level via connect() (applies to all players created in this session)
-const session = useSession(url, (s) => {
-  s.connect(500);
-  s.subscribe();
-});
+const session = useSession(url, (s) => s.connect(500));
+const broadcasts = useBroadcasts(session);
 
 // Override per player in the setup callback
 const player = usePlayer(broadcast, (p) => {

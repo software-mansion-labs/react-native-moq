@@ -68,8 +68,8 @@ RCT_EXPORT_MODULE()
   [[MoQImpl shared] subscribe:prefix];
 }
 
-- (void)unsubscribe {
-  [[MoQImpl shared] unsubscribe];
+- (void)unsubscribe:(NSString *)prefix {
+  [[MoQImpl shared] unsubscribe:prefix];
 }
 
 - (void)play:(NSString *)broadcastPath {

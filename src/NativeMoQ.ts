@@ -8,9 +8,12 @@ export interface Spec extends TurboModule {
   connect(url: string, targetLatencyMs: number): void;
   disconnect(): void;
 
-  // Broadcast subscription
+  // Broadcast subscription. The native side maintains one BroadcastSubscription
+  // per prefix; subscribe/unsubscribe are matched by prefix. Calling subscribe
+  // twice with the same prefix is idempotent — JS-side ref-counting in
+  // useBroadcasts ensures the underlying subscription is shared across hooks.
   subscribe(prefix: string): void;
-  unsubscribe(): void;
+  unsubscribe(prefix: string): void;
 
   // Player controls (per broadcast)
   play(broadcastPath: string): void;

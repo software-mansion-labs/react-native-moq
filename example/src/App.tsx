@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Button,
   ScrollView,
@@ -8,9 +8,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { useEvent, useEventListener, useSession } from 'react-native-moq';
+import {
+  useBroadcasts,
+  useEventListener,
+  useSession,
+  type Session,
+} from 'react-native-moq';
 import { BroadcastPlayer } from './BroadcastPlayer';
-import { EventLog, useEventLog } from './EventLog';
+import { EventLog, useEventLog, type AddEntry } from './EventLog';
 import { StateIndicator } from './StateIndicator';
 
 type Mode = 'video' | 'audio';
@@ -48,20 +53,6 @@ export default function App() {
     addEntry('stateChange', state);
   });
 
-  useEffect(() => {
-    const sub = session.addListener('broadcastAvailable', ({ path }) => {
-      addEntry('broadcastAvailable', path);
-    });
-    return () => sub.remove();
-  }, [session, addEntry]);
-
-  const broadcastUnavailableEvent = useEvent(session, 'broadcastUnavailable');
-  useEffect(() => {
-    if (broadcastUnavailableEvent !== undefined) {
-      addEntry('broadcastUnavailable', broadcastUnavailableEvent.path);
-    }
-  }, [broadcastUnavailableEvent, addEntry]);
-
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safeArea}>
@@ -88,11 +79,9 @@ export default function App() {
               title={isSubscribed ? 'Unsubscribe' : 'Subscribe'}
               onPress={() => {
                 if (isSubscribed) {
-                  session.unsubscribe();
                   setIsSubscribed(false);
                   setActivePlayers([]);
                 } else {
-                  session.subscribe();
                   setIsSubscribed(true);
                 }
               }}
@@ -107,42 +96,89 @@ export default function App() {
             </Text>
           )}
 
-          {isConnected && isSubscribed && session.broadcasts.length === 0 && (
-            <Text style={styles.noBroadcasts}>No broadcasts available</Text>
+          {isConnected && isSubscribed && (
+            <BroadcastsList
+              session={session}
+              activePlayers={activePlayers}
+              addPlayer={addPlayer}
+              removePlayer={removePlayer}
+              addEntry={addEntry}
+            />
           )}
-
-          {session.broadcasts.map((broadcast) => {
-            const active = activePlayers.find((p) => p.path === broadcast.path);
-            if (active) {
-              return (
-                <BroadcastPlayer
-                  key={broadcast.path}
-                  broadcast={broadcast}
-                  initialMode={active.initialMode}
-                  onRemove={() => removePlayer(broadcast.path)}
-                  addEntry={addEntry}
-                />
-              );
-            }
-            return (
-              <View key={broadcast.path} style={styles.availableCard}>
-                <Text style={styles.broadcastPath}>{broadcast.path}</Text>
-                <View style={styles.availableButtons}>
-                  <Button
-                    title="Video"
-                    onPress={() => addPlayer(broadcast.path, 'video')}
-                  />
-                  <Button
-                    title="Audio only"
-                    onPress={() => addPlayer(broadcast.path, 'audio')}
-                  />
-                </View>
-              </View>
-            );
-          })}
         </ScrollView>
       </SafeAreaView>
     </SafeAreaProvider>
+  );
+}
+
+// Mounting this component ref-counts a `useBroadcasts(session, '')` subscription
+// — the underlying native subscription is created on mount and torn down on
+// unmount.  Multiple instances with the same prefix would share one native sub.
+function BroadcastsList({
+  session,
+  activePlayers,
+  addPlayer,
+  removePlayer,
+  addEntry,
+}: {
+  session: Session;
+  activePlayers: ActivePlayer[];
+  addPlayer: (path: string, mode: Mode) => void;
+  removePlayer: (path: string) => void;
+  addEntry: AddEntry;
+}) {
+  const broadcasts = useBroadcasts(session, '');
+
+  // Diff the broadcasts array against the previous render to mirror the old
+  // broadcastAvailable / broadcastUnavailable session events into the event log.
+  const seenPaths = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const current = new Set(broadcasts.map((b) => b.path));
+    current.forEach((path) => {
+      if (!seenPaths.current.has(path)) addEntry('broadcastAvailable', path);
+    });
+    seenPaths.current.forEach((path) => {
+      if (!current.has(path)) addEntry('broadcastUnavailable', path);
+    });
+    seenPaths.current = current;
+  }, [broadcasts, addEntry]);
+
+  if (broadcasts.length === 0) {
+    return <Text style={styles.noBroadcasts}>No broadcasts available</Text>;
+  }
+
+  return (
+    <>
+      {broadcasts.map((broadcast) => {
+        const active = activePlayers.find((p) => p.path === broadcast.path);
+        if (active) {
+          return (
+            <BroadcastPlayer
+              key={broadcast.path}
+              broadcast={broadcast}
+              initialMode={active.initialMode}
+              onRemove={() => removePlayer(broadcast.path)}
+              addEntry={addEntry}
+            />
+          );
+        }
+        return (
+          <View key={broadcast.path} style={styles.availableCard}>
+            <Text style={styles.broadcastPath}>{broadcast.path}</Text>
+            <View style={styles.availableButtons}>
+              <Button
+                title="Video"
+                onPress={() => addPlayer(broadcast.path, 'video')}
+              />
+              <Button
+                title="Audio only"
+                onPress={() => addPlayer(broadcast.path, 'audio')}
+              />
+            </View>
+          </View>
+        );
+      })}
+    </>
   );
 }
 

@@ -120,13 +120,10 @@ export type PlayerEvents = {
 
 export type SessionEvents = {
   stateChange: (event: { state: SessionState }) => void;
-  broadcastAvailable: (event: BroadcastInfo) => void;
-  broadcastUnavailable: (event: { path: string }) => void;
 };
 
 export interface Session {
   state: SessionState;
-  broadcasts: BroadcastInfo[];
   readonly emitter: EventEmitter<SessionEvents>;
   addListener<TEventName extends keyof SessionEvents>(
     eventName: TEventName,
@@ -134,8 +131,6 @@ export interface Session {
   ): EventSubscription;
   connect(targetLatencyMs?: number): void;
   disconnect(): void;
-  subscribe(prefix?: string): void;
-  unsubscribe(): void;
 }
 
 export interface Player {

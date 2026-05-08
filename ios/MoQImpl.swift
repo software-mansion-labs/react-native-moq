@@ -29,15 +29,21 @@ private let audioKeySuffix = "_audio"
   // MARK: - Private
 
   private var session: Session?
-  private var subscription: BroadcastSubscription?
   private var targetLatencyMs: UInt64 = 200
+
+  // One MoQPrefixSubscription per active prefix.  JS-side ref-counting in
+  // useBroadcasts ensures that calls to subscribe/unsubscribe are balanced.
+  private var subscriptions: [String: MoQPrefixSubscription] = [:]
+  // path → prefix that introduced it.  Players are still keyed by path; when
+  // the owning prefix's subscription tears down we tear down the player too.
+  // Overlapping prefixes that match the same broadcast are not supported and
+  // give last-writer-wins on player ownership.
+  private var prefixForPath: [String: String] = [:]
 
   private var playerRefs: [String: MoQPlayerRef] = [:]
   private var catalogs: [String: Catalog] = [:]
-  private var catalogTasks: [String: Task<Void, Never>] = [:]
 
   private var stateTask: Task<Void, Never>?
-  private var broadcastsTask: Task<Void, Never>?
 
   // MARK: - Public API
 
@@ -55,8 +61,9 @@ private let audioKeySuffix = "_audio"
     Task { @MainActor in self._subscribe(prefix: prefix) }
   }
 
-  @objc public func unsubscribe() {
-    Task { @MainActor in await self._unsubscribe() }
+  @objc(unsubscribe:)
+  public func unsubscribe(prefix: String) {
+    Task { @MainActor in await self._unsubscribe(prefix: prefix) }
   }
 
   // All control methods route through MainActor so they observe writes from
@@ -135,50 +142,54 @@ private let audioKeySuffix = "_audio"
   @MainActor
   private func _subscribe(prefix: String) {
     guard let s = session else { return }
-    // Replace any existing subscription so callers can re-subscribe with a
-    // different prefix without first calling unsubscribe() explicitly.
-    broadcastsTask?.cancel(); broadcastsTask = nil
-    subscription?.cancel(); subscription = nil
+    // Idempotent: a JS-side ref-count already ensures this call only fires
+    // once per prefix going from 0 → 1 subscribers, but guard anyway in case
+    // the relay had pending state.
+    if subscriptions[prefix] != nil { return }
 
     Task { @MainActor in
       guard let sub = try? await s.subscribe(prefix: prefix) else { return }
-      // Bail out if the user disconnected or re-subscribed while we awaited.
-      guard self.session === s, self.subscription == nil else {
+      // Bail out if the user disconnected or already subscribed while we awaited.
+      guard self.session === s, self.subscriptions[prefix] == nil else {
         sub.cancel()
         return
       }
-      self.subscription = sub
-      self.broadcastsTask = Task { @MainActor in
-        for await broadcast in sub.broadcasts {
-          let path = broadcast.path
-          self.catalogTasks[path] = Task { @MainActor in
-            for await catalog in broadcast.catalogs() {
-              await self._handleBroadcastAvailable(catalog)
-            }
-            await self._handleBroadcastUnavailable(path: path)
-          }
+      let ps = MoQPrefixSubscription(
+        prefix: prefix,
+        subscription: sub,
+        onBroadcastAvailable: { [weak self] prefix, catalog in
+          await self?._handleBroadcastAvailable(prefix: prefix, catalog: catalog)
+        },
+        onBroadcastUnavailable: { [weak self] prefix, path in
+          await self?._handleBroadcastUnavailable(prefix: prefix, path: path)
         }
-      }
+      )
+      self.subscriptions[prefix] = ps
+      ps.start()
     }
   }
 
   @MainActor
-  private func _unsubscribe() async {
-    broadcastsTask?.cancel(); broadcastsTask = nil
-    subscription?.cancel(); subscription = nil
+  private func _unsubscribe(prefix: String) async {
+    guard let ps = subscriptions.removeValue(forKey: prefix) else { return }
+    let paths = ps.cancel()
 
-    let allRefs = playerRefs
-    playerRefs = [:]
-    catalogs = [:]
-
-    for (path, _) in catalogTasks {
-      catalogTasks[path]?.cancel()
+    // Tear down players for the paths this prefix owned.  We don't emit
+    // broadcastUnavailable events here — the JS-side useBroadcasts already
+    // cleared its local state synchronously when its ref count hit zero.
+    for path in paths where prefixForPath[path] == prefix {
+      prefixForPath.removeValue(forKey: path)
+      catalogs.removeValue(forKey: path)
+      await _removePlayer(for: path, cancelCatalogTask: false)
+      await _removePlayer(for: path + audioKeySuffix, notifyVideoViews: false, cancelCatalogTask: false)
     }
-    catalogTasks = [:]
+  }
 
-    NotificationCenter.default.post(name: MoQImpl.playerChangedNotification, object: nil)
-
-    for (_, ref) in allRefs { await ref.stopAll() }
+  @MainActor
+  private func _unsubscribeAll() async {
+    for prefix in Array(subscriptions.keys) {
+      await _unsubscribe(prefix: prefix)
+    }
   }
 
   @MainActor
@@ -190,7 +201,7 @@ private let audioKeySuffix = "_audio"
     session = nil
 
     Task { @MainActor in
-      await self._unsubscribe()
+      await self._unsubscribeAll()
       await s?.close()
     }
   }
@@ -198,10 +209,11 @@ private let audioKeySuffix = "_audio"
   // MARK: - Private: broadcast events
 
   @MainActor
-  private func _handleBroadcastAvailable(_ catalog: Catalog) async {
+  private func _handleBroadcastAvailable(prefix: String, catalog: Catalog) async {
     let path = catalog.path
 
     catalogs[path] = catalog
+    prefixForPath[path] = prefix
 
     let hadPlayer = playerRefs[path] != nil
     await _removePlayer(for: path, notifyVideoViews: false, cancelCatalogTask: false)
@@ -235,6 +247,7 @@ private let audioKeySuffix = "_audio"
     }
 
     var broadcastAvailableBody: [String: Any] = [
+      "prefix": prefix,
       "path": path,
       "videoTracks": catalog.videoTracks.map { t -> [String: Any] in
         var d: [String: Any] = ["name": t.name, "codec": t.config.codec]
@@ -263,11 +276,17 @@ private let audioKeySuffix = "_audio"
   }
 
   @MainActor
-  private func _handleBroadcastUnavailable(path: String) async {
+  private func _handleBroadcastUnavailable(prefix: String, path: String) async {
+    // If the prefix's subscription was already torn down (e.g. by _unsubscribe)
+    // the catalog task may still call into here once after cancellation.  Skip
+    // double-emit / double-tear-down.
+    guard prefixForPath[path] == prefix else { return }
+
     await _removePlayer(for: path)
     await _removePlayer(for: path + audioKeySuffix, notifyVideoViews: false, cancelCatalogTask: false)
     catalogs.removeValue(forKey: path)
-    onEvent?("broadcastUnavailable", ["path": path])
+    prefixForPath.removeValue(forKey: path)
+    onEvent?("broadcastUnavailable", ["prefix": prefix, "path": path])
   }
 
   @MainActor
@@ -300,8 +319,8 @@ private let audioKeySuffix = "_audio"
     cancelCatalogTask: Bool = true
   ) async {
     if let ref = playerRefs.removeValue(forKey: path) {
-      if cancelCatalogTask {
-        catalogTasks.removeValue(forKey: path)?.cancel()
+      if cancelCatalogTask, let owningPrefix = prefixForPath[path] {
+        subscriptions[owningPrefix]?.cancelCatalogTask(for: path)
       }
       await ref.stopAll()
     }

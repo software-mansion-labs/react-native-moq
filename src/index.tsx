@@ -1,6 +1,7 @@
 export { VideoView } from './VideoView';
 export type { VideoViewProps, VideoViewRef } from './VideoView';
 export { useSession } from './useSession';
+export { useBroadcasts } from './useBroadcasts';
 export { usePlayer } from './usePlayer';
 export { useAudioPlayer } from './useAudioPlayer';
 export { useEvent, useEventListener } from './useEvent';
