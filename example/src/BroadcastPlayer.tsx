@@ -1,6 +1,6 @@
 import type { BroadcastInfo, VideoViewRef } from 'react-native-moq';
 import { useEffect, useRef, useState } from 'react';
-import { Button, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Button, StyleSheet, Text, View } from 'react-native';
 import {
   VideoView,
   useAudioPlayer,
@@ -8,7 +8,6 @@ import {
   useEventListener,
   usePlayer,
 } from 'react-native-moq';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AddEntry } from './EventLog';
 import { RenditionPicker } from './RenditionPicker';
 import { StatsPanel } from './StatsPanel';
@@ -67,8 +66,6 @@ function VideoSection({
     p.play();
   });
   const videoViewRef = useRef<VideoViewRef>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const insets = useSafeAreaInsets();
 
   // Pause when this section unmounts (mode switch or full disconnect) so the
   // video stream stops while audio mode is active.
@@ -125,48 +122,16 @@ function VideoSection({
 
   return (
     <>
+      {/* VideoView renders its own native-looking fullscreen chrome
+          (close button + play/pause) with tap-to-toggle auto-hide. Pass
+          `controls={false}` to opt out, or `controls={<MyControls/>}` to
+          replace it. */}
       <VideoView
         ref={videoViewRef}
         player={player}
         style={styles.video}
         videoAspectRatio={videoAspectRatio}
-        onFullscreenEnter={() => setIsFullscreen(true)}
-        onFullscreenExit={() => setIsFullscreen(false)}
-      >
-        {/* Children render alongside the native video — both inline and inside
-            the fullscreen modal — so we conditionally mount the overlay only
-            while fullscreen. Padding follows the device safe area so the
-            button clears the notch / status bar. */}
-        {isFullscreen && (
-          <View
-            style={[
-              styles.fullscreenOverlay,
-              {
-                paddingTop: insets.top + 16,
-                paddingRight: insets.right + 16,
-                paddingBottom: insets.bottom + 16,
-                paddingLeft: insets.left + 16,
-              },
-            ]}
-            pointerEvents="box-none"
-          >
-            {/* Custom Pressable instead of <Button> — RN's <Button> ignores
-                color for text on Android (it sets the background instead),
-                which makes the title invisible against a light backdrop. */}
-            <Pressable
-              onPress={() => videoViewRef.current?.exitFullscreen()}
-              style={({ pressed }) => [
-                styles.fullscreenExitButton,
-                pressed && styles.fullscreenExitButtonPressed,
-              ]}
-            >
-              <Text style={styles.fullscreenExitButtonText}>
-                Exit fullscreen
-              </Text>
-            </Pressable>
-          </View>
-        )}
-      </VideoView>
+      />
 
       {sortedVideoTracks.length > 1 && (
         <RenditionPicker
@@ -298,28 +263,6 @@ const styles = StyleSheet.create({
   controlsRow: {
     flexDirection: 'row',
     gap: 8,
-  },
-  // Overlay rendered as a child of the native VideoView so it follows the
-  // view when it gets reparented into the fullscreen container. Padding is
-  // applied inline so it can include the device safe-area insets.
-  fullscreenOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-start',
-  },
-  fullscreenExitButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  fullscreenExitButtonPressed: {
-    opacity: 0.7,
-  },
-  fullscreenExitButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
   },
   audioStatus: {
     flexDirection: 'row',

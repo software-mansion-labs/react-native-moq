@@ -1,18 +1,31 @@
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
+  useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import {
+  Animated,
+  Easing,
   Modal,
+  Pressable,
+  StatusBar,
   StyleSheet,
   useWindowDimensions,
   View,
   requireNativeComponent,
   type ViewProps,
 } from 'react-native';
+import {
+  SafeAreaProvider,
+  initialWindowMetrics,
+} from 'react-native-safe-area-context';
+import { FullscreenContext } from './FullscreenContext';
+import { FullscreenControls } from './FullscreenControls';
 import type { Player } from './types';
 
 interface NativeVideoViewProps extends ViewProps {
@@ -28,6 +41,21 @@ export interface VideoViewProps extends ViewProps {
   // letterboxes natively via the display layer's videoGravity, so this only
   // affects rendering inside the fullscreen modal.
   videoAspectRatio?: number;
+  /**
+   * Chrome shown while in fullscreen.
+   *
+   * - `true` (default): render the built-in `<FullscreenControls />`, styled
+   *   to look like the native iOS / Android video player.
+   * - `false`: no controls and no tap-to-toggle gesture.
+   * - A ReactNode: replace the default chrome with your own element. It is
+   *   wrapped in the same auto-hide fade as the default, and a tap on the
+   *   video background toggles its visibility. Use `useFullscreenControls()`
+   *   inside to read the same `{visible, show, exit, player}` API.
+   *
+   * Controls only render inside the fullscreen modal — inline VideoView is
+   * left bare so the host app can lay out its own controls around it.
+   */
+  controls?: boolean | ReactNode;
   onFullscreenEnter?: () => void;
   onFullscreenExit?: () => void;
 }
@@ -39,6 +67,11 @@ export interface VideoViewRef {
 
 const NativeMoQVideoView =
   requireNativeComponent<NativeVideoViewProps>('MoQVideoView');
+
+// Auto-hide timing for fullscreen controls. ~3.5s matches the AVPlayer
+// default; the fade itself is short so it doesn't feel sluggish.
+const CONTROLS_AUTO_HIDE_MS = 3500;
+const CONTROLS_FADE_MS = 220;
 
 // Fullscreen is implemented as an RN <Modal> rather than reparenting the
 // native view. The native view (AVSampleBufferDisplayLayer / SurfaceView) is
@@ -54,6 +87,7 @@ export const VideoView = forwardRef<VideoViewRef, VideoViewProps>(
       children,
       style,
       videoAspectRatio,
+      controls = true,
       onFullscreenEnter,
       onFullscreenExit,
       ...rest
@@ -107,10 +141,21 @@ export const VideoView = forwardRef<VideoViewRef, VideoViewProps>(
           ? { width: windowHeight * aspect, height: windowHeight }
           : { width: windowWidth, height: windowWidth / aspect };
 
+      // Resolve `controls` to either a ReactNode or null.
+      const controlsElement: ReactNode =
+        controls === false ? null : controls === true ? (
+          <FullscreenControls />
+        ) : (
+          controls
+        );
+
       return (
         <Modal
           visible
           animationType="fade"
+          // Lets the modal extend behind the (now hidden) status bar on
+          // Android so the chrome sits flush against the top edge.
+          statusBarTranslucent
           supportedOrientations={[
             'portrait',
             'portrait-upside-down',
@@ -120,10 +165,23 @@ export const VideoView = forwardRef<VideoViewRef, VideoViewProps>(
           ]}
           onRequestClose={exitFullscreen}
         >
-          <View style={styles.fullscreenContainer}>
-            <View style={fitBox}>{native}</View>
-            {children}
-          </View>
+          {/* Hide the system status bar while fullscreen, matching how
+              AVPlayerViewController and Media3 PlayerView present video. */}
+          <StatusBar hidden animated />
+          {/* `react-native-safe-area-context` doesn't propagate insets across
+              the Modal boundary, so we mount a fresh provider here. The
+              initialMetrics seed avoids a 0-inset first frame so the close
+              button doesn't briefly snap into the notch before measuring. */}
+          <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+            <FullscreenStage
+              player={player}
+              controls={controlsElement}
+              onExit={exitFullscreen}
+              fitBox={fitBox}
+              video={native}
+              overlay={children}
+            />
+          </SafeAreaProvider>
         </Modal>
       );
     }
@@ -136,6 +194,119 @@ export const VideoView = forwardRef<VideoViewRef, VideoViewProps>(
     );
   }
 );
+
+/**
+ * Hosts the actual fullscreen visual layout: black backdrop, letterboxed
+ * video, tap-to-toggle controls layer with a fade, and the user's overlay
+ * children. Split out so that the controls visibility state and animation
+ * are created fresh each time fullscreen is entered.
+ */
+function FullscreenStage({
+  player,
+  controls,
+  onExit,
+  fitBox,
+  video,
+  overlay,
+}: {
+  player: Player;
+  controls: ReactNode;
+  onExit: () => void;
+  fitBox: { width: number; height: number };
+  /** The native video element. Goes inside the letterboxed box. */
+  video: ReactNode;
+  /** User-provided overlay children. Rendered above everything, at the
+   *  container level (not clipped to the letterbox). */
+  overlay: ReactNode;
+}) {
+  const [visible, setVisible] = useState(true);
+  const opacity = useRef(new Animated.Value(1)).current;
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }, []);
+
+  const startHideTimer = useCallback(() => {
+    clearHideTimer();
+    hideTimer.current = setTimeout(() => {
+      setVisible(false);
+    }, CONTROLS_AUTO_HIDE_MS);
+  }, [clearHideTimer]);
+
+  const show = useCallback(() => {
+    setVisible(true);
+    startHideTimer();
+  }, [startHideTimer]);
+
+  // Start the auto-hide countdown when controls are present. If the user
+  // opts out of controls entirely we skip the timer altogether (no fade,
+  // no Pressable, nothing to dismiss).
+  useEffect(() => {
+    if (controls == null) return;
+    startHideTimer();
+    return clearHideTimer;
+  }, [controls, startHideTimer, clearHideTimer]);
+
+  useEffect(() => {
+    Animated.timing(opacity, {
+      toValue: visible ? 1 : 0,
+      duration: CONTROLS_FADE_MS,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [visible, opacity]);
+
+  const onBackgroundPress = useCallback(() => {
+    if (visible) {
+      // Tapping the video while controls are visible hides them right away,
+      // matching the AVPlayer / PlayerView behavior.
+      clearHideTimer();
+      setVisible(false);
+    } else {
+      show();
+    }
+  }, [visible, show, clearHideTimer]);
+
+  const api = useMemo(
+    () => ({ visible, show, exit: onExit, player }),
+    [visible, show, onExit, player]
+  );
+
+  return (
+    <FullscreenContext.Provider value={api}>
+      <View style={styles.fullscreenContainer}>
+        <View style={fitBox}>{video}</View>
+
+        {controls != null && (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={onBackgroundPress}
+            // Avoid the click sound on each tap-to-toggle on Android.
+            android_disableSound
+          >
+            <Animated.View
+              style={[StyleSheet.absoluteFill, { opacity }]}
+              // When hidden the layer must let taps fall through to the
+              // Pressable so the next tap brings controls back.
+              pointerEvents={visible ? 'box-none' : 'none'}
+            >
+              {controls}
+            </Animated.View>
+          </Pressable>
+        )}
+
+        {/* User-provided overlay sits above the controls layer, with its
+            own pointerEvents handling. Useful for e.g. a rendition picker
+            anchored to a side of the screen. */}
+        {overlay}
+      </View>
+    </FullscreenContext.Provider>
+  );
+}
 
 const styles = StyleSheet.create({
   fullscreenContainer: {

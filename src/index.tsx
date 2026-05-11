@@ -1,5 +1,8 @@
 export { VideoView } from './VideoView';
 export type { VideoViewProps, VideoViewRef } from './VideoView';
+export { FullscreenControls } from './FullscreenControls';
+export { useFullscreenControls } from './FullscreenContext';
+export type { FullscreenControlsAPI } from './FullscreenContext';
 export { useSession } from './useSession';
 export { useBroadcasts } from './useBroadcasts';
 export { usePlayer } from './usePlayer';
