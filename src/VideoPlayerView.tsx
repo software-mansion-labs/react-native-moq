@@ -28,7 +28,7 @@ import { FullscreenControls } from './FullscreenControls';
 import type { Player } from './types';
 import { VideoView } from './VideoView';
 
-export interface VideoPlayerProps extends ViewProps {
+export interface VideoPlayerViewProps extends ViewProps {
   player: Player;
   children?: ReactNode;
   // Aspect ratio (width / height) of the source video. Used to letterbox the
@@ -56,7 +56,7 @@ export interface VideoPlayerProps extends ViewProps {
   onFullscreenExit?: () => void;
 }
 
-export interface VideoPlayerRef {
+export interface VideoPlayerViewRef {
   enterFullscreen(): void;
   exitFullscreen(): void;
 }
@@ -74,121 +74,120 @@ const CONTROLS_FADE_MS = 220;
 // <Modal> keeps everything inside RN's tree — touches and child layout
 // behave normally on both platforms.
 //
-// `<VideoPlayer>` is a batteries-included preset built on top of the bare
+// `<VideoPlayerView>` is a batteries-included preset built on top of the bare
 // `<VideoView>` primitive. It owns the fullscreen modal, the default
 // platform-styled chrome, and the imperative `enterFullscreen/exitFullscreen`
 // API. For a no-frills surface you can wrap in your own UI, use `<VideoView>`.
-export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
-  function VideoPlayer(
-    {
-      player,
-      children,
-      style,
-      videoAspectRatio,
-      controls = true,
-      onFullscreenEnter,
-      onFullscreenExit,
-      ...rest
-    },
-    ref
-  ) {
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+export const VideoPlayerView = forwardRef<
+  VideoPlayerViewRef,
+  VideoPlayerViewProps
+>(function VideoPlayerView(
+  {
+    player,
+    children,
+    style,
+    videoAspectRatio,
+    controls = true,
+    onFullscreenEnter,
+    onFullscreenExit,
+    ...rest
+  },
+  ref
+) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
-    const enterFullscreen = useCallback(() => {
-      setIsFullscreen((prev) => {
-        if (prev) return prev;
-        onFullscreenEnter?.();
-        return true;
-      });
-    }, [onFullscreenEnter]);
+  const enterFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => {
+      if (prev) return prev;
+      onFullscreenEnter?.();
+      return true;
+    });
+  }, [onFullscreenEnter]);
 
-    const exitFullscreen = useCallback(() => {
-      setIsFullscreen((prev) => {
-        if (!prev) return prev;
-        onFullscreenExit?.();
-        return false;
-      });
-    }, [onFullscreenExit]);
+  const exitFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => {
+      if (!prev) return prev;
+      onFullscreenExit?.();
+      return false;
+    });
+  }, [onFullscreenExit]);
 
-    useImperativeHandle(ref, () => ({ enterFullscreen, exitFullscreen }), [
-      enterFullscreen,
-      exitFullscreen,
-    ]);
+  useImperativeHandle(ref, () => ({ enterFullscreen, exitFullscreen }), [
+    enterFullscreen,
+    exitFullscreen,
+  ]);
 
-    // The shared MoQ video output (the AVSampleBufferDisplayLayer on iOS,
-    // the player Surface on Android) is keyed by broadcastPath, so when this
-    // element remounts on fullscreen toggle the underlying layer/surface
-    // simply re-attaches to the new instance. There may be a brief frame of
-    // black during the transition; this is acceptable.
-    const native = (
-      <VideoView player={player} style={StyleSheet.absoluteFill} />
-    );
+  // The shared MoQ video output (the AVSampleBufferDisplayLayer on iOS,
+  // the player Surface on Android) is keyed by broadcastPath, so when this
+  // element remounts on fullscreen toggle the underlying layer/surface
+  // simply re-attaches to the new instance. There may be a brief frame of
+  // black during the transition; this is acceptable.
+  const native = <VideoView player={player} style={StyleSheet.absoluteFill} />;
 
-    if (isFullscreen) {
-      // Compute a letterboxed box that fits the window while preserving the
-      // video's aspect ratio. Android's SurfaceView would otherwise stretch
-      // the surface buffer to whatever shape the window happens to be.
-      const aspect = videoAspectRatio ?? 16 / 9;
-      const screenAspect = windowWidth / windowHeight;
-      const fitBox =
-        screenAspect > aspect
-          ? { width: windowHeight * aspect, height: windowHeight }
-          : { width: windowWidth, height: windowWidth / aspect };
+  if (isFullscreen) {
+    // Compute a letterboxed box that fits the window while preserving the
+    // video's aspect ratio. Android's SurfaceView would otherwise stretch
+    // the surface buffer to whatever shape the window happens to be.
+    const aspect = videoAspectRatio ?? 16 / 9;
+    const screenAspect = windowWidth / windowHeight;
+    const fitBox =
+      screenAspect > aspect
+        ? { width: windowHeight * aspect, height: windowHeight }
+        : { width: windowWidth, height: windowWidth / aspect };
 
-      // Resolve `controls` to either a ReactNode or null.
-      const controlsElement: ReactNode =
-        controls === false ? null : controls === true ? (
-          <FullscreenControls />
-        ) : (
-          controls
-        );
+    // Resolve `controls` to either a ReactNode or null.
+    const controlsElement: ReactNode =
+      controls === false ? null : controls === true ? (
+        <FullscreenControls />
+      ) : (
+        controls
+      );
 
-      return (
-        <Modal
-          visible
-          animationType="fade"
-          // Lets the modal extend behind the (now hidden) status bar on
-          // Android so the chrome sits flush against the top edge.
-          statusBarTranslucent
-          supportedOrientations={[
-            'portrait',
-            'portrait-upside-down',
-            'landscape',
-            'landscape-left',
-            'landscape-right',
-          ]}
-          onRequestClose={exitFullscreen}
-        >
-          {/* Hide the system status bar while fullscreen, matching how
+    return (
+      <Modal
+        visible
+        animationType="fade"
+        // Lets the modal extend behind the (now hidden) status bar on
+        // Android so the chrome sits flush against the top edge.
+        statusBarTranslucent
+        supportedOrientations={[
+          'portrait',
+          'portrait-upside-down',
+          'landscape',
+          'landscape-left',
+          'landscape-right',
+        ]}
+        onRequestClose={exitFullscreen}
+      >
+        {/* Hide the system status bar while fullscreen, matching how
               AVPlayerViewController and Media3 PlayerView present video. */}
-          <StatusBar hidden animated />
-          {/* `react-native-safe-area-context` doesn't propagate insets across
+        <StatusBar hidden animated />
+        {/* `react-native-safe-area-context` doesn't propagate insets across
               the Modal boundary, so we mount a fresh provider here. The
               initialMetrics seed avoids a 0-inset first frame so the close
               button doesn't briefly snap into the notch before measuring. */}
-          <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-            <FullscreenStage
-              player={player}
-              controls={controlsElement}
-              onExit={exitFullscreen}
-              fitBox={fitBox}
-              video={native}
-              overlay={children}
-            />
-          </SafeAreaProvider>
-        </Modal>
-      );
-    }
-
-    return (
-      <View style={style} {...rest}>
-        {native}
-        {children}
-      </View>
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+          <FullscreenStage
+            player={player}
+            controls={controlsElement}
+            onExit={exitFullscreen}
+            fitBox={fitBox}
+            video={native}
+            overlay={children}
+          />
+        </SafeAreaProvider>
+      </Modal>
     );
   }
-);
+
+  return (
+    <View style={style} {...rest}>
+      {native}
+      {children}
+    </View>
+  );
+});
 
 /**
  * Hosts the actual fullscreen visual layout: black backdrop, letterboxed

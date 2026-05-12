@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import NativeMoQ from './NativeMoQ';
 import type { AudioPlayer, BroadcastInfo, Player } from './types';
 import { AUDIO_PLAYER_KEY_SUFFIX, PlayerHandle } from './types';
-import { usePlayerBase } from './usePlayerBase';
+import { usePlayer } from './usePlayer';
 
 export function useAudioPlayer(
   broadcastInfo: BroadcastInfo,
@@ -31,7 +31,7 @@ export function useAudioPlayer(
     };
   }, [broadcastInfo.path, audioKey]);
 
-  const player: Player = usePlayerBase(audioHandle);
+  const player: Player = usePlayer(audioHandle);
 
   const audioPlayer: AudioPlayer = {
     broadcastPath: player.broadcastPath,

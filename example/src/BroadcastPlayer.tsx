@@ -1,12 +1,12 @@
-import type { BroadcastInfo, VideoPlayerRef } from 'react-native-moq';
+import type { BroadcastInfo, VideoPlayerViewRef } from 'react-native-moq';
 import { useEffect, useRef, useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 import {
-  VideoPlayer,
+  VideoPlayerView,
   useAudioPlayer,
   useEvent,
   useEventListener,
-  usePlayer,
+  useVideoPlayer,
 } from 'react-native-moq';
 import type { AddEntry } from './EventLog';
 import { RenditionPicker } from './RenditionPicker';
@@ -62,10 +62,10 @@ function VideoSection({
   broadcast: BroadcastInfo;
   addEntry: AddEntry;
 }) {
-  const player = usePlayer(broadcast, (p) => {
+  const player = useVideoPlayer(broadcast, (p) => {
     p.play();
   });
-  const videoPlayerRef = useRef<VideoPlayerRef>(null);
+  const playerViewRef = useRef<VideoPlayerViewRef>(null);
 
   // Pause when this section unmounts (mode switch or full disconnect) so the
   // video stream stops while audio mode is active.
@@ -80,7 +80,7 @@ function VideoSection({
   });
 
   // Aspect ratio of the active video track (or the largest one we know of).
-  // Passed to VideoView so the fullscreen modal letterboxes correctly on
+  // Passed to VideoPlayerView so the fullscreen modal letterboxes correctly on
   // Android, where SurfaceView would otherwise stretch the video.
   const activeTrack =
     broadcast.videoTracks.find(
@@ -122,12 +122,12 @@ function VideoSection({
 
   return (
     <>
-      {/* VideoPlayer renders its own native-looking fullscreen chrome
+      {/* VideoPlayerView renders its own native-looking fullscreen chrome
           (close button + play/pause) with tap-to-toggle auto-hide. Pass
           `controls={false}` to opt out, or `controls={<MyControls/>}` to
           replace it. */}
-      <VideoPlayer
-        ref={videoPlayerRef}
+      <VideoPlayerView
+        ref={playerViewRef}
         player={player}
         style={styles.video}
         videoAspectRatio={videoAspectRatio}
@@ -148,7 +148,7 @@ function VideoSection({
         />
         <Button
           title="Fullscreen"
-          onPress={() => videoPlayerRef.current?.enterFullscreen()}
+          onPress={() => playerViewRef.current?.enterFullscreen()}
         />
       </View>
 
