@@ -124,7 +124,7 @@ To discover when broadcasts appear or disappear without rendering them directly,
 
 ### `usePlayer(broadcast, setup?)`
 
-Creates a reactive `Player` from a `BroadcastInfo`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<VideoView>`.
+Creates a reactive `Player` from a `BroadcastInfo`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<VideoView>` (or `<VideoPlayer>`).
 
 ```tsx
 const player = usePlayer(broadcast, (p) => {
@@ -190,7 +190,7 @@ Returns an `AudioPlayer` object — same shape as `Player` minus the video-only 
 
 The same `PlayerEvents` apply (`playingChange`, `trackStopped`, `trackSwitched`, `statsUpdate`); `trackSwitched` only fires with `trackKind: 'audio'`. The audio-only stream uses a separate native player from the video+audio one, so both can run alongside each other for the same broadcast.
 
-Passing an `AudioPlayer` to `<VideoView>` is a type error — the audio-only mode has no video output by design.
+Passing an `AudioPlayer` to `<VideoView>` (or `<VideoPlayer>`) is a type error — the audio-only mode has no video output by design.
 
 ---
 
@@ -259,12 +259,43 @@ Use this when you need to subscribe from non-component code (stores, services, c
 
 ---
 
+The library ships two components for putting the player on screen, layered on top of each other:
+
+| Component | What it is | Use it when |
+|---|---|---|
+| [`<VideoView>`](#videoview) | The bare native video surface — renders the player's pixels and nothing else. | You want to build your own video UI (custom controls, custom fullscreen, custom overlays). |
+| [`<VideoPlayer>`](#videoplayer) | A ready-made layout composed on top of `<VideoView>`. Adds a fullscreen modal, platform-styled controls, an `enterFullscreen()` / `exitFullscreen()` ref API, and an overlay `children` slot. | You want a working video experience without writing one yourself — or a starting point to copy and adapt. |
+
+Both take a `Player` from [`usePlayer`](#useplayerbroadcast-setup); pick the one that matches how much UI you want the library to own.
+
+---
+
 ### `<VideoView>`
 
-Native component that renders the video for a given player. Accepts children — render overlay UI as children and they will be laid out on top of the video both inline and inside the fullscreen modal. In fullscreen mode it also ships a default, platform-styled chrome (close button + play/pause with tap-to-toggle auto-hide) — see [Fullscreen playback](#fullscreen-playback) for how to replace or disable it.
+The bare native video surface. Behaves like a normal RN view: takes `style` (and the rest of `ViewProps`), renders the player's video output at whatever size you give it, and that's it. No fullscreen, no controls, no overlay slot — for those you compose your own UI around it (or use [`<VideoPlayer>`](#videoplayer)).
 
 ```tsx
 <VideoView
+  player={player}
+  style={{ width: '100%', aspectRatio: 16 / 9 }}
+/>
+```
+
+| Prop | Type | Required | Description |
+|---|---|---|---|
+| `player` | `Player` | Yes | Player returned by `usePlayer` |
+| `style` | `ViewStyle` | No | Standard React Native style prop |
+
+`<VideoView>` accepts the rest of the standard `ViewProps` and forwards them to the native view. It does **not** accept children — the underlying native view is not a `ViewGroup` on Android, so overlays must be siblings (typically absolutely positioned alongside the video).
+
+---
+
+### `<VideoPlayer>`
+
+A complete video player composed on top of `<VideoView>`. Inline it looks like a plain video surface with whatever `style` and overlay `children` you give it. Calling `enterFullscreen()` on its ref (or wiring your own fullscreen button to it) opens the video in an RN `<Modal>` with platform-styled chrome — close button, centered play/pause, tap-to-toggle auto-hide — and your overlay children layered on top. The chrome is fully customizable (see [Fullscreen playback](#fullscreen-playback)); if you outgrow the preset entirely, the [source](src/VideoPlayer.tsx) is short enough to copy into your app and adapt on top of `<VideoView>`.
+
+```tsx
+<VideoPlayer
   player={player}
   style={{ width: '100%', aspectRatio: 16 / 9 }}
 />
@@ -289,9 +320,9 @@ Imperative methods on the ref:
 
 ```tsx
 import { useRef } from 'react';
-import { VideoView, type VideoViewRef } from 'react-native-moq';
+import { VideoPlayer, type VideoPlayerRef } from 'react-native-moq';
 
-const ref = useRef<VideoViewRef>(null);
+const ref = useRef<VideoPlayerRef>(null);
 // ...
 ref.current?.enterFullscreen();
 ref.current?.exitFullscreen();
@@ -303,7 +334,7 @@ See [Fullscreen playback](#fullscreen-playback) for examples covering the defaul
 
 ### `useFullscreenControls()`
 
-Reads the fullscreen controls API from inside an element you've passed to `<VideoView controls={...} />`. Use this when building your own chrome and you want to opt in to the same tap-to-toggle / fade behavior the built-in controls use.
+Reads the fullscreen controls API from inside an element you've passed to `<VideoPlayer controls={...} />`. Use this when building your own chrome and you want to opt in to the same tap-to-toggle / fade behavior the built-in controls use.
 
 ```tsx
 const { player, exit, show, visible } = useFullscreenControls();
@@ -311,18 +342,18 @@ const { player, exit, show, visible } = useFullscreenControls();
 
 | Field | Type | Description |
 |---|---|---|
-| `player` | `Player` | The player driving the VideoView this chrome is mounted in |
+| `player` | `Player` | The player driving the VideoPlayer this chrome is mounted in |
 | `exit` | `() => void` | Programmatically exit fullscreen (equivalent to `ref.current?.exitFullscreen()`) |
 | `show` | `() => void` | Mark controls as visible and reset the auto-hide timer. Call this from any of your custom buttons' `onPress` so a tap doesn't immediately fade the chrome out from under the user's finger |
 | `visible` | `boolean` | Whether the surrounding fade is currently animating to visible — only useful if your custom controls want to render differently while hidden |
 
-Throws if called outside a VideoView fullscreen modal. The built-in [`<FullscreenControls />`](#fullscreencontrols) component (also exported) is the canonical consumer — read its [source](src/FullscreenControls.tsx) for a worked example.
+Throws if called outside a VideoPlayer fullscreen modal. The built-in [`<FullscreenControls />`](#fullscreencontrols) component (also exported) is the canonical consumer — read its [source](src/FullscreenControls.tsx) for a worked example.
 
 ---
 
 ### `<FullscreenControls />`
 
-The default fullscreen chrome — a platform-styled close + play/pause overlay. Mounted automatically when `<VideoView controls />` (or `controls={true}`) is used. Exported so you can compose it into a larger custom chrome, e.g. side-by-side with extra buttons:
+The default fullscreen chrome — a platform-styled close + play/pause overlay. Mounted automatically when `<VideoPlayer controls />` (or `controls={true}`) is used. Exported so you can compose it into a larger custom chrome, e.g. side-by-side with extra buttons:
 
 ```tsx
 import { FullscreenControls, useFullscreenControls } from 'react-native-moq';
@@ -337,7 +368,7 @@ function ChromeWithQualityPicker() {
   );
 }
 
-<VideoView player={player} controls={<ChromeWithQualityPicker />} />
+<VideoPlayer player={player} controls={<ChromeWithQualityPicker />} />
 ```
 
 Takes no props.
@@ -500,7 +531,7 @@ sortedTracks.map((track) => (
 
 ### Fullscreen playback
 
-`VideoView` exposes imperative `enterFullscreen()` / `exitFullscreen()` methods on its ref. Internally it renders the video into an RN `<Modal>` so children are still part of RN's tree — overlay buttons remain tappable, and rendering works on both iOS and Android (where the underlying `SurfaceView` cannot host child views directly).
+Fullscreen support lives on the [`<VideoPlayer>`](#videoplayer) preset, which exposes imperative `enterFullscreen()` / `exitFullscreen()` methods on its ref. Internally it renders the video into an RN `<Modal>` so children are still part of RN's tree — overlay buttons remain tappable, and rendering works on both iOS and Android (where the underlying `SurfaceView` cannot host child views directly). If you want fullscreen with a different UX, copy [`src/VideoPlayer.tsx`](src/VideoPlayer.tsx) into your app and adapt it on top of the bare `<VideoView>` primitive.
 
 By default the fullscreen modal renders platform-styled chrome — a close button (top-left on iOS, top-right on Android), a centered play/pause, and tap-to-toggle auto-hide. Most apps need nothing more than this:
 
@@ -508,15 +539,15 @@ By default the fullscreen modal renders platform-styled chrome — a close butto
 import { useRef } from 'react';
 import { Button, View } from 'react-native';
 import {
-  VideoView,
+  VideoPlayer,
   usePlayer,
   type BroadcastInfo,
-  type VideoViewRef,
+  type VideoPlayerRef,
 } from 'react-native-moq';
 
 function VideoSection({ broadcast }: { broadcast: BroadcastInfo }) {
   const player = usePlayer(broadcast, (p) => p.play());
-  const ref = useRef<VideoViewRef>(null);
+  const ref = useRef<VideoPlayerRef>(null);
 
   // Pass the active track's aspect to letterbox correctly in fullscreen
   // (Android's SurfaceView would otherwise stretch the video).
@@ -528,7 +559,7 @@ function VideoSection({ broadcast }: { broadcast: BroadcastInfo }) {
 
   return (
     <View>
-      <VideoView
+      <VideoPlayer
         ref={ref}
         player={player}
         style={{ width: '100%', aspectRatio: 16 / 9 }}
@@ -545,14 +576,14 @@ function VideoSection({ broadcast }: { broadcast: BroadcastInfo }) {
 Pass `controls={false}` to hide it entirely — useful if you want a bare presentation, or if you're going to render your own overlay via `children`:
 
 ```tsx
-<VideoView ref={ref} player={player} controls={false} />
+<VideoPlayer ref={ref} player={player} controls={false} />
 ```
 
 Pass any ReactNode to replace it. Custom controls are wrapped in the same fade + tap-to-toggle gesture as the default, so they auto-hide after a few seconds and reappear on tap. Inside, call `useFullscreenControls()` to read the visibility state and the same `{ exit, show, player }` API the built-in chrome uses:
 
 ```tsx
 import { Pressable, Text, View, StyleSheet } from 'react-native';
-import { VideoView, useFullscreenControls, useEvent } from 'react-native-moq';
+import { VideoPlayer, useFullscreenControls, useEvent } from 'react-native-moq';
 
 function MyControls() {
   const { player, exit, show, visible } = useFullscreenControls();
@@ -584,7 +615,7 @@ function MyControls() {
   );
 }
 
-<VideoView ref={ref} player={player} controls={<MyControls />} />
+<VideoPlayer ref={ref} player={player} controls={<MyControls />} />
 ```
 
 You can mix and match: keep the default chrome on and use `children` for non-auto-hiding overlays like a rendition picker.

@@ -1,8 +1,8 @@
-import type { BroadcastInfo, VideoViewRef } from 'react-native-moq';
+import type { BroadcastInfo, VideoPlayerRef } from 'react-native-moq';
 import { useEffect, useRef, useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 import {
-  VideoView,
+  VideoPlayer,
   useAudioPlayer,
   useEvent,
   useEventListener,
@@ -65,7 +65,7 @@ function VideoSection({
   const player = usePlayer(broadcast, (p) => {
     p.play();
   });
-  const videoViewRef = useRef<VideoViewRef>(null);
+  const videoPlayerRef = useRef<VideoPlayerRef>(null);
 
   // Pause when this section unmounts (mode switch or full disconnect) so the
   // video stream stops while audio mode is active.
@@ -122,12 +122,12 @@ function VideoSection({
 
   return (
     <>
-      {/* VideoView renders its own native-looking fullscreen chrome
+      {/* VideoPlayer renders its own native-looking fullscreen chrome
           (close button + play/pause) with tap-to-toggle auto-hide. Pass
           `controls={false}` to opt out, or `controls={<MyControls/>}` to
           replace it. */}
-      <VideoView
-        ref={videoViewRef}
+      <VideoPlayer
+        ref={videoPlayerRef}
         player={player}
         style={styles.video}
         videoAspectRatio={videoAspectRatio}
@@ -148,7 +148,7 @@ function VideoSection({
         />
         <Button
           title="Fullscreen"
-          onPress={() => videoViewRef.current?.enterFullscreen()}
+          onPress={() => videoPlayerRef.current?.enterFullscreen()}
         />
       </View>
 

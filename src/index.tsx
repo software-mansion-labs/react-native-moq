@@ -1,5 +1,7 @@
 export { VideoView } from './VideoView';
-export type { VideoViewProps, VideoViewRef } from './VideoView';
+export type { VideoViewProps } from './VideoView';
+export { VideoPlayer } from './VideoPlayer';
+export type { VideoPlayerProps, VideoPlayerRef } from './VideoPlayer';
 export { FullscreenControls } from './FullscreenControls';
 export { useFullscreenControls } from './FullscreenContext';
 export type { FullscreenControlsAPI } from './FullscreenContext';
