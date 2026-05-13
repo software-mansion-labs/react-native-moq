@@ -25,6 +25,8 @@ import {
 } from 'react-native-safe-area-context';
 import { FullscreenContext } from './FullscreenContext';
 import { FullscreenControls } from './FullscreenControls';
+import { MiniPlayerContext } from './MiniPlayerContext';
+import { MiniPlayerControls } from './MiniPlayerControls';
 import type { Player } from './types';
 import { VideoView } from './VideoView';
 
@@ -48,10 +50,23 @@ export interface VideoPlayerViewProps extends ViewProps {
    *   video background toggles its visibility. Use `useFullscreenControls()`
    *   inside to read the same `{visible, show, exit, player}` API.
    *
-   * Controls only render inside the fullscreen modal — the inline view is
-   * left bare so the host app can lay out its own controls around it.
+   * For chrome shown while the player is inline (not fullscreen), see
+   * `miniControls`.
    */
   controls?: boolean | ReactNode;
+  /**
+   * Chrome shown inline (when not fullscreen). Same shape as `controls`.
+   *
+   * - `true` (default): render the built-in `<MiniPlayerControls />` —
+   *   a centered play/pause and a fullscreen-enter button in the bottom
+   *   right, wrapped in the same tap-to-toggle auto-hide fade as the
+   *   fullscreen chrome.
+   * - `false`: no inline chrome and no tap-to-toggle gesture.
+   * - A ReactNode: replace the default mini chrome. Use
+   *   `useMiniPlayerControls()` inside to read the same
+   *   `{visible, show, enterFullscreen, player}` API.
+   */
+  miniControls?: boolean | ReactNode;
   onFullscreenEnter?: () => void;
   onFullscreenExit?: () => void;
 }
@@ -88,6 +103,7 @@ export const VideoPlayerView = forwardRef<
     style,
     videoAspectRatio,
     controls = true,
+    miniControls = true,
     onFullscreenEnter,
     onFullscreenExit,
     ...rest
@@ -181,10 +197,24 @@ export const VideoPlayerView = forwardRef<
     );
   }
 
+  // Resolve `miniControls` the same way as `controls`: a boolean toggles the
+  // built-in chrome, a ReactNode replaces it.
+  const miniControlsElement: ReactNode =
+    miniControls === false ? null : miniControls === true ? (
+      <MiniPlayerControls />
+    ) : (
+      miniControls
+    );
+
   return (
     <View style={style} {...rest}>
-      {native}
-      {children}
+      <MiniStage
+        player={player}
+        controls={miniControlsElement}
+        onEnterFullscreen={enterFullscreen}
+        video={native}
+        overlay={children}
+      />
     </View>
   );
 });
@@ -299,6 +329,104 @@ function FullscreenStage({
         {overlay}
       </View>
     </FullscreenContext.Provider>
+  );
+}
+
+/**
+ * Hosts the inline (non-fullscreen) visual layout: the native video at
+ * absolute-fill, a tap-to-toggle controls layer with the same auto-hide
+ * fade as the fullscreen stage, and the user's overlay children. Split out
+ * so the controls visibility state is created fresh each time the inline
+ * view mounts (e.g. on fullscreen exit).
+ */
+function MiniStage({
+  player,
+  controls,
+  onEnterFullscreen,
+  video,
+  overlay,
+}: {
+  player: Player;
+  controls: ReactNode;
+  onEnterFullscreen: () => void;
+  /** The native video element. Already styled to absolute-fill. */
+  video: ReactNode;
+  /** User-provided overlay children. Rendered above the controls layer. */
+  overlay: ReactNode;
+}) {
+  const [visible, setVisible] = useState(true);
+  const opacity = useRef(new Animated.Value(1)).current;
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }, []);
+
+  const startHideTimer = useCallback(() => {
+    clearHideTimer();
+    hideTimer.current = setTimeout(() => {
+      setVisible(false);
+    }, CONTROLS_AUTO_HIDE_MS);
+  }, [clearHideTimer]);
+
+  const show = useCallback(() => {
+    setVisible(true);
+    startHideTimer();
+  }, [startHideTimer]);
+
+  useEffect(() => {
+    if (controls == null) return;
+    startHideTimer();
+    return clearHideTimer;
+  }, [controls, startHideTimer, clearHideTimer]);
+
+  useEffect(() => {
+    Animated.timing(opacity, {
+      toValue: visible ? 1 : 0,
+      duration: CONTROLS_FADE_MS,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [visible, opacity]);
+
+  const onBackgroundPress = useCallback(() => {
+    if (visible) {
+      clearHideTimer();
+      setVisible(false);
+    } else {
+      show();
+    }
+  }, [visible, show, clearHideTimer]);
+
+  const api = useMemo(
+    () => ({ visible, show, enterFullscreen: onEnterFullscreen, player }),
+    [visible, show, onEnterFullscreen, player]
+  );
+
+  return (
+    <MiniPlayerContext.Provider value={api}>
+      {video}
+      {controls != null && (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onBackgroundPress}
+          android_disableSound
+        >
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { opacity }]}
+            pointerEvents={visible ? 'box-none' : 'none'}
+          >
+            {controls}
+          </Animated.View>
+        </Pressable>
+      )}
+      {/* Overlay sits above the controls layer, with its own pointerEvents
+          handling. Useful for e.g. a rendition picker anchored to a side. */}
+      {overlay}
+    </MiniPlayerContext.Provider>
   );
 }
 

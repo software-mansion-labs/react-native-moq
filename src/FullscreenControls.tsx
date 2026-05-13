@@ -218,22 +218,14 @@ function PlayGlyph({
   // produces a right-pointing equilateral-ish triangle. Offsetting by half
   // the right border keeps the optical center aligned with its container.
   const half = size / 2;
-  return (
-    <View
-      style={{
-        width: 0,
-        height: 0,
-        borderLeftWidth: size,
-        borderTopWidth: half,
-        borderBottomWidth: half,
-        borderRightWidth: 0,
-        borderLeftColor: color,
-        borderTopColor: 'transparent',
-        borderBottomColor: 'transparent',
-        marginLeft: size * 0.25, // optical centering inside a round button
-      }}
-    />
-  );
+  const dynamic = {
+    borderLeftWidth: size,
+    borderTopWidth: half,
+    borderBottomWidth: half,
+    borderLeftColor: color,
+    marginLeft: size * 0.25, // optical centering inside a round button
+  };
+  return <View style={[styles.playGlyph, dynamic]} />;
 }
 
 function PauseGlyph({
@@ -245,24 +237,12 @@ function PauseGlyph({
 }) {
   const barWidth = Math.max(3, size * 0.22);
   const gap = Math.max(4, size * 0.22);
+  const row = { gap };
+  const bar = { width: barWidth, height: size, backgroundColor: color };
   return (
-    <View style={{ flexDirection: 'row', gap }}>
-      <View
-        style={{
-          width: barWidth,
-          height: size,
-          backgroundColor: color,
-          borderRadius: 1.5,
-        }}
-      />
-      <View
-        style={{
-          width: barWidth,
-          height: size,
-          backgroundColor: color,
-          borderRadius: 1.5,
-        }}
-      />
+    <View style={[styles.pauseRow, row]}>
+      <View style={[styles.pauseBar, bar]} />
+      <View style={[styles.pauseBar, bar]} />
     </View>
   );
 }
@@ -276,32 +256,18 @@ function CloseX({
   color?: string;
   thickness?: number;
 }) {
+  const container = { width: size, height: size };
+  const bar = {
+    top: (size - thickness) / 2,
+    width: size,
+    height: thickness,
+    backgroundColor: color,
+    borderRadius: thickness / 2,
+  };
   return (
-    <View style={{ width: size, height: size }}>
-      <View
-        style={{
-          position: 'absolute',
-          top: (size - thickness) / 2,
-          left: 0,
-          width: size,
-          height: thickness,
-          backgroundColor: color,
-          borderRadius: thickness / 2,
-          transform: [{ rotate: '45deg' }],
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          top: (size - thickness) / 2,
-          left: 0,
-          width: size,
-          height: thickness,
-          backgroundColor: color,
-          borderRadius: thickness / 2,
-          transform: [{ rotate: '-45deg' }],
-        }}
-      />
+    <View style={container}>
+      <View style={[styles.closeBar, bar, styles.rot45]} />
+      <View style={[styles.closeBar, bar, styles.rotNeg45]} />
     </View>
   );
 }
@@ -369,4 +335,17 @@ const styles = StyleSheet.create({
   androidScrim: {
     backgroundColor: 'rgba(0, 0, 0, 0.18)',
   },
+
+  playGlyph: {
+    width: 0,
+    height: 0,
+    borderRightWidth: 0,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+  },
+  pauseRow: { flexDirection: 'row' },
+  pauseBar: { borderRadius: 1.5 },
+  closeBar: { position: 'absolute', left: 0 },
+  rot45: { transform: [{ rotate: '45deg' }] },
+  rotNeg45: { transform: [{ rotate: '-45deg' }] },
 });

@@ -8,6 +8,9 @@ export type {
 export { FullscreenControls } from './FullscreenControls';
 export { useFullscreenControls } from './FullscreenContext';
 export type { FullscreenControlsAPI } from './FullscreenContext';
+export { MiniPlayerControls } from './MiniPlayerControls';
+export { useMiniPlayerControls } from './MiniPlayerContext';
+export type { MiniPlayerControlsAPI } from './MiniPlayerContext';
 export { useSession } from './useSession';
 export { useBroadcasts } from './useBroadcasts';
 export { useVideoPlayer } from './useVideoPlayer';

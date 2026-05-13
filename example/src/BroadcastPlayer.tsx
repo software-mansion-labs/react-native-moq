@@ -1,5 +1,5 @@
-import type { BroadcastInfo, VideoPlayerViewRef } from 'react-native-moq';
-import { useEffect, useRef, useState } from 'react';
+import type { BroadcastInfo } from 'react-native-moq';
+import { useEffect, useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 import {
   VideoPlayerView,
@@ -65,7 +65,6 @@ function VideoSection({
   const player = useVideoPlayer(broadcast, (p) => {
     p.play();
   });
-  const playerViewRef = useRef<VideoPlayerViewRef>(null);
 
   // Pause when this section unmounts (mode switch or full disconnect) so the
   // video stream stops while audio mode is active.
@@ -122,12 +121,12 @@ function VideoSection({
 
   return (
     <>
-      {/* VideoPlayerView renders its own native-looking fullscreen chrome
-          (close button + play/pause) with tap-to-toggle auto-hide. Pass
-          `controls={false}` to opt out, or `controls={<MyControls/>}` to
-          replace it. */}
+      {/* VideoPlayerView renders its own native-looking inline mini chrome
+          (centered play/pause + bottom-right fullscreen-enter) and fullscreen
+          chrome (close + play/pause), both with tap-to-toggle auto-hide. Pass
+          `miniControls={false}` / `controls={false}` to opt out, or pass a
+          ReactNode to either to swap in your own. */}
       <VideoPlayerView
-        ref={playerViewRef}
         player={player}
         style={styles.video}
         videoAspectRatio={videoAspectRatio}
@@ -140,17 +139,6 @@ function VideoSection({
           onSelect={(name: string) => player.switchVideoTrack(name)}
         />
       )}
-
-      <View style={styles.controlsRow}>
-        <Button
-          title={player.isPlaying ? 'Pause' : 'Resume'}
-          onPress={player.isPlaying ? player.pause : player.play}
-        />
-        <Button
-          title="Fullscreen"
-          onPress={() => playerViewRef.current?.enterFullscreen()}
-        />
-      </View>
 
       {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
     </>
@@ -259,10 +247,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#000',
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    gap: 8,
   },
   audioStatus: {
     flexDirection: 'row',
