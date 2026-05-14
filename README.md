@@ -292,7 +292,7 @@ The bare native video surface. Behaves like a normal RN view: takes `style` (and
 
 ### `<VideoPlayerView>`
 
-A complete video player composed on top of `<VideoView>`. Inline it looks like a plain video surface with whatever `style` and overlay `children` you give it. Calling `enterFullscreen()` on its ref (or wiring your own fullscreen button to it) opens the video in an RN `<Modal>` with platform-styled chrome — close button, centered play/pause, tap-to-toggle auto-hide — and your overlay children layered on top. The chrome is fully customizable (see [Fullscreen playback](#fullscreen-playback)); if you outgrow the preset entirely, the [source](src/VideoPlayerView.tsx) is short enough to copy into your app and adapt on top of `<VideoView>`.
+A complete video player composed on top of `<VideoView>`. Inline it renders platform-styled mini chrome on top of the video — a centered play/pause and a bottom-right enter-fullscreen button, wrapped in the same tap-to-toggle auto-hide as the fullscreen chrome. Calling `enterFullscreen()` on its ref (or tapping the inline button) opens the video in an RN `<Modal>` with platform-styled chrome — close button, centered play/pause, tap-to-toggle auto-hide — and your overlay children layered on top. Both inline and fullscreen chrome are fully customizable (see [Fullscreen playback](#fullscreen-playback)); if you outgrow the preset entirely, the [source](src/VideoPlayerView.tsx) is short enough to copy into your app and adapt on top of `<VideoView>`.
 
 ```tsx
 <VideoPlayerView
@@ -308,6 +308,7 @@ A complete video player composed on top of `<VideoView>`. Inline it looks like a
 | `children` | `ReactNode` | No | Overlay content rendered above the video, inline and in fullscreen |
 | `videoAspectRatio` | `number` | No | Source video aspect ratio (`width / height`). Used to letterbox the video inside the fullscreen modal so it isn't stretched on Android. Defaults to `16 / 9` |
 | `controls` | `boolean \| ReactNode` | No | Chrome shown while in fullscreen. `true` (default) renders the built-in platform-styled controls; `false` disables them; passing your own element replaces them while keeping the same fade + tap-to-toggle behavior |
+| `miniControls` | `boolean \| ReactNode` | No | Chrome shown inline (when not fullscreen). `true` (default) renders the built-in `<MiniPlayerControls />` — centered play/pause plus a bottom-right enter-fullscreen button; `false` disables them; passing your own element replaces them while keeping the same fade + tap-to-toggle behavior |
 | `onFullscreenEnter` | `() => void` | No | Fired after the fullscreen modal opens |
 | `onFullscreenExit` | `() => void` | No | Fired after the fullscreen modal closes (including dismissal via the Android hardware back button) |
 
@@ -369,6 +370,49 @@ function ChromeWithQualityPicker() {
 }
 
 <VideoPlayerView player={player} controls={<ChromeWithQualityPicker />} />
+```
+
+Takes no props.
+
+---
+
+### `useMiniPlayerControls()`
+
+Reads the inline (non-fullscreen) controls API from inside an element you've passed to `<VideoPlayerView miniControls={...} />`. Use this when building your own inline chrome and you want to opt in to the same tap-to-toggle / fade behavior the built-in mini controls use.
+
+```tsx
+const { player, enterFullscreen, show, visible } = useMiniPlayerControls();
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `player` | `Player` | The player driving the VideoPlayerView this chrome is mounted in |
+| `enterFullscreen` | `() => void` | Programmatically enter fullscreen (equivalent to `ref.current?.enterFullscreen()`) |
+| `show` | `() => void` | Mark controls as visible and reset the auto-hide timer. Call this from any of your custom buttons' `onPress` so a tap doesn't immediately fade the chrome out from under the user's finger |
+| `visible` | `boolean` | Whether the surrounding fade is currently animating to visible — only useful if your custom controls want to render differently while hidden |
+
+Throws if called outside a VideoPlayerView inline view. The built-in [`<MiniPlayerControls />`](#miniplayercontrols-) component (also exported) is the canonical consumer — read its [source](src/MiniPlayerControls.tsx) for a worked example.
+
+---
+
+### `<MiniPlayerControls />`
+
+The default inline chrome — a platform-styled centered play/pause plus a bottom-right enter-fullscreen button. Mounted automatically when `<VideoPlayerView miniControls />` (or `miniControls={true}`) is used. Exported so you can compose it into a larger custom chrome:
+
+```tsx
+import { MiniPlayerControls, useMiniPlayerControls } from 'react-native-moq';
+
+function MiniChromeWithBadge() {
+  const { player } = useMiniPlayerControls();
+  return (
+    <>
+      <MiniPlayerControls />
+      <LiveBadge player={player} />
+    </>
+  );
+}
+
+<VideoPlayerView player={player} miniControls={<MiniChromeWithBadge />} />
 ```
 
 Takes no props.
