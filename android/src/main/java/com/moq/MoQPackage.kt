@@ -9,7 +9,11 @@ import com.facebook.react.uimanager.ViewManager
 
 class MoQPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
-    return if (name == MoQModule.NAME) MoQModule(reactContext) else null
+    return when (name) {
+      MoQModule.NAME -> MoQModule(reactContext)
+      MoQPublisherModule.NAME -> MoQPublisherModule(reactContext)
+      else -> null
+    }
   }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
@@ -21,11 +25,19 @@ class MoQPackage : BaseReactPackage() {
         needsEagerInit = false,
         isCxxModule = false,
         isTurboModule = true,
+      ),
+      MoQPublisherModule.NAME to ReactModuleInfo(
+        name = MoQPublisherModule.NAME,
+        className = MoQPublisherModule.NAME,
+        canOverrideExistingModule = false,
+        needsEagerInit = false,
+        isCxxModule = false,
+        isTurboModule = true,
       )
     )
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
-    return listOf(MoQVideoViewManager())
+    return listOf(MoQVideoViewManager(), MoQCameraPreviewViewManager())
   }
 }
