@@ -340,13 +340,13 @@ extension SessionState {
     case .connecting: return "connecting"
     case .connected: return "connected"
     case .closed: return "closed"
-    case .error(let message): return "error:\(message)"
+    case .error(let error): return "error:\(error.description)"
     }
   }
 
   init(stringValue: String) {
     if stringValue.hasPrefix("error:") {
-      self = .error(String(stringValue.dropFirst(6)))
+      self = .error(.connectionFailed(String(stringValue.dropFirst(6))))
     } else {
       switch stringValue {
       case "connecting": self = .connecting

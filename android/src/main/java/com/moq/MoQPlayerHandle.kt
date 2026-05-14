@@ -65,6 +65,10 @@ class MoQPlayerHandle(
             map.putString("type", "trackPaused")
             map.putString("trackKind", event.kind)
           }
+          is Player.Event.TrackSwitched -> {
+            map.putString("type", "trackSwitched")
+            map.putString("trackKind", event.kind)
+          }
           is Player.Event.TrackStopped -> {
             map.putString("type", "trackStopped")
             map.putString("trackKind", event.kind)

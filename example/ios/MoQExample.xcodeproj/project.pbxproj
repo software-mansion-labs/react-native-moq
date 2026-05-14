@@ -527,7 +527,7 @@
 			repositoryURL = "https://github.com/software-mansion-labs/moq-kit";
 			requirement = {
 				kind = exactVersion;
-				version = "0.0.1-alpha5";
+				version = 0.1.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
