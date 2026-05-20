@@ -1,13 +1,13 @@
 {
-  "originHash" : "f224ccdca576bf1dc13b3f3db627236d1c79e2ae7214a1674a69ac74932623c0",
+  "originHash" : "6c124151aebf9b9f2f9a59aec6e6af1c5e65462a3137a1ffb4d12ff04b67f614",
   "pins" : [
     {
       "identity" : "moq-kit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/software-mansion-labs/moq-kit.git",
       "state" : {
-        "revision" : "5717deaeeed77acd86e0b2786243a411ed5e3046",
-        "version" : "0.1.0"
+        "revision" : "c6535e66a1d1ecea475e5cd02edfafd9a2732f48",
+        "version" : "0.1.2"
       }
     }
   ],
