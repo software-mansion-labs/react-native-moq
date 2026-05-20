@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import { EventEmitter, type EventSubscription } from './EventEmitter';
 import NativeMoQPublisher from './NativeMoQPublisher';
@@ -9,6 +9,13 @@ export type PublisherState =
   | 'idle'
   | 'connecting'
   | 'publishing'
+  | 'stopped'
+  | `error:${string}`;
+
+export type ScreenBroadcastState =
+  | 'idle'
+  | 'connecting'
+  | 'broadcasting'
   | 'stopped'
   | `error:${string}`;
 
@@ -29,6 +36,23 @@ export interface PublishOptions {
   audioSampleRate?: number;
 }
 
+export interface ScreenBroadcastOptions {
+  path: string;
+  // iOS-only. Must match the App Group entitlement on both the host app and
+  // the Broadcast Upload Extension target. Required on iOS, ignored on Android.
+  appGroupIdentifier?: string;
+  // iOS-only: capture app audio (RPSampleBufferType.audioApp). Defaults true.
+  appAudio?: boolean;
+  // Capture mic alongside the screen. Defaults true.
+  mic?: boolean;
+  videoCodec?: VideoCodec;
+  width?: number;
+  height?: number;
+  framerate?: number;
+  audioCodec?: AudioCodec;
+  audioSampleRate?: number;
+}
+
 export type PublisherEvents = {
   stateChange: (event: { state: PublisherState }) => void;
   trackStateChange: (event: {
@@ -36,12 +60,14 @@ export type PublisherEvents = {
     state: PublishedTrackState;
     error?: string;
   }) => void;
+  screenBroadcastStateChange: (event: { state: ScreenBroadcastState }) => void;
 };
 
 export interface Publisher {
   readonly state: PublisherState;
   readonly trackStates: Record<string, PublishedTrackState>;
   readonly lastError: string | null;
+  readonly screenBroadcastState: ScreenBroadcastState;
   readonly emitter: EventEmitter<PublisherEvents>;
   addListener<TEventName extends keyof PublisherEvents>(
     eventName: TEventName,
@@ -50,6 +76,14 @@ export interface Publisher {
   publish(opts: PublishOptions): void;
   stop(): void;
   flipCamera(): void;
+  // Persist the screen-broadcast config. On iOS this writes to the App Group
+  // descriptor store so the Broadcast Upload Extension can read it on launch.
+  // On Android this caches it for the next startScreenBroadcast() call.
+  configureScreenBroadcast(opts: ScreenBroadcastOptions): void;
+  // Android-only: starts the foreground MediaProjection service. On iOS this
+  // rejects — the user must tap the <BroadcastPickerView/> to start.
+  startScreenBroadcast(): Promise<void>;
+  stopScreenBroadcast(): void;
 }
 
 export function usePublisher(url: string): Publisher {
@@ -58,6 +92,8 @@ export function usePublisher(url: string): Publisher {
     Record<string, PublishedTrackState>
   >({});
   const [lastError, setLastError] = useState<string | null>(null);
+  const [screenBroadcastState, setScreenBroadcastState] =
+    useState<ScreenBroadcastState>('idle');
 
   const urlRef = useRef(url);
   urlRef.current = url;
@@ -97,11 +133,22 @@ export function usePublisher(url: string): Publisher {
         emitter.emit('trackStateChange', { name, state: trackState, error });
       }
     );
+    const screenSub = publisherEmitter.addListener(
+      'screenBroadcastStateChanged',
+      (event) => {
+        const { state: rawState } = event as { state: string };
+        const typedState = rawState as ScreenBroadcastState;
+        setScreenBroadcastState(typedState);
+        emitter.emit('screenBroadcastStateChange', { state: typedState });
+      }
+    );
 
     return () => {
       stateSub.remove();
       trackSub.remove();
+      screenSub.remove();
       NativeMoQPublisher.stop();
+      NativeMoQPublisher.stopScreenBroadcast();
     };
   }, []);
 
@@ -118,6 +165,25 @@ export function usePublisher(url: string): Publisher {
     NativeMoQPublisher.flipCamera();
   }, []);
 
+  const configureScreenBroadcast = useCallback(
+    (opts: ScreenBroadcastOptions) => {
+      NativeMoQPublisher.configureScreenBroadcast(
+        urlRef.current,
+        JSON.stringify(opts)
+      );
+    },
+    []
+  );
+
+  const startScreenBroadcast = useCallback(
+    () => NativeMoQPublisher.startScreenBroadcast(),
+    []
+  );
+
+  const stopScreenBroadcast = useCallback(() => {
+    NativeMoQPublisher.stopScreenBroadcast();
+  }, []);
+
   const addListener = useCallback(
     <TEventName extends keyof PublisherEvents>(
       eventName: TEventName,
@@ -126,14 +192,33 @@ export function usePublisher(url: string): Publisher {
     []
   );
 
-  return {
-    state,
-    trackStates,
-    lastError,
-    emitter: emitterRef.current,
-    addListener,
-    publish,
-    stop,
-    flipCamera,
-  };
+  return useMemo(
+    () => ({
+      state,
+      trackStates,
+      lastError,
+      screenBroadcastState,
+      emitter: emitterRef.current,
+      addListener,
+      publish,
+      stop,
+      flipCamera,
+      configureScreenBroadcast,
+      startScreenBroadcast,
+      stopScreenBroadcast,
+    }),
+    [
+      state,
+      trackStates,
+      lastError,
+      screenBroadcastState,
+      addListener,
+      publish,
+      stop,
+      flipCamera,
+      configureScreenBroadcast,
+      startScreenBroadcast,
+      stopScreenBroadcast,
+    ]
+  );
 }

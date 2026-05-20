@@ -12,8 +12,35 @@
 		50A47D9C2F92BC860074E548 /* MoQKit in Frameworks */ = {isa = PBXBuildFile; productRef = 50A47D9B2F92BC860074E548 /* MoQKit */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		B02B000000000000B0000001 /* SampleHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B01A000000000000B0000001 /* SampleHandler.swift */; };
+		B02B000000000000B0000002 /* MoQKit in Frameworks */ = {isa = PBXBuildFile; productRef = B090000000000000B0000001 /* MoQKit */; };
+		B02B000000000000B0000003 /* MoQBroadcastUpload.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B01A000000000000B0000004 /* MoQBroadcastUpload.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BE9A4BDF26517AB5BCE9115A /* Pods_MoQExample.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3006685728BD44382A12A0C1 /* Pods_MoQExample.framework */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B080000000000000B0000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B04D000000000000B0000001;
+			remoteInfo = MoQBroadcastUpload;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B06F000000000000B0000001 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B02B000000000000B0000003 /* MoQBroadcastUpload.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		13B07F961A680F5B00A75B9A /* MoQExample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MoQExample.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -25,6 +52,11 @@
 		5709B34CF0A7D63546082F79 /* Pods-MoQExample.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MoQExample.release.xcconfig"; path = "Target Support Files/Pods-MoQExample/Pods-MoQExample.release.xcconfig"; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = MoQExample/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = MoQExample/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		B01A000000000000B0000001 /* SampleHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleHandler.swift; sourceTree = "<group>"; };
+		B01A000000000000B0000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B01A000000000000B0000003 /* MoQBroadcastUpload.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoQBroadcastUpload.entitlements; sourceTree = "<group>"; };
+		B01A000000000000B0000004 /* MoQBroadcastUpload.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MoQBroadcastUpload.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B01A000000000000B0000005 /* MoQExample.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = MoQExample.entitlements; path = MoQExample/MoQExample.entitlements; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -35,6 +67,14 @@
 			files = (
 				BE9A4BDF26517AB5BCE9115A /* Pods_MoQExample.framework in Frameworks */,
 				50A47D9C2F92BC860074E548 /* MoQKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B05E000000000000B0000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B02B000000000000B0000002 /* MoQKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -49,6 +89,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				B01A000000000000B0000005 /* MoQExample.entitlements */,
 			);
 			name = MoQExample;
 			sourceTree = "<group>";
@@ -73,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07FAE1A68108700A75B9A /* MoQExample */,
+				B03C000000000000B0000001 /* MoQBroadcastUpload */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
@@ -87,8 +129,19 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* MoQExample.app */,
+				B01A000000000000B0000004 /* MoQBroadcastUpload.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B03C000000000000B0000001 /* MoQBroadcastUpload */ = {
+			isa = PBXGroup;
+			children = (
+				B01A000000000000B0000001 /* SampleHandler.swift */,
+				B01A000000000000B0000002 /* Info.plist */,
+				B01A000000000000B0000003 /* MoQBroadcastUpload.entitlements */,
+			);
+			path = MoQBroadcastUpload;
 			sourceTree = "<group>";
 		};
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
@@ -114,15 +167,37 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */,
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
+				B06F000000000000B0000001 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B080000000000000B0000002 /* PBXTargetDependency */,
 			);
 			name = MoQExample;
 			productName = MoQExample;
 			productReference = 13B07F961A680F5B00A75B9A /* MoQExample.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B04D000000000000B0000001 /* MoQBroadcastUpload */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B070000000000000B0000003 /* Build configuration list for PBXNativeTarget "MoQBroadcastUpload" */;
+			buildPhases = (
+				B05E000000000000B0000001 /* Sources */,
+				B05E000000000000B0000002 /* Frameworks */,
+				B05E000000000000B0000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MoQBroadcastUpload;
+			packageProductDependencies = (
+				B090000000000000B0000001 /* MoQKit */,
+			);
+			productName = MoQBroadcastUpload;
+			productReference = B01A000000000000B0000004 /* MoQBroadcastUpload.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -134,6 +209,9 @@
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
 						LastSwiftMigration = 1120;
+					};
+					B04D000000000000B0000001 = {
+						CreatedOnToolsVersion = 15.0;
 					};
 				};
 			};
@@ -154,6 +232,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* MoQExample */,
+				B04D000000000000B0000001 /* MoQBroadcastUpload */,
 			);
 		};
 /* End PBXProject section */
@@ -166,6 +245,13 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				05A4443FFAD88909E1529436 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B05E000000000000B0000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -196,9 +282,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MoQExample/Pods-MoQExample-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MoQExample/Pods-MoQExample-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -235,9 +325,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MoQExample/Pods-MoQExample-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MoQExample/Pods-MoQExample-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -255,7 +349,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B05E000000000000B0000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B02B000000000000B0000001 /* SampleHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B080000000000000B0000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B04D000000000000B0000001 /* MoQBroadcastUpload */;
+			targetProxy = B080000000000000B0000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
@@ -264,6 +374,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = MoQExample/MoQExample.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = MoQExample/Info.plist;
@@ -294,6 +405,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = MoQExample/MoQExample.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = MoQExample/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
@@ -498,6 +610,60 @@
 			};
 			name = Release;
 		};
+		B070000000000000B0000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MoQBroadcastUpload/MoQBroadcastUpload.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MoQBroadcastUpload/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = moq.example.MoQBroadcastUpload;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B070000000000000B0000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MoQBroadcastUpload/MoQBroadcastUpload.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MoQBroadcastUpload/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = moq.example.MoQBroadcastUpload;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -519,6 +685,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		B070000000000000B0000003 /* Build configuration list for PBXNativeTarget "MoQBroadcastUpload" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B070000000000000B0000001 /* Debug */,
+				B070000000000000B0000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -534,6 +709,11 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		50A47D9B2F92BC860074E548 /* MoQKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50A47D9A2F92BC860074E548 /* XCRemoteSwiftPackageReference "moq-kit" */;
+			productName = MoQKit;
+		};
+		B090000000000000B0000001 /* MoQKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 50A47D9A2F92BC860074E548 /* XCRemoteSwiftPackageReference "moq-kit" */;
 			productName = MoQKit;

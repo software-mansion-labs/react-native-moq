@@ -20,11 +20,15 @@ export type {
   PublisherState,
   PublishOptions,
   PublishedTrackState,
+  ScreenBroadcastOptions,
+  ScreenBroadcastState,
   VideoCodec,
   AudioCodec,
 } from './usePublisher';
 export { PublisherView } from './PublisherView';
 export type { PublisherViewProps, CameraPosition } from './PublisherView';
+export { BroadcastPickerView } from './BroadcastPickerView';
+export type { BroadcastPickerViewProps } from './BroadcastPickerView';
 export { useVideoPlayer } from './useVideoPlayer';
 export { useAudioPlayer } from './useAudioPlayer';
 export { useEvent, useEventListener } from './useEvent';

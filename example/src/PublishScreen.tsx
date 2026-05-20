@@ -11,10 +11,20 @@ import {
   View,
 } from 'react-native';
 import {
+  BroadcastPickerView,
   PublisherView,
   usePublisher,
   type CameraPosition,
 } from 'react-native-moq';
+
+// Must match the App Group in MoQBroadcastUpload.entitlements +
+// MoQExample.entitlements. iOS-only.
+const SCREEN_APP_GROUP = 'group.moq.example.screenbroadcast';
+// Must match the Broadcast Upload Extension's bundle identifier in pbxproj.
+const SCREEN_PREFERRED_EXT = 'moq.example.MoQBroadcastUpload';
+// Appended to the main broadcast path to derive the screen-share broadcast's
+// path. Matches moq-kit's iOS demo convention.
+const SCREEN_PATH_SUFFIX = '/screenshare';
 
 async function requestCapturePermissions() {
   if (Platform.OS !== 'android') return;
@@ -35,6 +45,7 @@ export function PublishScreen({
   const [cameraPosition, setCameraPosition] = useState<CameraPosition>('front');
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [screenEnabled, setScreenEnabled] = useState(false);
 
   const publisher = usePublisher(url);
 
@@ -42,10 +53,59 @@ export function PublishScreen({
     requestCapturePermissions();
   }, []);
 
+  const screenPath = path + SCREEN_PATH_SUFFIX;
+
+  // Keep the native side's screen-broadcast descriptor in sync with the
+  // current relay URL and derived screen path. On iOS this writes the App
+  // Group descriptor the Broadcast Upload Extension reads at launch; on
+  // Android it caches config for the next startScreenBroadcast() call.
+  useEffect(() => {
+    publisher.configureScreenBroadcast({
+      path: screenPath,
+      appGroupIdentifier: SCREEN_APP_GROUP,
+      appAudio: true,
+      mic: true,
+    });
+  }, [publisher, screenPath, url]);
+
+  const screenBroadcasting =
+    publisher.screenBroadcastState === 'broadcasting' ||
+    publisher.screenBroadcastState === 'connecting';
+
   const isPublishing =
     publisher.state === 'publishing' || publisher.state === 'connecting';
   const canPublish =
     !isPublishing && (cameraEnabled || micEnabled) && path.length > 0;
+
+  // On Android the toggle drives the foreground service directly (the system
+  // consent dialog is part of startScreenBroadcast). On iOS the toggle only
+  // expresses intent — the user must tap the system broadcast picker, and the
+  // extension reports back its real state via screenBroadcastState.
+  const onToggleScreen = (next: boolean) => {
+    setScreenEnabled(next);
+    if (Platform.OS === 'android') {
+      if (next) {
+        publisher.startScreenBroadcast().catch(() => setScreenEnabled(false));
+      } else {
+        publisher.stopScreenBroadcast();
+      }
+    } else if (!next && screenBroadcasting) {
+      publisher.stopScreenBroadcast();
+    }
+  };
+
+  // Reflect native screen state back into the toggle so iOS users see the
+  // switch flip on when the system picker actually starts the broadcast, and
+  // off when it stops.
+  useEffect(() => {
+    if (screenBroadcasting) setScreenEnabled(true);
+    else if (
+      publisher.screenBroadcastState === 'idle' ||
+      publisher.screenBroadcastState === 'stopped'
+    ) {
+      setScreenEnabled(false);
+    }
+  }, [publisher.screenBroadcastState, screenBroadcasting]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -65,7 +125,7 @@ export function PublishScreen({
         placeholder="Broadcast path (e.g. live/test)"
         autoCapitalize="none"
         autoCorrect={false}
-        editable={!isPublishing}
+        editable={!isPublishing && !screenBroadcasting}
       />
 
       <View style={styles.preview}>
@@ -97,6 +157,19 @@ export function PublishScreen({
           disabled={isPublishing}
         />
       </Row>
+      <Row label="Screen">
+        {Platform.OS === 'ios' ? (
+          // RPSystemBroadcastPickerView IS the toggle on iOS — tapping it
+          // opens the system sheet that starts/stops the extension.
+          <BroadcastPickerView
+            preferredExtension={SCREEN_PREFERRED_EXT}
+            tintColor="#2563eb"
+            style={styles.broadcastPicker}
+          />
+        ) : (
+          <Switch value={screenEnabled} onValueChange={onToggleScreen} />
+        )}
+      </Row>
 
       <Button
         title={isPublishing ? 'Stop' : 'Publish'}
@@ -120,6 +193,10 @@ export function PublishScreen({
           {name}: {state}
         </Text>
       ))}
+
+      <Text style={styles.stateLabel}>
+        Screen: {publisher.screenBroadcastState} ({screenPath})
+      </Text>
     </ScrollView>
   );
 }
@@ -170,4 +247,5 @@ const styles = StyleSheet.create({
   stateLabel: { fontSize: 13, color: '#6b7280' },
   error: { fontSize: 13, color: '#dc2626' },
   trackState: { fontSize: 12, color: '#6b7280' },
+  broadcastPicker: { width: 44, height: 44 },
 });
