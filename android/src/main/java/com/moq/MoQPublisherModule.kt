@@ -306,6 +306,31 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
     stopScreenBroadcastService()
   }
 
+  // Mirror moq-kit's iOS demo CodecConfigView gating. JS uses this to hide
+  // codec picker options whose encoder would fail to initialize — moq-kit's
+  // Android layer reports those failures as a silent stop, so filtering at
+  // the UI layer is the only way to keep the publisher from terminating.
+  override fun getSupportedCodecs(): WritableMap {
+    val map = Arguments.createMap()
+    val video = Arguments.createArray()
+    VideoEncoderConfig.supportedCodecs().forEach {
+      when (it) {
+        VideoCodec.H264 -> video.pushString("h264")
+        VideoCodec.H265 -> video.pushString("h265")
+      }
+    }
+    val audio = Arguments.createArray()
+    AudioEncoderConfig.supportedCodecs().forEach {
+      when (it) {
+        AudioCodec.OPUS -> audio.pushString("opus")
+        AudioCodec.AAC -> audio.pushString("aac")
+      }
+    }
+    map.putArray("video", video)
+    map.putArray("audio", audio)
+    return map
+  }
+
   private fun stopScreenBroadcastService() {
     val ctx = reactApplicationContext
     val intent = Intent(ctx, MoQScreenBroadcastService::class.java)

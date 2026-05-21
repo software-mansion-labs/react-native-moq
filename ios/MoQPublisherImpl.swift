@@ -95,6 +95,26 @@ public enum MoQScreenBroadcastSharedKeys {
     Task { @MainActor in self._stopScreenBroadcast() }
   }
 
+  // Mirror moq-kit's iOS demo CodecConfigView gating — return only codecs
+  // whose encoder will actually initialize on this device.
+  @objc public func supportedCodecs() -> [String: [String]] {
+    let video = VideoEncoderConfig.supportedCodecs().map { codec -> String in
+      switch codec {
+      case .h264: return "h264"
+      case .h265: return "h265"
+      @unknown default: return ""
+      }
+    }.filter { !$0.isEmpty }
+    let audio = AudioEncoderConfig.supportedCodecs().map { codec -> String in
+      switch codec {
+      case .opus: return "opus"
+      case .aac: return "aac"
+      @unknown default: return ""
+      }
+    }.filter { !$0.isEmpty }
+    return ["video": video, "audio": audio]
+  }
+
   // MARK: - Preview
 
   @MainActor

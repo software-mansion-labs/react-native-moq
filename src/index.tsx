@@ -13,7 +13,7 @@ export { useMiniPlayerControls } from './MiniPlayerContext';
 export type { MiniPlayerControlsAPI } from './MiniPlayerContext';
 export { useSession } from './useSession';
 export { useBroadcasts } from './useBroadcasts';
-export { usePublisher } from './usePublisher';
+export { usePublisher, getSupportedCodecs } from './usePublisher';
 export type {
   Publisher,
   PublisherEvents,
@@ -22,6 +22,7 @@ export type {
   PublishedTrackState,
   ScreenBroadcastOptions,
   ScreenBroadcastState,
+  SupportedCodecs,
   VideoCodec,
   AudioCodec,
 } from './usePublisher';

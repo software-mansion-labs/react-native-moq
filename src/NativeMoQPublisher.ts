@@ -4,6 +4,13 @@ export interface Spec extends TurboModule {
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 
+  // Returns the set of codecs whose encoder can actually be initialized on
+  // this device. Lets the JS layer hide picker options that would otherwise
+  // silently terminate the publisher when selected (Android's moq-kit layer
+  // doesn't surface encoder-init failures as error states).
+  // Shape: { video: ('h264' | 'h265')[]; audio: ('opus' | 'aac')[] }
+  getSupportedCodecs(): { video: string[]; audio: string[] };
+
   // The publisher is a singleton: at most one active publish at a time, and
   // the preview camera is shared between the <PublisherView /> preview and
   // the live capture. Mounting a PublisherView ref-counts startPreview.

@@ -553,6 +553,237 @@ interface StallStats {
 }
 ```
 
+## Publishing
+
+The publisher captures audio + video from the device (camera/microphone, or the system screen) and pushes them to the same MoQ relay subscribers connect to. There is at most one active publish at a time — the publisher is a singleton and the preview camera is shared between the on-screen `<PublisherView>` and the live capture.
+
+```tsx
+import { useEffect } from 'react';
+import { Button, PermissionsAndroid, Platform } from 'react-native';
+import { PublisherView, usePublisher } from 'react-native-moq';
+
+function PublishScreen() {
+  const publisher = usePublisher('http://relay.example.com:4443');
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+      ]);
+    }
+  }, []);
+
+  return (
+    <>
+      <PublisherView style={{ aspectRatio: 9 / 16 }} cameraPosition="front" />
+      <Button
+        title={publisher.state === 'publishing' ? 'Stop' : 'Publish'}
+        onPress={() => {
+          if (publisher.state === 'publishing') publisher.stop();
+          else publisher.publish({ path: 'live/test' });
+        }}
+      />
+    </>
+  );
+}
+```
+
+The host app is responsible for requesting `CAMERA` / `RECORD_AUDIO` runtime permissions on Android, and for adding `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` to `Info.plist` on iOS. The library does not request these for you.
+
+---
+
+### `usePublisher(url)`
+
+Manages a single publishing session against a MoQ relay. Mounting the hook does not start anything — calling `publish()` opens the relay session, creates a `Publisher`, and starts the configured tracks; calling `stop()` tears everything down. Re-renders are driven by native state events (`publisherStateChanged`, `publisherTrackStateChanged`, `screenBroadcastStateChanged`).
+
+```tsx
+const publisher = usePublisher('http://relay.example.com:4443');
+
+publisher.publish({
+  path: 'live/cam-1',
+  cameraEnabled: true,
+  micEnabled: true,
+  videoCodec: 'h265',     // optional — defaults to the best supported codec
+  width: 1280,
+  height: 720,
+  framerate: 30,
+  audioCodec: 'opus',
+  audioSampleRate: 48000,
+});
+```
+
+Returns a `Publisher` object:
+
+| Property / Method | Type | Description |
+|---|---|---|
+| `state` | `PublisherState` | Current publishing state |
+| `trackStates` | `Record<string, PublishedTrackState>` | Per-track lifecycle, keyed by track name (`"camera"`, `"mic"`, `"screen"`, …) |
+| `lastError` | `string \| null` | Last error message, or `null` if the publisher is healthy |
+| `screenBroadcastState` | `ScreenBroadcastState` | Independent state machine for the screen-broadcast track |
+| `emitter` | `EventEmitter<PublisherEvents>` | Stable emitter for publisher events |
+| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a publisher event imperatively; call `.remove()` to unsubscribe |
+| `publish(opts)` | `(opts: PublishOptions) => void` | Connect to the relay and start publishing the configured tracks |
+| `stop()` | `() => void` | Stop all tracks, tear down the relay session, and clear `trackStates` |
+| `flipCamera()` | `() => void` | Switch the active camera between front and back |
+| `configureScreenBroadcast(opts)` | `(opts: ScreenBroadcastOptions) => void` | Persist screen-broadcast config (relay URL, path, encoder settings). See [Screen broadcasting](#screen-broadcasting) |
+| `startScreenBroadcast()` | `() => Promise<void>` | Android only — starts the foreground MediaProjection service. Rejects on iOS |
+| `stopScreenBroadcast()` | `() => void` | Stop the active screen broadcast |
+
+**`PublisherState`** is one of: `'idle'` · `'connecting'` · `'publishing'` · `'stopped'` · `` `error:${string}` ``
+
+**`PublishedTrackState`** is one of: `'idle'` · `'starting'` · `'active'` · `'stopped'`
+
+**`ScreenBroadcastState`** is one of: `'idle'` · `'connecting'` · `'broadcasting'` · `'stopped'` · `` `error:${string}` ``
+
+---
+
+### `<PublisherView />`
+
+Renders the publisher's camera preview. Mounting the view starts the camera; unmounting stops it — unless `publish()` is in progress, in which case the camera keeps running until the publish stops (the preview and the live capture share a single `CameraCapture`).
+
+```tsx
+<PublisherView cameraPosition="front" style={{ aspectRatio: 9 / 16 }} />
+```
+
+| Prop | Type | Required | Description |
+|---|---|---|---|
+| `cameraPosition` | `'front' \| 'back'` | No | Initial camera. Defaults to `'front'`. Call `publisher.flipCamera()` to switch at runtime |
+| `style` | `ViewStyle` | No | Standard React Native style prop |
+
+The component accepts the rest of the standard `ViewProps` and forwards them to the native view.
+
+---
+
+### `getSupportedCodecs()`
+
+Synchronous query for the codecs whose encoder will actually initialize on this device. Use it to gate codec pickers in publishing UI — selecting a codec the device can't encode silently terminates the broadcast on Android (moq-kit reports the failure as a clean stop, not an error state).
+
+```tsx
+import { getSupportedCodecs } from 'react-native-moq';
+
+const SUPPORTED = getSupportedCodecs();
+// → { video: ['h264', 'h265'], audio: ['opus', 'aac'] }
+
+const initialCodec = SUPPORTED.video.includes('h265') ? 'h265' : 'h264';
+```
+
+Returns a `SupportedCodecs`:
+
+```ts
+interface SupportedCodecs {
+  video: ('h264' | 'h265')[];
+  audio: ('opus' | 'aac')[];
+}
+```
+
+The result depends only on hardware/OS capabilities and won't change at runtime, so it's safe to call once at module load and cache the result.
+
+---
+
+### Screen broadcasting
+
+Screen capture runs out-of-process on iOS (a `Broadcast Upload Extension`) and in a foreground `Service` on Android. It publishes to its own broadcast path (independent of the camera/mic publish), so subscribers can pick it up as a separate stream.
+
+In all cases, call `publisher.configureScreenBroadcast(opts)` first to persist the relay URL + path + encoder config — this is what the extension/service reads at launch.
+
+```tsx
+publisher.configureScreenBroadcast({
+  path: 'live/cam-1/screenshare',
+  appGroupIdentifier: 'group.com.example.screenbroadcast', // iOS only
+  appAudio: true, // iOS only — capture audio from the broadcasting app
+  mic: true,
+  videoCodec: 'h264',
+  width: 1280,
+  height: 720,
+  framerate: 30,
+});
+```
+
+**iOS** cannot start a system broadcast programmatically — the user must tap `<BroadcastPickerView>` to open the system sheet. `startScreenBroadcast()` always rejects. The extension reports its real state back through `publisher.screenBroadcastState`.
+
+```tsx
+import { BroadcastPickerView } from 'react-native-moq';
+
+<BroadcastPickerView
+  preferredExtension="com.example.app.MyBroadcastUpload"
+  tintColor="#2563eb"
+  style={{ width: 44, height: 44 }}
+/>
+```
+
+Setup on iOS requires:
+- A `Broadcast Upload Extension` target in your Xcode project. The library ships `MoQReplayKitBroadcastSampleHandler` — subclass it in your extension and override `makeReplayKitBroadcastConfiguration` if you need custom encoder settings.
+- An `App Group` entitlement on **both** the host app and the extension. Pass its identifier as `appGroupIdentifier` so the two processes can share the broadcast descriptor.
+- The extension's bundle identifier supplied via `preferredExtension` so the picker pre-selects it.
+
+**Android** drives the foreground service directly. `startScreenBroadcast()` triggers the system `MediaProjection` consent dialog and only resolves once the user grants it.
+
+```tsx
+const onToggleScreen = (next: boolean) => {
+  if (next) {
+    publisher
+      .startScreenBroadcast()
+      .catch(() => {/* user denied consent */});
+  } else {
+    publisher.stopScreenBroadcast();
+  }
+};
+```
+
+Setup on Android requires the `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PROJECTION` permissions and the `MoQScreenBroadcastService` service declaration in `AndroidManifest.xml` (handled by the library's manifest merger — no manual step needed in typical apps).
+
+`<BroadcastPickerView>` renders nothing on Android, so the same JSX can be conditionally branched on `Platform.OS` without crashing.
+
+---
+
+### Publisher events
+
+| Event | Payload | Description |
+|---|---|---|
+| `stateChange` | `{ state: PublisherState }` | Publisher state transitioned |
+| `trackStateChange` | `{ name, state, error? }` | A published track changed lifecycle state (or errored) |
+| `screenBroadcastStateChange` | `{ state: ScreenBroadcastState }` | Screen-broadcast state transitioned |
+
+Subscribe via `useEventListener`, `useEvent`, or `publisher.addListener` — same patterns as the player/session events documented above.
+
+---
+
+### Types
+
+#### `PublishOptions`
+
+```ts
+interface PublishOptions {
+  path: string;            // Broadcast path published to the relay
+  cameraEnabled?: boolean; // Default: true
+  micEnabled?: boolean;    // Default: true
+  videoCodec?: VideoCodec; // 'h264' | 'h265'
+  width?: number;          // Default: 1280
+  height?: number;         // Default: 720
+  framerate?: number;      // Default: 30
+  audioCodec?: AudioCodec; // 'opus' | 'aac'
+  audioSampleRate?: number;// Default: 48000
+}
+```
+
+#### `ScreenBroadcastOptions`
+
+```ts
+interface ScreenBroadcastOptions {
+  path: string;
+  appGroupIdentifier?: string; // iOS — required there, ignored on Android
+  appAudio?: boolean;          // iOS only, defaults true
+  mic?: boolean;               // defaults true
+  videoCodec?: VideoCodec;
+  width?: number;
+  height?: number;
+  framerate?: number;
+  audioCodec?: AudioCodec;
+  audioSampleRate?: number;
+}
+```
+
 ## Advanced usage
 
 ### Quality / rendition switching

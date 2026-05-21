@@ -24,6 +24,23 @@ export type PublishedTrackState = 'idle' | 'starting' | 'active' | 'stopped';
 export type VideoCodec = 'h264' | 'h265';
 export type AudioCodec = 'opus' | 'aac';
 
+export interface SupportedCodecs {
+  video: VideoCodec[];
+  audio: AudioCodec[];
+}
+
+// Synchronous query for codecs whose encoder can actually be initialized on
+// this device. Use this to gate codec picker options in publishing UI —
+// otherwise selecting an unsupported codec silently terminates the broadcast
+// on Android (moq-kit reports the failure as a clean stop).
+export function getSupportedCodecs(): SupportedCodecs {
+  const result = NativeMoQPublisher.getSupportedCodecs();
+  return {
+    video: (result.video as VideoCodec[]) ?? [],
+    audio: (result.audio as AudioCodec[]) ?? [],
+  };
+}
+
 export interface PublishOptions {
   path: string;
   cameraEnabled?: boolean;

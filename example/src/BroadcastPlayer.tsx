@@ -1,4 +1,8 @@
-import type { BroadcastInfo } from 'react-native-moq';
+import type {
+  AudioTrackInfo,
+  BroadcastInfo,
+  VideoTrackInfo,
+} from 'react-native-moq';
 import { useEffect, useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 import {
@@ -132,6 +136,13 @@ function VideoSection({
         videoAspectRatio={videoAspectRatio}
       />
 
+      <TrackInfoPills
+        video={activeTrack}
+        audio={broadcast.audioTracks.find(
+          (t) => t.name === player.currentAudioTrackName
+        )}
+      />
+
       {sortedVideoTracks.length > 1 && (
         <RenditionPicker
           tracks={sortedVideoTracks}
@@ -199,6 +210,12 @@ function AudioSection({
         </Text>
       </View>
 
+      <TrackInfoPills
+        audio={broadcast.audioTracks.find(
+          (t) => t.name === player.currentAudioTrackName
+        )}
+      />
+
       <Button
         title={player.isPlaying ? 'Pause' : 'Resume'}
         onPress={player.isPlaying ? player.pause : player.play}
@@ -206,6 +223,39 @@ function AudioSection({
 
       {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
     </>
+  );
+}
+
+// Mirrors moq-kit's iOS demo SessionPlayerView InfoPill row — shows the
+// currently-playing track's codec / dimensions / sample rate.
+function TrackInfoPills({
+  video,
+  audio,
+}: {
+  video?: VideoTrackInfo;
+  audio?: AudioTrackInfo;
+}) {
+  if (!video && !audio) return null;
+  return (
+    <View style={styles.pillRow}>
+      {video && <InfoPill text={video.codec.toUpperCase()} />}
+      {video && video.width && video.height && (
+        <InfoPill text={`${video.width}×${video.height}`} />
+      )}
+      {audio && (
+        <InfoPill
+          text={`${audio.codec.toUpperCase()} ${audio.sampleRate} Hz`}
+        />
+      )}
+    </View>
+  );
+}
+
+function InfoPill({ text }: { text: string }) {
+  return (
+    <View style={styles.pill}>
+      <Text style={styles.pillText}>{text}</Text>
+    </View>
   );
 }
 
@@ -262,6 +312,22 @@ const styles = StyleSheet.create({
   },
   audioStatusText: {
     fontSize: 14,
+    color: '#374151',
+  },
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  pill: {
+    backgroundColor: '#e5e7eb',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  pillText: {
+    fontSize: 11,
+    fontWeight: '500',
     color: '#374151',
   },
 });
