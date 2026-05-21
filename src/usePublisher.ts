@@ -128,7 +128,6 @@ export function usePublisher(url: string): Publisher {
         if (typedState.startsWith('error:')) {
           setLastError(typedState.slice('error:'.length));
         } else if (typedState === 'idle') {
-          setLastError(null);
           setTrackStates({});
         }
         emitter.emit('stateChange', { state: typedState });
@@ -170,6 +169,7 @@ export function usePublisher(url: string): Publisher {
   }, []);
 
   const publish = useCallback((opts: PublishOptions) => {
+    setLastError(null);
     const { path, ...rest } = opts;
     NativeMoQPublisher.publish(urlRef.current, path, JSON.stringify(rest));
   }, []);
