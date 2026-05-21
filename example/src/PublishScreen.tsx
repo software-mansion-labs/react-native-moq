@@ -31,8 +31,8 @@ const RESOLUTIONS: Record<
   VideoResolution,
   { width: number; height: number; label: string }
 > = {
-  HD: { width: 1280, height: 720, label: 'HD (720p)' },
-  FHD: { width: 1920, height: 1080, label: 'FHD (1080p)' },
+  HD: { width: 720, height: 1280, label: 'HD (720p)' },
+  FHD: { width: 1080, height: 1920, label: 'FHD (1080p)' },
 };
 
 const FRAME_RATES = [24, 30, 60] as const;

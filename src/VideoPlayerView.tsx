@@ -214,6 +214,7 @@ export const VideoPlayerView = forwardRef<
         onEnterFullscreen={enterFullscreen}
         video={native}
         overlay={children}
+        videoAspectRatio={videoAspectRatio ?? 16 / 9}
       />
     </View>
   );
@@ -345,15 +346,22 @@ function MiniStage({
   onEnterFullscreen,
   video,
   overlay,
+  videoAspectRatio,
 }: {
   player: Player;
   controls: ReactNode;
   onEnterFullscreen: () => void;
-  /** The native video element. Already styled to absolute-fill. */
+  /** The native video element. Styled to absolute-fill its parent. */
   video: ReactNode;
   /** User-provided overlay children. Rendered above the controls layer. */
   overlay: ReactNode;
+  /** Aspect ratio used to letterbox the native video so Android's
+   *  SurfaceView doesn't stretch the buffer to the container shape. */
+  videoAspectRatio: number;
 }) {
+  const [size, setSize] = useState<{ width: number; height: number } | null>(
+    null
+  );
   const [visible, setVisible] = useState(true);
   const opacity = useRef(new Animated.Value(1)).current;
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -406,9 +414,40 @@ function MiniStage({
     [visible, show, onEnterFullscreen, player]
   );
 
+  // Letterbox the native video inside its container, matching the fullscreen
+  // stage. Android's SurfaceView would otherwise stretch the buffer to the
+  // container's shape; iOS's display layer letterboxes natively via
+  // videoGravity, so this is effectively a no-op there beyond the wrapper.
+  let fitBox: { width: number; height: number } | null = null;
+  if (size != null && size.width > 0 && size.height > 0) {
+    const containerAspect = size.width / size.height;
+    fitBox =
+      containerAspect > videoAspectRatio
+        ? {
+            width: size.height * videoAspectRatio,
+            height: size.height,
+          }
+        : {
+            width: size.width,
+            height: size.width / videoAspectRatio,
+          };
+  }
+
   return (
     <MiniPlayerContext.Provider value={api}>
-      {video}
+      <View
+        style={styles.miniVideoContainer}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setSize((prev) =>
+            prev != null && prev.width === width && prev.height === height
+              ? prev
+              : { width, height }
+          );
+        }}
+      >
+        {fitBox != null && <View style={fitBox}>{video}</View>}
+      </View>
       {controls != null && (
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -434,6 +473,11 @@ const styles = StyleSheet.create({
   fullscreenContainer: {
     flex: 1,
     backgroundColor: 'black',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniVideoContainer: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
