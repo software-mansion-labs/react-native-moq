@@ -1,6 +1,8 @@
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useEvent } from './useEvent';
 import { useMiniPlayerControls } from './MiniPlayerContext';
+import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
+import type { Player } from './types';
 
 // Default inline chrome for VideoPlayerView. Mirrors the platform split used
 // by FullscreenControls but scaled down for an embedded view:
@@ -38,6 +40,7 @@ export function MiniPlayerControls() {
   if (Platform.OS === 'ios') {
     return (
       <IOSChrome
+        player={player}
         isPlaying={isPlaying}
         onTogglePlay={onTogglePlay}
         onEnterFullscreen={onEnterFullscreen}
@@ -46,6 +49,7 @@ export function MiniPlayerControls() {
   }
   return (
     <AndroidChrome
+      player={player}
       isPlaying={isPlaying}
       onTogglePlay={onTogglePlay}
       onEnterFullscreen={onEnterFullscreen}
@@ -58,10 +62,12 @@ export function MiniPlayerControls() {
 // ---------------------------------------------------------------------------
 
 function IOSChrome({
+  player,
   isPlaying,
   onTogglePlay,
   onEnterFullscreen,
 }: {
+  player: Player;
   isPlaying: boolean;
   onTogglePlay: () => void;
   onEnterFullscreen: () => void;
@@ -81,6 +87,13 @@ function IOSChrome({
         >
           {isPlaying ? <PauseGlyph size={20} /> : <PlayGlyph size={20} />}
         </Pressable>
+      </View>
+
+      <View style={styles.bottomLeft} pointerEvents="box-none">
+        <View style={styles.volumeRow}>
+          <SpeakerGlyph size={14} volume={player.volume} />
+          <VolumeSlider player={player} width={96} />
+        </View>
       </View>
 
       <View style={styles.bottomRight} pointerEvents="box-none">
@@ -106,10 +119,12 @@ function IOSChrome({
 // ---------------------------------------------------------------------------
 
 function AndroidChrome({
+  player,
   isPlaying,
   onTogglePlay,
   onEnterFullscreen,
 }: {
+  player: Player;
   isPlaying: boolean;
   onTogglePlay: () => void;
   onEnterFullscreen: () => void;
@@ -143,6 +158,13 @@ function AndroidChrome({
         >
           {isPlaying ? <PauseGlyph size={22} /> : <PlayGlyph size={22} />}
         </Pressable>
+      </View>
+
+      <View style={styles.bottomLeft} pointerEvents="box-none">
+        <View style={styles.volumeRow}>
+          <SpeakerGlyph size={14} volume={player.volume} />
+          <VolumeSlider player={player} width={96} />
+        </View>
       </View>
 
       <View style={styles.bottomRight} pointerEvents="box-none">
@@ -269,6 +291,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 8,
     bottom: 8,
+  },
+
+  bottomLeft: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+  },
+
+  volumeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
 
   // iOS — translucent black pills, matching the fullscreen chrome's look.

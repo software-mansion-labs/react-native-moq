@@ -103,6 +103,11 @@ private let audioKeySuffix = "_audio"
     Task { @MainActor in self.playerRefs[broadcastPath]?.switchAudioTrack(name: trackName) }
   }
 
+  @objc(setVolume:volume:)
+  public func setVolume(broadcastPath: String, volume: Float) {
+    Task { @MainActor in self.playerRefs[broadcastPath]?.setVolume(volume) }
+  }
+
   @objc(createAudioOnlyPlayer:)
   public func createAudioOnlyPlayer(broadcastPath: String) {
     Task { @MainActor in

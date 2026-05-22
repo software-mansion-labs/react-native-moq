@@ -96,6 +96,10 @@ RCT_EXPORT_MODULE()
   [[MoQImpl shared] switchAudioTrack:broadcastPath trackName:trackName];
 }
 
+- (void)setVolume:(NSString *)broadcastPath volume:(double)volume {
+  [[MoQImpl shared] setVolume:broadcastPath volume:(float)volume];
+}
+
 - (void)createAudioOnlyPlayer:(NSString *)broadcastPath {
   [[MoQImpl shared] createAudioOnlyPlayer:broadcastPath];
 }

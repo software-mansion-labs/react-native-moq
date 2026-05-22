@@ -26,6 +26,7 @@ class MoQPlayerHandle(
   fun pause() = player.pause()
   fun updateTargetLatency(ms: Int) = player.updateTargetLatency(ms)
   fun setSurface(surface: Surface?) = player.setSurface(surface)
+  fun setVolume(volume: Float) = player.setVolume(volume)
 
   fun switchVideoTrack(trackName: String) {
     player.switchTrack(trackName)

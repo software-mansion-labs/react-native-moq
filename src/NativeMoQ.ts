@@ -22,6 +22,7 @@ export interface Spec extends TurboModule {
   updateTargetLatency(broadcastPath: string, ms: number): void;
   switchVideoTrack(broadcastPath: string, trackName: string): void;
   switchAudioTrack(broadcastPath: string, trackName: string): void;
+  setVolume(broadcastPath: string, volume: number): void;
 
   // Audio-only player (keyed as broadcastPath + "_audio" in native)
   createAudioOnlyPlayer(broadcastPath: string): void;

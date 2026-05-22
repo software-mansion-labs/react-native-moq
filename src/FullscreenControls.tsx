@@ -2,6 +2,8 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEvent } from './useEvent';
 import { useFullscreenControls } from './FullscreenContext';
+import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
+import type { Player } from './types';
 
 // Default fullscreen chrome. The intent is to look like the platform's
 // native video player while staying pure-RN: AVPlayerViewController on iOS
@@ -41,6 +43,7 @@ export function FullscreenControls() {
   if (Platform.OS === 'ios') {
     return (
       <IOSChrome
+        player={player}
         isPlaying={isPlaying}
         insets={insets}
         onTogglePlay={onTogglePlay}
@@ -50,6 +53,7 @@ export function FullscreenControls() {
   }
   return (
     <AndroidChrome
+      player={player}
       isPlaying={isPlaying}
       insets={insets}
       onTogglePlay={onTogglePlay}
@@ -70,11 +74,13 @@ type EdgeInsets = {
 // ---------------------------------------------------------------------------
 
 function IOSChrome({
+  player,
   isPlaying,
   insets,
   onTogglePlay,
   onExit,
 }: {
+  player: Player;
   isPlaying: boolean;
   insets: EdgeInsets;
   onTogglePlay: () => void;
@@ -120,6 +126,23 @@ function IOSChrome({
           {isPlaying ? <PauseGlyph size={28} /> : <PlayGlyph size={28} />}
         </Pressable>
       </View>
+
+      <View
+        style={[
+          styles.bottomBar,
+          {
+            paddingLeft: insets.left + 16,
+            paddingRight: insets.right + 16,
+            paddingBottom: insets.bottom + 12,
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.volumeRow}>
+          <SpeakerGlyph size={16} volume={player.volume} />
+          <VolumeSlider player={player} width={160} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -129,11 +152,13 @@ function IOSChrome({
 // ---------------------------------------------------------------------------
 
 function AndroidChrome({
+  player,
   isPlaying,
   insets,
   onTogglePlay,
   onExit,
 }: {
+  player: Player;
   isPlaying: boolean;
   insets: EdgeInsets;
   onTogglePlay: () => void;
@@ -198,6 +223,23 @@ function AndroidChrome({
         >
           {isPlaying ? <PauseGlyph size={30} /> : <PlayGlyph size={30} />}
         </Pressable>
+      </View>
+
+      <View
+        style={[
+          styles.bottomBar,
+          {
+            paddingLeft: insets.left + 12,
+            paddingRight: insets.right + 12,
+            paddingBottom: insets.bottom + 12,
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.volumeRow}>
+          <SpeakerGlyph size={16} volume={player.volume} />
+          <VolumeSlider player={player} width={160} />
+        </View>
       </View>
     </View>
   );
@@ -288,6 +330,24 @@ const styles = StyleSheet.create({
     top: 0,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+
+  bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  volumeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
 
   center: {

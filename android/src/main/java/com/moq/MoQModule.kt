@@ -200,6 +200,10 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     playerHandles[broadcastPath]?.switchAudioTrack(trackName)
   }
 
+  override fun setVolume(broadcastPath: String, volume: Double) {
+    playerHandles[broadcastPath]?.setVolume(volume.toFloat())
+  }
+
   override fun createAudioOnlyPlayer(broadcastPath: String) {
     val catalog = catalogs[broadcastPath] ?: return
     val audioTrackName = catalog.audioTracks.firstOrNull()?.name ?: return

@@ -77,6 +77,11 @@ export class PlayerHandle {
     if (this.#native) this.#native.switchAudioTrack(trackName);
     else NativeMoQ.switchAudioTrack(this.broadcastPath, trackName);
   }
+
+  setVolume(volume: number) {
+    if (this.#native) this.#native.setVolume(volume);
+    else NativeMoQ.setVolume(this.broadcastPath, volume);
+  }
 }
 
 export interface BroadcastInfo {
@@ -139,6 +144,7 @@ export interface Player {
   readonly playbackStats: PlaybackStats | null;
   readonly currentVideoTrackName?: string;
   readonly currentAudioTrackName?: string;
+  readonly volume: number;
   readonly emitter: EventEmitter<PlayerEvents>;
   addListener<TEventName extends keyof PlayerEvents>(
     eventName: TEventName,
@@ -150,6 +156,7 @@ export interface Player {
   updateTargetLatency(ms: number): void;
   switchVideoTrack(trackName: string): void;
   switchAudioTrack(trackName: string): void;
+  setVolume(volume: number): void;
 }
 
 export interface AudioPlayer {
@@ -157,6 +164,7 @@ export interface AudioPlayer {
   readonly isPlaying: boolean;
   readonly playbackStats: PlaybackStats | null;
   readonly currentAudioTrackName?: string;
+  readonly volume: number;
   readonly emitter: EventEmitter<PlayerEvents>;
   addListener<TEventName extends keyof PlayerEvents>(
     eventName: TEventName,
@@ -167,4 +175,5 @@ export interface AudioPlayer {
   stop(): void;
   updateTargetLatency(ms: number): void;
   switchAudioTrack(trackName: string): void;
+  setVolume(volume: number): void;
 }

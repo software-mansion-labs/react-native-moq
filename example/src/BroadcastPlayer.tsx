@@ -6,7 +6,9 @@ import type {
 import { useEffect, useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 import {
+  SpeakerGlyph,
   VideoPlayerView,
+  VolumeSlider,
   useAudioPlayer,
   useEvent,
   useEventListener,
@@ -221,6 +223,11 @@ function AudioSection({
         onPress={player.isPlaying ? player.pause : player.play}
       />
 
+      <View style={styles.volumeCard}>
+        <SpeakerGlyph size={16} color="#374151" volume={player.volume} />
+        <VolumeSlider player={player} width={200} theme="light" />
+      </View>
+
       {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
     </>
   );
@@ -303,6 +310,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingVertical: 16,
+    paddingHorizontal: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+  },
+  volumeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
     paddingHorizontal: 12,
     backgroundColor: '#f9fafb',
     borderRadius: 8,

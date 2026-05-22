@@ -19,6 +19,7 @@ export function usePlayer(player: PlayerHandle): Player {
   const [currentAudioTrackName, setCurrentAudioTrackName] = useState<
     string | undefined
   >(player.initialAudioTrackName);
+  const [volume, setVolumeState] = useState(1);
 
   const playerRef = useRef(player);
   playerRef.current = player;
@@ -119,6 +120,12 @@ export function usePlayer(player: PlayerHandle): Player {
     playerRef.current.switchAudioTrack(trackName);
   }, []);
 
+  const setVolume = useCallback((next: number) => {
+    const clamped = Math.min(Math.max(next, 0), 1);
+    playerRef.current.setVolume(clamped);
+    setVolumeState(clamped);
+  }, []);
+
   const addListener = useCallback(
     <TEventName extends keyof PlayerEvents>(
       eventName: TEventName,
@@ -133,6 +140,7 @@ export function usePlayer(player: PlayerHandle): Player {
     playbackStats,
     currentVideoTrackName,
     currentAudioTrackName,
+    volume,
     emitter: emitterRef.current,
     addListener,
     play,
@@ -141,5 +149,6 @@ export function usePlayer(player: PlayerHandle): Player {
     updateTargetLatency,
     switchVideoTrack,
     switchAudioTrack,
+    setVolume,
   };
 }

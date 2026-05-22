@@ -70,6 +70,16 @@ Value PlayerHostObject::get(Runtime& rt, const PropNameID& name) {
         });
   }
 
+  if (n == "setVolume") {
+    return Function::createFromHostFunction(
+        rt, name, 1,
+        [ref](Runtime& rt, const Value&, const Value* args,
+              size_t) -> Value {
+          [ref setVolume:(float)args[0].asNumber()];
+          return Value::undefined();
+        });
+  }
+
   if (n == "switchAudioTrack") {
     return Function::createFromHostFunction(
         rt, name, 1,
@@ -90,7 +100,7 @@ Value PlayerHostObject::get(Runtime& rt, const PropNameID& name) {
 
 std::vector<PropNameID> PlayerHostObject::getPropertyNames(Runtime& rt) {
   std::vector<PropNameID> props;
-  props.reserve(7);
+  props.reserve(8);
   props.push_back(PropNameID::forAscii(rt, "broadcastPath"));
   props.push_back(PropNameID::forAscii(rt, "play"));
   props.push_back(PropNameID::forAscii(rt, "pause"));
@@ -98,6 +108,7 @@ std::vector<PropNameID> PlayerHostObject::getPropertyNames(Runtime& rt) {
   props.push_back(PropNameID::forAscii(rt, "updateTargetLatency"));
   props.push_back(PropNameID::forAscii(rt, "switchVideoTrack"));
   props.push_back(PropNameID::forAscii(rt, "switchAudioTrack"));
+  props.push_back(PropNameID::forAscii(rt, "setVolume"));
   return props;
 }
 

@@ -59,6 +59,13 @@ import MoQKit
     }
   }
 
+  @objc(setVolume:)
+  public func setVolume(_ volume: Float) {
+    Task { @MainActor in
+      self.player.setVolume(volume)
+    }
+  }
+
   // MARK: - Event observation
 
   @MainActor

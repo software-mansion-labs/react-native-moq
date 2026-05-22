@@ -38,6 +38,7 @@ export function useAudioPlayer(
     isPlaying: player.isPlaying,
     playbackStats: player.playbackStats,
     currentAudioTrackName: player.currentAudioTrackName,
+    volume: player.volume,
     emitter: player.emitter,
     addListener: player.addListener,
     play: player.play,
@@ -45,6 +46,7 @@ export function useAudioPlayer(
     stop: player.stop,
     updateTargetLatency: player.updateTargetLatency,
     switchAudioTrack: player.switchAudioTrack,
+    setVolume: player.setVolume,
   };
 
   const audioPlayerRef = useRef(audioPlayer);

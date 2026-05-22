@@ -142,6 +142,7 @@ Returns a `Player` object:
 | `playbackStats` | `PlaybackStats \| null` | Live metrics, updated every 500 ms |
 | `currentVideoTrackName` | `string \| undefined` | Name of the active video track |
 | `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
+| `volume` | `number` | Current per-player audio output volume in `0..1`. Defaults to `1`; does not affect other audio playing on the device |
 | `emitter` | `EventEmitter<PlayerEvents>` | Stable emitter for player events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a player event imperatively; call `.remove()` to unsubscribe |
 | `play()` | `() => void` | Start or resume playback |
@@ -150,6 +151,7 @@ Returns a `Player` object:
 | `updateTargetLatency(ms)` | `(ms: number) => void` | Change buffering latency at runtime |
 | `switchVideoTrack(name)` | `(name: string) => void` | Switch to a different video rendition |
 | `switchAudioTrack(name)` | `(name: string) => void` | Switch to a different audio track |
+| `setVolume(volume)` | `(volume: number) => void` | Set per-player audio output volume. Values are clamped to `0..1` |
 
 ---
 
@@ -180,6 +182,7 @@ Returns an `AudioPlayer` object — same shape as `Player` minus the video-only 
 | `isPlaying` | `boolean` | True while audio is actively playing |
 | `playbackStats` | `PlaybackStats \| null` | Live metrics, updated every 500 ms (only audio fields are populated) |
 | `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
+| `volume` | `number` | Current per-player audio output volume in `0..1`. Defaults to `1` |
 | `emitter` | `EventEmitter<PlayerEvents>` | Stable emitter for player events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a player event imperatively |
 | `play()` | `() => void` | Start or resume playback |
@@ -187,6 +190,7 @@ Returns an `AudioPlayer` object — same shape as `Player` minus the video-only 
 | `stop()` | `() => void` | Stop playback and reset state |
 | `updateTargetLatency(ms)` | `(ms: number) => void` | Change buffering latency at runtime |
 | `switchAudioTrack(name)` | `(name: string) => void` | Switch to a different audio track |
+| `setVolume(volume)` | `(volume: number) => void` | Set per-player audio output volume. Values are clamped to `0..1` |
 
 The same `PlayerEvents` apply (`playingChange`, `trackStopped`, `trackSwitched`, `statsUpdate`); `trackSwitched` only fires with `trackKind: 'audio'`. The audio-only stream uses a separate native player from the video+audio one, so both can run alongside each other for the same broadcast.
 
@@ -397,7 +401,7 @@ Throws if called outside a VideoPlayerView inline view. The built-in [`<MiniPlay
 
 ### `<MiniPlayerControls />`
 
-The default inline chrome — a platform-styled centered play/pause plus a bottom-right enter-fullscreen button. Mounted automatically when `<VideoPlayerView miniControls />` (or `miniControls={true}`) is used. Exported so you can compose it into a larger custom chrome:
+The default inline chrome — a platform-styled centered play/pause, a bottom-left volume slider, and a bottom-right enter-fullscreen button. Mounted automatically when `<VideoPlayerView miniControls />` (or `miniControls={true}`) is used. The same volume slider is also rendered along the bottom of the default fullscreen chrome. Exported so you can compose it into a larger custom chrome:
 
 ```tsx
 import { MiniPlayerControls, useMiniPlayerControls } from 'react-native-moq';
@@ -416,6 +420,44 @@ function MiniChromeWithBadge() {
 ```
 
 Takes no props.
+
+---
+
+### `<VolumeSlider />` and `<SpeakerGlyph />`
+
+Building blocks behind the volume control in the default mini and fullscreen chrome. Useful for adding volume to your own custom chrome, or to non-video surfaces like the audio-only example in [`example/src/BroadcastPlayer.tsx`](example/src/BroadcastPlayer.tsx).
+
+```tsx
+import { SpeakerGlyph, VolumeSlider, useAudioPlayer } from 'react-native-moq';
+
+function AudioCard({ broadcast }) {
+  const player = useAudioPlayer(broadcast, (p) => p.play());
+  return (
+    <View style={styles.row}>
+      <SpeakerGlyph size={16} color="#374151" volume={player.volume} />
+      <VolumeSlider player={player} width={200} theme="light" />
+    </View>
+  );
+}
+```
+
+`<VolumeSlider>` props:
+
+| Prop | Type | Required | Description |
+|---|---|---|---|
+| `player` | `Player \| AudioPlayer` | Yes | Player to drive — calls `setVolume()` and reads `volume` |
+| `width` | `number` | No | Pixel width of the slider. Default `140` |
+| `theme` | `'dark' \| 'light'` | No | `'dark'` (default) renders white on a translucent dark scrim — meant for video overlays. `'light'` renders blue-ish on neutral gray — meant for light card backgrounds |
+
+`<SpeakerGlyph>` props:
+
+| Prop | Type | Required | Description |
+|---|---|---|---|
+| `size` | `number` | No | Icon size in pixels. Default `16` |
+| `volume` | `number` | No | `0..1`; selects how many of the three wave arcs are filled. `0` shows the mute slash. Default `1` |
+| `color` | `string` | No | Foreground color. Inactive arcs use a 35%-alpha variant of the same color. Default `#fff` |
+
+Drawn from plain `<View>`s — no SVG or icon-font dependency.
 
 ---
 
@@ -481,6 +523,7 @@ interface AudioPlayer {
   readonly isPlaying: boolean;
   readonly playbackStats: PlaybackStats | null;
   readonly currentAudioTrackName?: string;
+  readonly volume: number;
   readonly emitter: EventEmitter<PlayerEvents>;
   addListener<T extends keyof PlayerEvents>(eventName: T, listener: PlayerEvents[T]): EventSubscription;
   play(): void;
@@ -488,6 +531,7 @@ interface AudioPlayer {
   stop(): void;
   updateTargetLatency(ms: number): void;
   switchAudioTrack(trackName: string): void;
+  setVolume(volume: number): void;
 }
 ```
 
