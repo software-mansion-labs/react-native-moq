@@ -80,6 +80,8 @@ Returns a `Session` object:
 
 | Property / Method | Type | Description |
 |---|---|---|
+| `id` | `string` | Opaque per-hook identifier. Used internally to route native calls and events when multiple sessions are active |
+| `url` | `string` | Relay URL passed to the hook |
 | `state` | `SessionState` | Current connection state |
 | `emitter` | `EventEmitter<SessionEvents>` | Stable emitter for session events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a session event imperatively; call `.remove()` to unsubscribe |
@@ -89,6 +91,8 @@ Returns a `Session` object:
 **`SessionState`** is one of: `'idle'` · `'connecting'` · `'connected'` · `'closed'` · `` `error:${string}` ``
 
 Call `connect()` manually — either in the setup callback or in response to user interaction. The hook does not auto-connect. To start receiving broadcasts, call [`useBroadcasts(session, prefix?)`](#usebroadcastssession-prefix) — it begins the underlying native subscription on mount and tears it down on unmount.
+
+**Multiple sessions.** Each `useSession` call is independent: subscribe to one relay while publishing to another, or open two logical sessions against the same URL. Pass the right `Session` into `useBroadcasts` / `usePublisher` to scope work to it; the library keys all native state by `session.id`.
 
 ---
 
@@ -137,6 +141,7 @@ Returns a `Player` object:
 
 | Property / Method | Type | Description |
 |---|---|---|
+| `sessionId` | `string` | The session this player belongs to (matches `broadcast.sessionId`) |
 | `broadcastPath` | `string` | The broadcast path this player belongs to |
 | `isPlaying` | `boolean` | True while tracks are actively playing |
 | `playbackStats` | `PlaybackStats \| null` | Live metrics, updated every 500 ms |
@@ -178,6 +183,7 @@ Returns an `AudioPlayer` object — same shape as `Player` minus the video-only 
 
 | Property / Method | Type | Description |
 |---|---|---|
+| `sessionId` | `string` | The session this player belongs to |
 | `broadcastPath` | `string` | Internal key for this audio-only player (broadcast path with an `_audio` suffix) |
 | `isPlaying` | `boolean` | True while audio is actively playing |
 | `playbackStats` | `PlaybackStats \| null` | Live metrics, updated every 500 ms (only audio fields are populated) |
@@ -519,6 +525,7 @@ Returned by `useAudioPlayer`. A `Player` shape narrowed to audio-only — no `cu
 
 ```ts
 interface AudioPlayer {
+  readonly sessionId: string;
   readonly broadcastPath: string;
   readonly isPlaying: boolean;
   readonly playbackStats: PlaybackStats | null;
@@ -539,10 +546,11 @@ interface AudioPlayer {
 
 ```ts
 interface BroadcastInfo {
+  sessionId: string;       // session the broadcast was discovered on
   path: string;
   videoTracks: VideoTrackInfo[];
   audioTracks: AudioTrackInfo[];
-  player: PlayerHandle; // opaque native handle — call methods directly, or pass the broadcast to useVideoPlayer / useAudioPlayer
+  player: PlayerHandle;    // opaque native handle — call methods directly, or pass the broadcast to useVideoPlayer / useAudioPlayer
 }
 ```
 
@@ -599,15 +607,26 @@ interface StallStats {
 
 ## Publishing
 
-The publisher captures audio + video from the device (camera/microphone, or the system screen) and pushes them to the same MoQ relay subscribers connect to. There is at most one active publish at a time — the publisher is a singleton and the preview camera is shared between the on-screen `<PublisherView>` and the live capture.
+The publisher captures audio + video from the device (camera/microphone, or the system screen) and pushes them to a MoQ relay. It reuses a [`Session`](#usesessionurl-setup) you've already opened with `useSession`, so the same connection can simultaneously publish and subscribe. The preview camera and microphone are device-level singletons, shared across the on-screen `<PublisherView>` and any live captures.
 
 ```tsx
 import { useEffect } from 'react';
 import { Button, PermissionsAndroid, Platform } from 'react-native';
-import { PublisherView, usePublisher } from 'react-native-moq';
+import {
+  PublisherView,
+  usePublisher,
+  useSession,
+  useEventListener,
+} from 'react-native-moq';
 
 function PublishScreen() {
-  const publisher = usePublisher('http://relay.example.com:4443');
+  const session = useSession('http://relay.example.com:4443');
+  const publisher = usePublisher(session);
+
+  // Open the shared session up front so publish() has a connection to reuse.
+  useEffect(() => {
+    if (session.state === 'idle' || session.state === 'closed') session.connect();
+  }, [session]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -623,6 +642,7 @@ function PublishScreen() {
       <PublisherView style={{ aspectRatio: 9 / 16 }} cameraPosition="front" />
       <Button
         title={publisher.state === 'publishing' ? 'Stop' : 'Publish'}
+        disabled={session.state !== 'connected' && publisher.state !== 'publishing'}
         onPress={() => {
           if (publisher.state === 'publishing') publisher.stop();
           else publisher.publish({ path: 'live/test' });
@@ -633,16 +653,21 @@ function PublishScreen() {
 }
 ```
 
+Because publish reuses the host session, you can subscribe and publish on the same connection — pair `usePublisher(session)` with `useBroadcasts(session, prefix)` to do both at once. You can also drive two relays concurrently by opening two `useSession` hooks and handing each one to its own publisher / subscriber.
+
 The host app is responsible for requesting `CAMERA` / `RECORD_AUDIO` runtime permissions on Android, and for adding `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` to `Info.plist` on iOS. The library does not request these for you.
 
 ---
 
-### `usePublisher(url)`
+### `usePublisher(session)`
 
-Manages a single publishing session against a MoQ relay. Mounting the hook does not start anything — calling `publish()` opens the relay session, creates a `Publisher`, and starts the configured tracks; calling `stop()` tears everything down. Re-renders are driven by native state events (`publisherStateChanged`, `publisherTrackStateChanged`, `screenBroadcastStateChanged`).
+Attaches a publisher to a `Session` returned by [`useSession`](#usesessionurl-setup). Mounting the hook does not start anything — calling `publish()` creates a native `Publisher` on top of the existing session and starts the configured tracks; calling `stop()` tears the publisher down (the session stays open). Re-renders are driven by native state events (`publisherStateChanged`, `publisherTrackStateChanged`, `screenBroadcastStateChanged`).
+
+The session must be `connected` when `publish()` is called — otherwise the publisher transitions to `error:session is not connected` immediately. Wait for `session.state === 'connected'` (or gate the UI on it) before publishing.
 
 ```tsx
-const publisher = usePublisher('http://relay.example.com:4443');
+const session = useSession('http://relay.example.com:4443');
+const publisher = usePublisher(session);
 
 publisher.publish({
   path: 'live/cam-1',
@@ -667,8 +692,8 @@ Returns a `Publisher` object:
 | `screenBroadcastState` | `ScreenBroadcastState` | Independent state machine for the screen-broadcast track |
 | `emitter` | `EventEmitter<PublisherEvents>` | Stable emitter for publisher events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a publisher event imperatively; call `.remove()` to unsubscribe |
-| `publish(opts)` | `(opts: PublishOptions) => void` | Connect to the relay and start publishing the configured tracks |
-| `stop()` | `() => void` | Stop all tracks, tear down the relay session, and clear `trackStates` |
+| `publish(opts)` | `(opts: PublishOptions) => void` | Start publishing the configured tracks on the bound session. Requires `session.state === 'connected'` |
+| `stop()` | `() => void` | Stop all tracks and clear `trackStates`. Does not disconnect the underlying session |
 | `flipCamera()` | `() => void` | Switch the active camera between front and back |
 | `configureScreenBroadcast(opts)` | `(opts: ScreenBroadcastOptions) => void` | Persist screen-broadcast config (relay URL, path, encoder settings). See [Screen broadcasting](#screen-broadcasting) |
 | `startScreenBroadcast()` | `() => Promise<void>` | Android only — starts the foreground MediaProjection service. Rejects on iOS |

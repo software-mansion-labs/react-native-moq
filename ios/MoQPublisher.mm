@@ -35,12 +35,12 @@ RCT_EXPORT_MODULE()
   [[MoQPublisherImpl shared] flipCamera];
 }
 
-- (void)publish:(NSString *)url path:(NSString *)path optsJson:(NSString *)optsJson {
-  [[MoQPublisherImpl shared] publish:url path:path optsJson:optsJson];
+- (void)publish:(NSString *)sessionId path:(NSString *)path optsJson:(NSString *)optsJson {
+  [[MoQPublisherImpl shared] publishWithSessionId:sessionId path:path optsJson:optsJson];
 }
 
-- (void)stop {
-  [[MoQPublisherImpl shared] stop];
+- (void)stop:(NSString *)sessionId {
+  [[MoQPublisherImpl shared] stopWithSessionId:sessionId];
 }
 
 - (void)configureScreenBroadcast:(NSString *)url optsJson:(NSString *)optsJson {

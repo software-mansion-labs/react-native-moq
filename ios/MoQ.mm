@@ -15,12 +15,15 @@ class MoQJSIModule : public facebook::react::NativeMoQSpecJSI {
                             const facebook::jsi::PropNameID& name) override {
     if (name.utf8(rt) == "getPlayer") {
       return facebook::jsi::Function::createFromHostFunction(
-          rt, name, 1,
+          rt, name, 2,
           [](facebook::jsi::Runtime& rt, const facebook::jsi::Value&,
              const facebook::jsi::Value* args, size_t) -> facebook::jsi::Value {
-            NSString* path = [NSString
+            NSString* sessionId = [NSString
                 stringWithUTF8String:args[0].asString(rt).utf8(rt).c_str()];
-            MoQPlayerRef* ref = [[MoQImpl shared] playerRefForPath:path];
+            NSString* path = [NSString
+                stringWithUTF8String:args[1].asString(rt).utf8(rt).c_str()];
+            MoQPlayerRef* ref =
+                [[MoQImpl shared] playerRefForSessionId:sessionId broadcastPath:path];
             if (!ref) return facebook::jsi::Value::undefined();
             auto hostObj = std::make_shared<moq::PlayerHostObject>(ref);
             return facebook::jsi::Object::createFromHostObject(rt, hostObj);
@@ -56,52 +59,52 @@ RCT_EXPORT_MODULE()
   [MoQImpl shared].onEvent = nil;
 }
 
-- (void)connect:(NSString *)url targetLatencyMs:(double)targetLatencyMs {
-  [[MoQImpl shared] connect:url targetLatencyMs:(int)targetLatencyMs];
+- (void)connect:(NSString *)sessionId url:(NSString *)url targetLatencyMs:(double)targetLatencyMs {
+  [[MoQImpl shared] connectWithSessionId:sessionId url:url targetLatencyMs:(int)targetLatencyMs];
 }
 
-- (void)disconnect {
-  [[MoQImpl shared] disconnect];
+- (void)disconnect:(NSString *)sessionId {
+  [[MoQImpl shared] disconnectWithSessionId:sessionId];
 }
 
-- (void)subscribe:(NSString *)prefix {
-  [[MoQImpl shared] subscribe:prefix];
+- (void)subscribe:(NSString *)sessionId prefix:(NSString *)prefix {
+  [[MoQImpl shared] subscribeWithSessionId:sessionId prefix:prefix];
 }
 
-- (void)unsubscribe:(NSString *)prefix {
-  [[MoQImpl shared] unsubscribe:prefix];
+- (void)unsubscribe:(NSString *)sessionId prefix:(NSString *)prefix {
+  [[MoQImpl shared] unsubscribeWithSessionId:sessionId prefix:prefix];
 }
 
-- (void)play:(NSString *)broadcastPath {
-  [[MoQImpl shared] play:broadcastPath];
+- (void)play:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath {
+  [[MoQImpl shared] playWithSessionId:sessionId broadcastPath:broadcastPath];
 }
 
-- (void)pause:(NSString *)broadcastPath {
-  [[MoQImpl shared] pause:broadcastPath];
+- (void)pause:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath {
+  [[MoQImpl shared] pauseWithSessionId:sessionId broadcastPath:broadcastPath];
 }
 
-- (void)stopPlayer:(NSString *)broadcastPath {
-  [[MoQImpl shared] stopPlayer:broadcastPath];
+- (void)stopPlayer:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath {
+  [[MoQImpl shared] stopPlayerWithSessionId:sessionId broadcastPath:broadcastPath];
 }
 
-- (void)updateTargetLatency:(NSString *)broadcastPath ms:(double)ms {
-  [[MoQImpl shared] updateTargetLatency:broadcastPath ms:(int)ms];
+- (void)updateTargetLatency:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath ms:(double)ms {
+  [[MoQImpl shared] updateTargetLatencyWithSessionId:sessionId broadcastPath:broadcastPath ms:(int)ms];
 }
 
-- (void)switchVideoTrack:(NSString *)broadcastPath trackName:(NSString *)trackName {
-  [[MoQImpl shared] switchVideoTrack:broadcastPath trackName:trackName];
+- (void)switchVideoTrack:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath trackName:(NSString *)trackName {
+  [[MoQImpl shared] switchVideoTrackWithSessionId:sessionId broadcastPath:broadcastPath trackName:trackName];
 }
 
-- (void)switchAudioTrack:(NSString *)broadcastPath trackName:(NSString *)trackName {
-  [[MoQImpl shared] switchAudioTrack:broadcastPath trackName:trackName];
+- (void)switchAudioTrack:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath trackName:(NSString *)trackName {
+  [[MoQImpl shared] switchAudioTrackWithSessionId:sessionId broadcastPath:broadcastPath trackName:trackName];
 }
 
-- (void)setVolume:(NSString *)broadcastPath volume:(double)volume {
-  [[MoQImpl shared] setVolume:broadcastPath volume:(float)volume];
+- (void)setVolume:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath volume:(double)volume {
+  [[MoQImpl shared] setVolumeWithSessionId:sessionId broadcastPath:broadcastPath volume:(float)volume];
 }
 
-- (void)createAudioOnlyPlayer:(NSString *)broadcastPath {
-  [[MoQImpl shared] createAudioOnlyPlayer:broadcastPath];
+- (void)createAudioOnlyPlayer:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath {
+  [[MoQImpl shared] createAudioOnlyPlayerWithSessionId:sessionId broadcastPath:broadcastPath];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:

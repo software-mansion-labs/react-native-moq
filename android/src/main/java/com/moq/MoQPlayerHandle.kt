@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 
 class MoQPlayerHandle(
   val player: Player,
+  val sessionId: String,
   val broadcastPath: String,
   private val moduleScope: CoroutineScope,
   private val mainHandler: Handler,
@@ -31,6 +32,7 @@ class MoQPlayerHandle(
   fun switchVideoTrack(trackName: String) {
     player.switchTrack(trackName)
     val map = Arguments.createMap()
+    map.putString("sessionId", sessionId)
     map.putString("broadcastPath", broadcastPath)
     map.putString("type", "trackSwitched")
     map.putString("trackKind", "video")
@@ -41,6 +43,7 @@ class MoQPlayerHandle(
   fun switchAudioTrack(trackName: String) {
     player.switchAudioTrack(trackName)
     val map = Arguments.createMap()
+    map.putString("sessionId", sessionId)
     map.putString("broadcastPath", broadcastPath)
     map.putString("type", "trackSwitched")
     map.putString("trackKind", "audio")
@@ -55,6 +58,7 @@ class MoQPlayerHandle(
     eventJob = moduleScope.launch {
       player.events.collect { event ->
         val map = Arguments.createMap()
+        map.putString("sessionId", sessionId)
         map.putString("broadcastPath", broadcastPath)
         when (event) {
           is Player.Event.TrackPlaying -> {
@@ -96,6 +100,7 @@ class MoQPlayerHandle(
     val runnable = object : Runnable {
       override fun run() {
         val map = player.stats.toWritableMap()
+        map.putString("sessionId", sessionId)
         map.putString("broadcastPath", broadcastPath)
         onEvent?.invoke("playbackStatsUpdated", map)
         mainHandler.postDelayed(this, 500)

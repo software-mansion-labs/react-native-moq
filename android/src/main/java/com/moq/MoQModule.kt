@@ -27,43 +27,72 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private val moduleScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
   private val mainHandler = Handler(Looper.getMainLooper())
 
-  private var session: Session? = null
-  private var stateJob: Job? = null
+  // Per-session state. Each useSession on the JS side corresponds to one
+  // entry here; two sessions can subscribe / publish independently.
+  private class SessionContext(val id: String, val session: Session) {
+    var targetLatencyMs: Int = 200
+    var state: Session.State = Session.State.Idle
+    var stateJob: Job? = null
+    val subscriptions = ConcurrentHashMap<String, MoQPrefixSubscription>()
+    val prefixForPath = ConcurrentHashMap<String, String>()
+    val catalogs = ConcurrentHashMap<String, Catalog>()
+  }
 
-  private var targetLatencyMs: Int = 200
-  private val catalogs = ConcurrentHashMap<String, Catalog>()
-
-  // One MoQPrefixSubscription per active prefix.  JS-side ref-counting in
-  // useBroadcasts ensures that calls to subscribe/unsubscribe are balanced.
-  private val subscriptions = ConcurrentHashMap<String, MoQPrefixSubscription>()
-  // path → prefix that introduced it.  Players are still keyed by path; when
-  // the owning prefix's subscription tears down we tear down the player too.
-  // Overlapping prefixes that match the same broadcast are not supported and
-  // give last-writer-wins on player ownership.
-  private val prefixForPath = ConcurrentHashMap<String, String>()
+  private val contexts = ConcurrentHashMap<String, SessionContext>()
 
   // MARK: - Companion: shared handle map and listeners for MoQVideoView
 
   companion object {
     const val NAME = NativeMoQSpec.NAME
 
+    // Connected sessions, exposed to MoQPublisherModule so it can attach a
+    // Publisher to one of them. Updated whenever the session reaches the
+    // Connected state and cleared on disconnect/error.
+    private val connectedSessions = ConcurrentHashMap<String, Session>()
+
+    fun connectedSession(sessionId: String): Session? = connectedSessions[sessionId]
+
+    // Player handles keyed by (sessionId, broadcastPath). Two sessions may
+    // surface the same broadcastPath; they get distinct player handles.
+    private fun playerKey(sessionId: String, broadcastPath: String) =
+      "$sessionId $broadcastPath"
+
     val playerHandles = ConcurrentHashMap<String, MoQPlayerHandle>()
+
+    fun playerHandle(sessionId: String, broadcastPath: String): MoQPlayerHandle? =
+      playerHandles[playerKey(sessionId, broadcastPath)]
+
+    fun setPlayerHandle(sessionId: String, broadcastPath: String, handle: MoQPlayerHandle) {
+      playerHandles[playerKey(sessionId, broadcastPath)] = handle
+    }
+
+    fun removePlayerHandle(sessionId: String, broadcastPath: String): MoQPlayerHandle? =
+      playerHandles.remove(playerKey(sessionId, broadcastPath))
+
     private val playerChangeListeners =
       ConcurrentHashMap<String, CopyOnWriteArrayList<() -> Unit>>()
 
-    fun addPlayerListener(broadcastPath: String, listener: () -> Unit) {
-      playerChangeListeners.getOrPut(broadcastPath) { CopyOnWriteArrayList() }.add(listener)
+    fun addPlayerListener(sessionId: String, broadcastPath: String, listener: () -> Unit) {
+      playerChangeListeners.getOrPut(playerKey(sessionId, broadcastPath)) {
+        CopyOnWriteArrayList()
+      }.add(listener)
     }
 
-    fun removePlayerListener(broadcastPath: String, listener: () -> Unit) {
-      playerChangeListeners[broadcastPath]?.remove(listener)
+    fun removePlayerListener(sessionId: String, broadcastPath: String, listener: () -> Unit) {
+      playerChangeListeners[playerKey(sessionId, broadcastPath)]?.remove(listener)
     }
 
-    fun notifyPlayerChanged(broadcastPath: String?) {
-      if (broadcastPath == null) {
+    fun notifyPlayerChanged(sessionId: String?, broadcastPath: String?) {
+      if (sessionId == null && broadcastPath == null) {
         playerChangeListeners.values.forEach { list -> list.forEach { it() } }
-      } else {
-        playerChangeListeners[broadcastPath]?.forEach { it() }
+      } else if (sessionId != null && broadcastPath == null) {
+        // All players for this session changed (e.g. session unsubscribe-all).
+        val prefix = "$sessionId "
+        playerChangeListeners.forEach { (key, list) ->
+          if (key.startsWith(prefix)) list.forEach { it() }
+        }
+      } else if (sessionId != null && broadcastPath != null) {
+        playerChangeListeners[playerKey(sessionId, broadcastPath)]?.forEach { it() }
       }
     }
 
@@ -83,17 +112,25 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun removeListeners(count: Double) {}
 
-  override fun connect(url: String, targetLatencyMs: Double) {
+  override fun connect(sessionId: String, url: String, targetLatencyMs: Double) {
     val latencyMs = targetLatencyMs.toInt()
-    this.targetLatencyMs = latencyMs
-    if (session != null) return
+    if (contexts.containsKey(sessionId)) return
     moduleScope.launch {
       val s = Session(url = url, parentScope = moduleScope)
-      session = s
+      val ctx = SessionContext(id = sessionId, session = s)
+      ctx.targetLatencyMs = latencyMs
+      contexts[sessionId] = ctx
 
-      stateJob = launch {
+      ctx.stateJob = launch {
         s.state.collect { state ->
+          ctx.state = state
+          if (state == Session.State.Connected) {
+            connectedSessions[sessionId] = s
+          } else {
+            connectedSessions.remove(sessionId)
+          }
           val map = Arguments.createMap()
+          map.putString("sessionId", sessionId)
           map.putString("state", state.toStringValue())
           emitEvent("sessionStateChanged", map)
         }
@@ -105,25 +142,25 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
   }
 
-  override fun disconnect() {
-    stateJob?.cancel()
-    stateJob = null
-    unsubscribeAll()
+  override fun disconnect(sessionId: String) {
+    val ctx = contexts.remove(sessionId) ?: return
+    ctx.stateJob?.cancel()
+    ctx.stateJob = null
+    connectedSessions.remove(sessionId)
 
-    val s = session
-    session = null
-
-    s?.close()
+    unsubscribeAll(ctx)
+    ctx.session.close()
   }
 
-  override fun subscribe(prefix: String) {
-    val s = session ?: return
+  override fun subscribe(sessionId: String, prefix: String) {
+    val ctx = contexts[sessionId] ?: return
     // Idempotent: a JS-side ref-count already ensures this call only fires
-    // once per prefix going from 0 → 1 subscribers, but guard anyway in case
-    // the relay had pending state.
-    if (subscriptions.containsKey(prefix)) return
+    // once per (session, prefix) going from 0 → 1 subscribers, but guard
+    // anyway in case the relay had pending state.
+    if (ctx.subscriptions.containsKey(prefix)) return
 
-    val latencyMs = targetLatencyMs
+    val latencyMs = ctx.targetLatencyMs
+    val s = ctx.session
 
     moduleScope.launch {
       val sub = try {
@@ -131,7 +168,10 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       } catch (_: Exception) { return@launch }
 
       // Bail out if the user disconnected or already subscribed while we awaited.
-      if (session !== s || subscriptions.containsKey(prefix)) {
+      val currentCtx = contexts[sessionId]
+      if (currentCtx == null || currentCtx.session !== s ||
+        currentCtx.subscriptions.containsKey(prefix)
+      ) {
         sub.close()
         return@launch
       }
@@ -141,111 +181,126 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         subscription = sub,
         scope = moduleScope,
         onBroadcastAvailable = { p, catalog ->
-          handleBroadcastAvailable(p, catalog, latencyMs)
+          handleBroadcastAvailable(sessionId, p, catalog, latencyMs)
         },
         onBroadcastUnavailable = { p, path ->
-          handleBroadcastUnavailable(p, path)
+          handleBroadcastUnavailable(sessionId, p, path)
         },
       )
-      subscriptions[prefix] = ps
+      currentCtx.subscriptions[prefix] = ps
       ps.start()
     }
   }
 
-  override fun unsubscribe(prefix: String) {
-    val ps = subscriptions.remove(prefix) ?: return
+  override fun unsubscribe(sessionId: String, prefix: String) {
+    val ctx = contexts[sessionId] ?: return
+    val ps = ctx.subscriptions.remove(prefix) ?: return
     val paths = ps.cancel()
 
     // Tear down players for the paths this prefix owned.  We don't emit
     // broadcastUnavailable events here — the JS-side useBroadcasts already
     // cleared its local state synchronously when its ref count hit zero.
     for (path in paths) {
-      if (prefixForPath[path] == prefix) {
-        prefixForPath.remove(path)
-        catalogs.remove(path)
-        removePlayer(path, notify = false)
-        removePlayer(path + AUDIO_KEY_SUFFIX, notify = false)
+      if (ctx.prefixForPath[path] == prefix) {
+        ctx.prefixForPath.remove(path)
+        ctx.catalogs.remove(path)
+        removePlayer(sessionId, path, notify = false)
+        removePlayer(sessionId, path + AUDIO_KEY_SUFFIX, notify = false)
       }
     }
-    mainHandler.post { notifyPlayerChanged(null) }
+    mainHandler.post { notifyPlayerChanged(sessionId, null) }
   }
 
-  private fun unsubscribeAll() {
-    for (prefix in subscriptions.keys.toList()) {
-      unsubscribe(prefix)
+  private fun unsubscribeAll(ctx: SessionContext) {
+    for (prefix in ctx.subscriptions.keys.toList()) {
+      val ps = ctx.subscriptions.remove(prefix) ?: continue
+      val paths = ps.cancel()
+      for (path in paths) {
+        if (ctx.prefixForPath[path] == prefix) {
+          ctx.prefixForPath.remove(path)
+          ctx.catalogs.remove(path)
+          removePlayer(ctx.id, path, notify = false)
+          removePlayer(ctx.id, path + AUDIO_KEY_SUFFIX, notify = false)
+        }
+      }
     }
+    mainHandler.post { notifyPlayerChanged(ctx.id, null) }
   }
 
-  override fun play(broadcastPath: String) {
-    playerHandles[broadcastPath]?.play()
+  override fun play(sessionId: String, broadcastPath: String) {
+    playerHandle(sessionId, broadcastPath)?.play()
   }
 
-  override fun pause(broadcastPath: String) {
-    playerHandles[broadcastPath]?.pause()
+  override fun pause(sessionId: String, broadcastPath: String) {
+    playerHandle(sessionId, broadcastPath)?.pause()
   }
 
-  override fun stopPlayer(broadcastPath: String) {
-    removePlayer(broadcastPath)
+  override fun stopPlayer(sessionId: String, broadcastPath: String) {
+    removePlayer(sessionId, broadcastPath)
   }
 
-  override fun updateTargetLatency(broadcastPath: String, ms: Double) {
-    playerHandles[broadcastPath]?.updateTargetLatency(ms.toInt())
+  override fun updateTargetLatency(sessionId: String, broadcastPath: String, ms: Double) {
+    playerHandle(sessionId, broadcastPath)?.updateTargetLatency(ms.toInt())
   }
 
-  override fun switchVideoTrack(broadcastPath: String, trackName: String) {
-    playerHandles[broadcastPath]?.switchVideoTrack(trackName)
+  override fun switchVideoTrack(sessionId: String, broadcastPath: String, trackName: String) {
+    playerHandle(sessionId, broadcastPath)?.switchVideoTrack(trackName)
   }
 
-  override fun switchAudioTrack(broadcastPath: String, trackName: String) {
-    playerHandles[broadcastPath]?.switchAudioTrack(trackName)
+  override fun switchAudioTrack(sessionId: String, broadcastPath: String, trackName: String) {
+    playerHandle(sessionId, broadcastPath)?.switchAudioTrack(trackName)
   }
 
-  override fun setVolume(broadcastPath: String, volume: Double) {
-    playerHandles[broadcastPath]?.setVolume(volume.toFloat())
+  override fun setVolume(sessionId: String, broadcastPath: String, volume: Double) {
+    playerHandle(sessionId, broadcastPath)?.setVolume(volume.toFloat())
   }
 
-  override fun createAudioOnlyPlayer(broadcastPath: String) {
-    val catalog = catalogs[broadcastPath] ?: return
+  override fun createAudioOnlyPlayer(sessionId: String, broadcastPath: String) {
+    val ctx = contexts[sessionId] ?: return
+    val catalog = ctx.catalogs[broadcastPath] ?: return
     val audioTrackName = catalog.audioTracks.firstOrNull()?.name ?: return
     val audioKey = broadcastPath + AUDIO_KEY_SUFFIX
 
-    // Run synchronously so `playerHandles[audioKey]` is populated before this
-    // call returns to JS — otherwise a follow-up `play(audioKey)` from the
-    // hook's setup callback would no-op against an empty map.
-    removePlayer(audioKey, notify = false)
+    // Run synchronously so `playerHandles[(sessionId, audioKey)]` is populated
+    // before this call returns to JS — otherwise a follow-up `play(audioKey)`
+    // from the hook's setup callback would no-op against an empty map.
+    removePlayer(sessionId, audioKey, notify = false)
 
     val p = try {
       Player(
         catalog = catalog,
         videoTrackName = null,
         audioTrackName = audioTrackName,
-        targetLatencyMs = targetLatencyMs,
+        targetLatencyMs = ctx.targetLatencyMs,
         parentScope = moduleScope,
       )
     } catch (_: Exception) { return }
 
-    val handle = MoQPlayerHandle(p, audioKey, moduleScope, mainHandler)
+    val handle = MoQPlayerHandle(p, sessionId, audioKey, moduleScope, mainHandler)
     handle.onEvent = { name, map -> emitEvent(name, map) }
-    playerHandles[audioKey] = handle
+    setPlayerHandle(sessionId, audioKey, handle)
     handle.startObservingEvents()
   }
 
   override fun invalidate() {
     super.invalidate()
-    disconnect()
+    for (id in contexts.keys.toList()) disconnect(id)
     moduleScope.cancel()
   }
 
   // MARK: - Broadcast events
 
-  private fun handleBroadcastAvailable(prefix: String, catalog: Catalog, targetLatencyMs: Int) {
+  private fun handleBroadcastAvailable(
+    sessionId: String, prefix: String, catalog: Catalog, targetLatencyMs: Int
+  ) {
+    val ctx = contexts[sessionId] ?: return
     val path = catalog.path
 
-    catalogs[path] = catalog
-    prefixForPath[path] = prefix
+    ctx.catalogs[path] = catalog
+    ctx.prefixForPath[path] = prefix
 
-    val hadPlayer = playerHandles[path] != null
-    removePlayer(path, notify = false)
+    val hadPlayer = playerHandle(sessionId, path) != null
+    removePlayer(sessionId, path, notify = false)
 
     val videoTrackName = catalog.videoTracks.firstOrNull()?.name
     val audioTrackName = catalog.audioTracks.firstOrNull()?.name
@@ -261,9 +316,9 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     } catch (_: Exception) { null }
 
     if (p != null) {
-      val handle = MoQPlayerHandle(p, path, moduleScope, mainHandler)
+      val handle = MoQPlayerHandle(p, sessionId, path, moduleScope, mainHandler)
       handle.onEvent = { name, map -> emitEvent(name, map) }
-      playerHandles[path] = handle
+      setPlayerHandle(sessionId, path, handle)
       handle.startObservingEvents()
 
       if (hadPlayer) {
@@ -272,11 +327,11 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
       // Re-create the audio-only player if one was previously active.
       val audioKey = path + AUDIO_KEY_SUFFIX
-      if (playerHandles[audioKey] != null) {
-        createAudioOnlyPlayer(path)
+      if (playerHandle(sessionId, audioKey) != null) {
+        createAudioOnlyPlayer(sessionId, path)
       }
 
-      mainHandler.post { notifyPlayerChanged(path) }
+      mainHandler.post { notifyPlayerChanged(sessionId, path) }
     }
 
     val videoArray = Arguments.createArray()
@@ -303,6 +358,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       audioArray.pushMap(item)
     }
     val map = Arguments.createMap()
+    map.putString("sessionId", sessionId)
     map.putString("prefix", prefix)
     map.putString("path", path)
     videoTrackName?.let { map.putString("initialVideoTrackName", it) }
@@ -312,30 +368,34 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     emitEvent("broadcastAvailable", map)
   }
 
-  private fun handleBroadcastUnavailable(prefix: String, path: String) {
+  private fun handleBroadcastUnavailable(sessionId: String, prefix: String, path: String) {
+    val ctx = contexts[sessionId] ?: return
     // If the prefix's subscription was already torn down (e.g. by unsubscribe)
     // we already handled cleanup; skip double-emit / double-tear-down.
-    if (prefixForPath[path] != prefix) return
+    if (ctx.prefixForPath[path] != prefix) return
 
-    removePlayer(path)
-    removePlayer(path + AUDIO_KEY_SUFFIX, notify = false)
-    catalogs.remove(path)
-    prefixForPath.remove(path)
+    removePlayer(sessionId, path)
+    removePlayer(sessionId, path + AUDIO_KEY_SUFFIX, notify = false)
+    ctx.catalogs.remove(path)
+    ctx.prefixForPath.remove(path)
     val map = Arguments.createMap()
+    map.putString("sessionId", sessionId)
     map.putString("prefix", prefix)
     map.putString("path", path)
     emitEvent("broadcastUnavailable", map)
   }
 
-  private fun removePlayer(path: String, notify: Boolean = true) {
-    val handle = playerHandles.remove(path) ?: return
+  private fun removePlayer(sessionId: String, path: String, notify: Boolean = true) {
+    val handle = removePlayerHandle(sessionId, path) ?: return
     // Cancel the catalog job so it stops emitting events for this path.
-    prefixForPath[path]?.let { owningPrefix ->
-      subscriptions[owningPrefix]?.cancelCatalogJob(path)
+    contexts[sessionId]?.let { ctx ->
+      ctx.prefixForPath[path]?.let { owningPrefix ->
+        ctx.subscriptions[owningPrefix]?.cancelCatalogJob(path)
+      }
     }
     handle.close()
     if (notify) {
-      mainHandler.post { notifyPlayerChanged(path) }
+      mainHandler.post { notifyPlayerChanged(sessionId, path) }
     }
   }
 

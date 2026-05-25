@@ -16,6 +16,7 @@ import {
   getSupportedCodecs,
   PublisherView,
   usePublisher,
+  useSession,
   type AudioCodec,
   type CameraPosition,
   type VideoCodec,
@@ -102,11 +103,21 @@ export function PublishScreen({
     [videoCodec, videoResolution, frameRate, audioCodec, audioSampleRate]
   );
 
-  const publisher = usePublisher(url);
+  const session = useSession(url);
+  const publisher = usePublisher(session);
 
   useEffect(() => {
     requestCapturePermissions();
   }, []);
+
+  // Open the shared session as soon as the screen mounts so publish() has a
+  // connection to reuse. usePublisher errors out if the session isn't
+  // connected when publish is called.
+  useEffect(() => {
+    if (session.state === 'idle' || session.state === 'closed') {
+      session.connect();
+    }
+  }, [session]);
 
   const screenPath = path + SCREEN_PATH_SUFFIX;
 

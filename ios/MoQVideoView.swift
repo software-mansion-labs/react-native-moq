@@ -5,11 +5,8 @@ import UIKit
 public class MoQVideoView: UIView {
   private var displayLayer: AVSampleBufferDisplayLayer?
 
-  @objc var broadcastPath: String? {
-    didSet {
-      attach(layer: broadcastPath.flatMap { MoQImpl.shared.videoLayer(for: $0) })
-    }
-  }
+  @objc var sessionId: String? { didSet { reattach() } }
+  @objc var broadcastPath: String? { didSet { reattach() } }
 
   public override init(frame: CGRect) {
     super.init(frame: frame)
@@ -36,10 +33,24 @@ public class MoQVideoView: UIView {
   }
 
   @objc private func playerDidChange(_ notification: Notification) {
-    let changedPath = notification.object as? String
-    // nil object = disconnect (all players removed); otherwise filter by path
-    guard changedPath == nil || changedPath == broadcastPath else { return }
-    attach(layer: broadcastPath.flatMap { MoQImpl.shared.videoLayer(for: $0) })
+    let userInfo = notification.userInfo ?? [:]
+    let changedSession = userInfo[MoQImpl.playerChangedSessionIdKey] as? String
+    let changedPath = userInfo[MoQImpl.playerChangedBroadcastPathKey] as? String
+    // No session in payload = global change (legacy); otherwise match ours.
+    if let changedSession, changedSession != sessionId { return }
+    if let changedPath, changedPath != broadcastPath { return }
+    reattach()
+  }
+
+  private func reattach() {
+    let newLayer: AVSampleBufferDisplayLayer?
+    if let sessionId, let broadcastPath {
+      newLayer = MoQImpl.shared.videoLayer(
+        forSessionId: sessionId, broadcastPath: broadcastPath)
+    } else {
+      newLayer = nil
+    }
+    attach(layer: newLayer)
   }
 
   private func attach(layer newLayer: AVSampleBufferDisplayLayer?) {

@@ -3,6 +3,7 @@ import MoQKit
 
 @objc public class MoQPlayerRef: NSObject {
   let player: Player
+  @objc public let sessionId: String
   @objc public let broadcastPath: String
 
   var currentVideoTrackName: String?
@@ -13,8 +14,9 @@ import MoQKit
   var statsTimer: Timer?
   var onEvent: ((String, [String: Any]) -> Void)?
 
-  init(player: Player, broadcastPath: String, videoTrackName: String? = nil, audioTrackName: String? = nil) {
+  init(player: Player, sessionId: String, broadcastPath: String, videoTrackName: String? = nil, audioTrackName: String? = nil) {
     self.player = player
+    self.sessionId = sessionId
     self.broadcastPath = broadcastPath
     self.currentVideoTrackName = videoTrackName
     self.currentAudioTrackName = audioTrackName
@@ -73,36 +75,37 @@ import MoQKit
     eventsTask?.cancel()
     eventsTask = Task { @MainActor in
       for await event in self.player.events {
+        let sid = self.sessionId
         switch event {
         case .trackPlaying(let kind):
           self.startStatsPolling()
           self.onEvent?("playerEvent", [
-            "broadcastPath": self.broadcastPath, "type": "trackPlaying",
+            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "trackPlaying",
             "trackKind": kind.rawValue,
           ])
         case .trackPaused(let kind):
           self.onEvent?("playerEvent", [
-            "broadcastPath": self.broadcastPath, "type": "trackPaused",
+            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "trackPaused",
             "trackKind": kind.rawValue,
           ])
         case .trackStopped(let kind):
           self.onEvent?("playerEvent", [
-            "broadcastPath": self.broadcastPath, "type": "trackStopped",
+            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "trackStopped",
             "trackKind": kind.rawValue,
           ])
         case .allTracksStopped:
           self.stopStatsPolling()
           self.onEvent?("playerEvent", [
-            "broadcastPath": self.broadcastPath, "type": "allTracksStopped",
+            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "allTracksStopped",
           ])
         case .error(let kind, let message):
           self.onEvent?("playerEvent", [
-            "broadcastPath": self.broadcastPath, "type": "error",
+            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "error",
             "trackKind": kind.rawValue, "message": message,
           ])
         case .trackSwitched(let kind):
           var body: [String: Any] = [
-            "broadcastPath": self.broadcastPath, "type": "trackSwitched",
+            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "trackSwitched",
             "trackKind": kind.rawValue,
           ]
           switch kind {
@@ -135,12 +138,14 @@ import MoQKit
   func startStatsPolling() {
     guard statsTimer == nil else { return }
     let path = broadcastPath
+    let sid = sessionId
     statsTimer = Timer.scheduledTimer(
       withTimeInterval: 0.5, repeats: true
     ) { [weak self] _ in
       Task { @MainActor in
         guard let self = self else { return }
         var dict = self.player.stats.asDictionary()
+        dict["sessionId"] = sid
         dict["broadcastPath"] = path
         self.onEvent?("playbackStatsUpdated", dict)
       }

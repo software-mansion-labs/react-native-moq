@@ -23,8 +23,12 @@ export interface Spec extends TurboModule {
   // { cameraEnabled?: boolean, micEnabled?: boolean,
   //   videoCodec?: 'h264' | 'h265', width?: number, height?: number,
   //   framerate?: number, audioCodec?: 'opus' | 'aac', audioSampleRate?: number }
-  publish(url: string, path: string, optsJson: string): void;
-  stop(): void;
+  // Reuses the MoQ Session opened via NativeMoQ.connect() for the given
+  // sessionId; errors out if no such session is connected. Multiple sessions
+  // may host concurrent publishers — track-state and publisher-state events
+  // carry the sessionId so JS can route them back to the right hook.
+  publish(sessionId: string, path: string, optsJson: string): void;
+  stop(sessionId: string): void;
 
   // Screen broadcasting runs out-of-process on iOS (Broadcast Upload Extension)
   // and in a foreground Service on Android. It always publishes to its own

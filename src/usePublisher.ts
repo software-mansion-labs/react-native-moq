@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import { EventEmitter, type EventSubscription } from './EventEmitter';
 import NativeMoQPublisher from './NativeMoQPublisher';
+import type { Session } from './types';
 
 const publisherEmitter = new NativeEventEmitter(NativeMoQPublisher);
 
@@ -103,7 +104,7 @@ export interface Publisher {
   stopScreenBroadcast(): void;
 }
 
-export function usePublisher(url: string): Publisher {
+export function usePublisher(session: Session): Publisher {
   const [state, setState] = useState<PublisherState>('idle');
   const [trackStates, setTrackStates] = useState<
     Record<string, PublishedTrackState>
@@ -112,8 +113,12 @@ export function usePublisher(url: string): Publisher {
   const [screenBroadcastState, setScreenBroadcastState] =
     useState<ScreenBroadcastState>('idle');
 
-  const urlRef = useRef(url);
-  urlRef.current = url;
+  // Screen broadcast runs out-of-process (iOS Broadcast Upload Extension /
+  // Android foreground service), so it can't reuse the host's session — it
+  // opens its own MoQ connection using the session's URL.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const sessionId = session.id;
 
   const emitterRef = useRef(new EventEmitter<PublisherEvents>());
 
@@ -122,8 +127,9 @@ export function usePublisher(url: string): Publisher {
     const stateSub = publisherEmitter.addListener(
       'publisherStateChanged',
       (event) => {
-        const { state: rawState } = event as { state: string };
-        const typedState = rawState as PublisherState;
+        const e = event as { sessionId: string; state: string };
+        if (e.sessionId !== sessionId) return;
+        const typedState = e.state as PublisherState;
         setState(typedState);
         if (typedState.startsWith('error:')) {
           setLastError(typedState.slice('error:'.length));
@@ -136,19 +142,24 @@ export function usePublisher(url: string): Publisher {
     const trackSub = publisherEmitter.addListener(
       'publisherTrackStateChanged',
       (event) => {
-        const {
-          name,
-          state: trackState,
-          error,
-        } = event as {
+        const e = event as {
+          sessionId: string;
           name: string;
           state: PublishedTrackState;
           error?: string;
         };
-        setTrackStates((prev) => ({ ...prev, [name]: trackState }));
-        emitter.emit('trackStateChange', { name, state: trackState, error });
+        if (e.sessionId !== sessionId) return;
+        setTrackStates((prev) => ({ ...prev, [e.name]: e.state }));
+        emitter.emit('trackStateChange', {
+          name: e.name,
+          state: e.state,
+          error: e.error,
+        });
       }
     );
+    // Screen broadcast is currently single-instance per device (one
+    // ReplayKit / MediaProjection session at a time), so it is not
+    // session-scoped.
     const screenSub = publisherEmitter.addListener(
       'screenBroadcastStateChanged',
       (event) => {
@@ -163,20 +174,23 @@ export function usePublisher(url: string): Publisher {
       stateSub.remove();
       trackSub.remove();
       screenSub.remove();
-      NativeMoQPublisher.stop();
+      NativeMoQPublisher.stop(sessionId);
       NativeMoQPublisher.stopScreenBroadcast();
     };
-  }, []);
+  }, [sessionId]);
 
-  const publish = useCallback((opts: PublishOptions) => {
-    setLastError(null);
-    const { path, ...rest } = opts;
-    NativeMoQPublisher.publish(urlRef.current, path, JSON.stringify(rest));
-  }, []);
+  const publish = useCallback(
+    (opts: PublishOptions) => {
+      setLastError(null);
+      const { path, ...rest } = opts;
+      NativeMoQPublisher.publish(sessionId, path, JSON.stringify(rest));
+    },
+    [sessionId]
+  );
 
   const stop = useCallback(() => {
-    NativeMoQPublisher.stop();
-  }, []);
+    NativeMoQPublisher.stop(sessionId);
+  }, [sessionId]);
 
   const flipCamera = useCallback(() => {
     NativeMoQPublisher.flipCamera();
@@ -185,7 +199,7 @@ export function usePublisher(url: string): Publisher {
   const configureScreenBroadcast = useCallback(
     (opts: ScreenBroadcastOptions) => {
       NativeMoQPublisher.configureScreenBroadcast(
-        urlRef.current,
+        sessionRef.current.url,
         JSON.stringify(opts)
       );
     },

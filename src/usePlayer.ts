@@ -27,7 +27,7 @@ export function usePlayer(player: PlayerHandle): Player {
   const emitterRef = useRef(new EventEmitter<PlayerEvents>());
   const lastPlayingChangeRef = useRef<{ isPlaying: boolean } | null>(null);
 
-  const { broadcastPath } = player;
+  const { sessionId, broadcastPath } = player;
 
   useEffect(() => {
     // Reset dedup state when the player identity changes.
@@ -45,12 +45,17 @@ export function usePlayer(player: PlayerHandle): Player {
     const subs = [
       moqEmitter.addListener('playerEvent', (event) => {
         const e = event as {
+          sessionId: string;
           broadcastPath: string;
           type: string;
           trackKind?: string;
           trackName?: string;
         };
-        if (e.broadcastPath !== playerRef.current.broadcastPath) return;
+        if (
+          e.sessionId !== playerRef.current.sessionId ||
+          e.broadcastPath !== playerRef.current.broadcastPath
+        )
+          return;
         if (e.type === 'trackPlaying') {
           setIsPlaying(true);
           emitPlayingChange({ isPlaying: true });
@@ -82,8 +87,15 @@ export function usePlayer(player: PlayerHandle): Player {
       }),
 
       moqEmitter.addListener('playbackStatsUpdated', (event) => {
-        const e = event as PlaybackStats & { broadcastPath: string };
-        if (e.broadcastPath !== playerRef.current.broadcastPath) return;
+        const e = event as PlaybackStats & {
+          sessionId: string;
+          broadcastPath: string;
+        };
+        if (
+          e.sessionId !== playerRef.current.sessionId ||
+          e.broadcastPath !== playerRef.current.broadcastPath
+        )
+          return;
         setPlaybackStats(e);
         emitter.emit('statsUpdate', e);
       }),
@@ -92,9 +104,9 @@ export function usePlayer(player: PlayerHandle): Player {
     return () => {
       subs.forEach((s) => s.remove());
     };
-    // Intentionally keyed on broadcastPath string — re-subscribe only when
-    // the player changes identity.
-  }, [broadcastPath]);
+    // Intentionally keyed on (sessionId, broadcastPath) — re-subscribe only
+    // when the player changes identity.
+  }, [sessionId, broadcastPath]);
 
   const play = useCallback(() => {
     playerRef.current.play();
@@ -135,6 +147,7 @@ export function usePlayer(player: PlayerHandle): Player {
   );
 
   return {
+    sessionId,
     broadcastPath,
     isPlaying,
     playbackStats,

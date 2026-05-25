@@ -6,11 +6,21 @@ import type { Session, SessionEvents, SessionState } from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
+let nextSessionId = 1;
+function mintSessionId(): string {
+  // Sufficient for in-bundle uniqueness; native maps are keyed by this string.
+  return `s${nextSessionId++}`;
+}
+
 export function useSession(
   url: string,
   setup?: (session: Session) => void
 ): Session {
   const [state, setState] = useState<SessionState>('idle');
+
+  const idRef = useRef<string | null>(null);
+  if (idRef.current === null) idRef.current = mintSessionId();
+  const id = idRef.current;
 
   const urlRef = useRef(url);
   urlRef.current = url;
@@ -20,26 +30,30 @@ export function useSession(
   useEffect(() => {
     const emitter = emitterRef.current;
     const sub = moqEmitter.addListener('sessionStateChanged', (event) => {
-      const { state: rawState } = event as { state: string };
-      const typedState = rawState as SessionState;
+      const e = event as { sessionId: string; state: string };
+      if (e.sessionId !== id) return;
+      const typedState = e.state as SessionState;
       setState(typedState);
       emitter.emit('stateChange', { state: typedState });
     });
 
     return () => {
       sub.remove();
-      NativeMoQ.disconnect();
+      NativeMoQ.disconnect(id);
     };
-  }, []);
+  }, [id]);
 
-  const connect = useCallback((targetLatencyMs = 200) => {
-    NativeMoQ.connect(urlRef.current, targetLatencyMs);
-  }, []);
+  const connect = useCallback(
+    (targetLatencyMs = 200) => {
+      NativeMoQ.connect(id, urlRef.current, targetLatencyMs);
+    },
+    [id]
+  );
 
   const disconnect = useCallback(() => {
-    NativeMoQ.disconnect();
+    NativeMoQ.disconnect(id);
     setState('idle');
-  }, []);
+  }, [id]);
 
   const addListener = useCallback(
     <TEventName extends keyof SessionEvents>(
@@ -50,6 +64,8 @@ export function useSession(
   );
 
   const moqSession: Session = {
+    id,
+    url,
     state,
     emitter: emitterRef.current,
     addListener,

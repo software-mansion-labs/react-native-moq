@@ -39,17 +39,34 @@ public enum MoQScreenBroadcastSharedKeys {
   private var cameraPosition: CameraPosition = .front
   private var previewRefCount: Int = 0
 
-  private var session: Session?
-  private var publisher: Publisher?
+  // Per-session publisher context. Multiple sessions can host concurrent
+  // publishers; the camera and microphone are shared as singletons since the
+  // device only has one each, but each session owns its own Publisher and
+  // observation tasks.
+  private final class PublisherContext {
+    let sessionId: String
+    let publisher: Publisher
+    var stateTask: Task<Void, Never>?
+    var eventsTask: Task<Void, Never>?
+    var trackStateTasks: [Task<Void, Never>] = []
+    var usesCamera: Bool = false
+    var ownsMicrophone: Bool = false
+
+    init(sessionId: String, publisher: Publisher) {
+      self.sessionId = sessionId
+      self.publisher = publisher
+    }
+  }
+
+  private var publishers: [String: PublisherContext] = [:]
   private var microphone: MicrophoneCapture?
-
-  private var sessionStateTask: Task<Void, Never>?
-  private var publisherStateTask: Task<Void, Never>?
-  private var publisherEventsTask: Task<Void, Never>?
-  private var trackStateTasks: [Task<Void, Never>] = []
-
-  // True while publish() is in flight, even before session reaches .connected.
-  private var publishing: Bool = false
+  // Ref count for who currently uses the shared microphone (one per active
+  // mic-enabled publisher). Lets us stop the mic only when the last publisher
+  // that needed it has stopped.
+  private var microphoneRefCount: Int = 0
+  // True while any publish() is in flight (used to keep the shared camera
+  // alive even after preview is unmounted).
+  private var publishing: Bool { !publishers.isEmpty }
 
   // App Group identifier currently configured for screen broadcasting. We keep
   // it so we can read state written by the Broadcast Upload Extension and clear
@@ -74,16 +91,17 @@ public enum MoQScreenBroadcastSharedKeys {
     Task { @MainActor in self._flipCamera() }
   }
 
-  @objc(publish:path:optsJson:)
-  public func publish(url: String, path: String, optsJson: String) {
+  @objc(publishWithSessionId:path:optsJson:)
+  public func publish(sessionId: String, path: String, optsJson: String) {
     let opts = Self.parseOpts(optsJson)
     Task { @MainActor in
-      await self._publish(url: url, path: path, opts: opts)
+      await self._publish(sessionId: sessionId, path: path, opts: opts)
     }
   }
 
-  @objc public func stop() {
-    Task { @MainActor in await self._stop() }
+  @objc(stopWithSessionId:)
+  public func stop(sessionId: String) {
+    Task { @MainActor in await self._stop(sessionId: sessionId) }
   }
 
   @objc(configureScreenBroadcast:optsJson:)
@@ -134,7 +152,7 @@ public enum MoQScreenBroadcastSharedKeys {
       cameraCapture = nil
       NotificationCenter.default.post(
         name: MoQPublisherImpl.cameraSessionChangedNotification, object: nil)
-      emitPublisherState("error:\(error.localizedDescription)")
+      broadcastCameraError(error)
     }
   }
 
@@ -158,39 +176,30 @@ public enum MoQScreenBroadcastSharedKeys {
     do {
       try cam.switch(to: Camera(position: new))
     } catch {
-      emitPublisherState("error:\(error.localizedDescription)")
+      broadcastCameraError(error)
     }
   }
 
   // MARK: - Publish
 
   @MainActor
-  private func _publish(url: String, path: String, opts: PublishOpts) async {
-    guard !publishing else { return }
-    publishing = true
+  private func _publish(sessionId: String, path: String, opts: PublishOpts) async {
+    guard publishers[sessionId] == nil else { return }
+    guard let s = MoQImpl.shared.currentSession(forSessionId: sessionId) else {
+      emitPublisherState(sessionId: sessionId, state: "error:session is not connected")
+      return
+    }
 
     Self.configurePublishingAudioSession()
 
-    let s = Session(url: url)
-    session = s
-
-    sessionStateTask = Task { @MainActor in
-      for await state in s.state {
-        switch state {
-        case .idle: self.emitPublisherState("idle")
-        case .connecting: self.emitPublisherState("connecting")
-        case .connected: break  // wait for publisher state to drive UI
-        case .closed: self.emitPublisherState("stopped")
-        case .error(let e): self.emitPublisherState("error:\(e.description)")
-        }
-      }
-    }
+    var didStartMic = false
 
     do {
-      try await s.connect()
-
       let pub = try Publisher()
-      publisher = pub
+      let ctx = PublisherContext(sessionId: sessionId, publisher: pub)
+      ctx.usesCamera = opts.cameraEnabled
+      ctx.ownsMicrophone = opts.micEnabled
+      publishers[sessionId] = ctx
 
       var tracks: [PublishedTrack] = []
 
@@ -215,9 +224,16 @@ public enum MoQScreenBroadcastSharedKeys {
       }
 
       if opts.micEnabled {
-        let mic = MicrophoneCapture()
-        microphone = mic
-        try await mic.start()
+        let mic: MicrophoneCapture
+        if let existing = microphone {
+          mic = existing
+        } else {
+          mic = MicrophoneCapture()
+          microphone = mic
+          try await mic.start()
+        }
+        didStartMic = true
+        microphoneRefCount += 1
         let audioConfig = AudioEncoderConfig(
           codec: opts.audioCodec,
           sampleRate: opts.audioSampleRate
@@ -228,37 +244,51 @@ public enum MoQScreenBroadcastSharedKeys {
       try await s.publish(path: path, publisher: pub)
       try await pub.start()
 
-      observePublisher(pub, tracks: tracks)
+      observePublisher(ctx, tracks: tracks)
     } catch {
-      emitPublisherState("error:\(error.localizedDescription)")
-      await _stop()
+      if didStartMic {
+        microphoneRefCount -= 1
+        if microphoneRefCount <= 0 {
+          microphoneRefCount = 0
+          microphone?.stop(); microphone = nil
+        }
+      }
+      publishers.removeValue(forKey: sessionId)
+      emitPublisherState(sessionId: sessionId, state: "error:\(error.localizedDescription)")
+      await _stop(sessionId: sessionId)
     }
   }
 
   @MainActor
-  private func observePublisher(_ pub: Publisher, tracks: [PublishedTrack]) {
-    publisherStateTask = Task { @MainActor in
+  private func observePublisher(_ ctx: PublisherContext, tracks: [PublishedTrack]) {
+    let pub = ctx.publisher
+    let sid = ctx.sessionId
+    ctx.stateTask = Task { @MainActor in
       for await state in pub.state {
         switch state {
         case .idle: break
-        case .publishing: self.emitPublisherState("publishing")
-        case .stopped: self.emitPublisherState("stopped")
-        case .error(let msg): self.emitPublisherState("error:\(msg)")
+        case .publishing: self.emitPublisherState(sessionId: sid, state: "publishing")
+        case .stopped: self.emitPublisherState(sessionId: sid, state: "stopped")
+        case .error(let msg): self.emitPublisherState(sessionId: sid, state: "error:\(msg)")
         }
       }
     }
 
-    publisherEventsTask = Task { @MainActor in
+    ctx.eventsTask = Task { @MainActor in
       for await event in pub.events {
         switch event {
         case .trackStarted(let name):
-          self.onEvent?("publisherTrackStateChanged", ["name": name, "state": "active"])
+          self.onEvent?(
+            "publisherTrackStateChanged",
+            ["sessionId": sid, "name": name, "state": "active"])
         case .trackStopped(let name):
-          self.onEvent?("publisherTrackStateChanged", ["name": name, "state": "stopped"])
+          self.onEvent?(
+            "publisherTrackStateChanged",
+            ["sessionId": sid, "name": name, "state": "stopped"])
         case .error(let name, let msg):
           self.onEvent?(
             "publisherTrackStateChanged",
-            ["name": name, "state": "stopped", "error": msg])
+            ["sessionId": sid, "name": name, "state": "stopped", "error": msg])
         }
       }
     }
@@ -269,48 +299,50 @@ public enum MoQScreenBroadcastSharedKeys {
         for await state in track.state {
           self.onEvent?(
             "publisherTrackStateChanged",
-            ["name": name, "state": Self.trackStateString(state)])
+            ["sessionId": sid, "name": name, "state": Self.trackStateString(state)])
         }
       }
-      trackStateTasks.append(task)
+      ctx.trackStateTasks.append(task)
     }
   }
 
   @MainActor
-  private func _stop() async {
-    let wasPublishing = publishing
-    publishing = false
+  private func _stop(sessionId: String) async {
+    guard let ctx = publishers.removeValue(forKey: sessionId) else { return }
 
-    sessionStateTask?.cancel(); sessionStateTask = nil
-    publisherStateTask?.cancel(); publisherStateTask = nil
-    publisherEventsTask?.cancel(); publisherEventsTask = nil
-    trackStateTasks.forEach { $0.cancel() }
-    trackStateTasks.removeAll()
+    ctx.stateTask?.cancel()
+    ctx.eventsTask?.cancel()
+    ctx.trackStateTasks.forEach { $0.cancel() }
 
-    let pub = publisher
-    let sess = session
-    publisher = nil
-    session = nil
+    if ctx.ownsMicrophone {
+      microphoneRefCount -= 1
+      if microphoneRefCount <= 0 {
+        microphoneRefCount = 0
+        microphone?.stop()
+        microphone = nil
+      }
+    }
 
-    microphone?.stop()
-    microphone = nil
-
-    // Stop the camera if the preview view is no longer mounted.
-    if previewRefCount == 0 {
+    // Stop the camera if neither preview nor any other publisher needs it.
+    let cameraStillUsed = previewRefCount > 0 || publishers.values.contains { $0.usesCamera }
+    if !cameraStillUsed {
       cameraCapture?.stop()
       cameraCapture = nil
       NotificationCenter.default.post(
         name: MoQPublisherImpl.cameraSessionChangedNotification, object: nil)
     }
 
-    if wasPublishing { emitPublisherState("idle") }
-    Self.configurePlaybackAudioSession()
+    emitPublisherState(sessionId: sessionId, state: "idle")
+    if publishers.isEmpty {
+      Self.configurePlaybackAudioSession()
+    }
 
-    // Tear down publisher/session off the main thread — pub.stop() may block
-    // on encoder flush.
+    // Tear down the publisher off the main thread — pub.stop() may block on
+    // encoder flush. The Session is owned by MoQImpl and stays alive across
+    // publish cycles, so we don't close it here.
+    let pub = ctx.publisher
     Task.detached {
-      pub?.stop()
-      await sess?.close()
+      pub.stop()
     }
   }
 
@@ -487,8 +519,19 @@ public enum MoQScreenBroadcastSharedKeys {
 
   // MARK: - Helpers
 
-  private func emitPublisherState(_ state: String) {
-    onEvent?("publisherStateChanged", ["state": state])
+  // Camera errors aren't bound to a particular publish session — they may
+  // happen during preview before anyone called publish(). Broadcast the error
+  // to every active publisher so each one transitions to the error state; if
+  // none are active, drop it (the preview itself doesn't have a state surface).
+  private func broadcastCameraError(_ error: Error) {
+    let msg = "error:\(error.localizedDescription)"
+    for sid in publishers.keys {
+      emitPublisherState(sessionId: sid, state: msg)
+    }
+  }
+
+  private func emitPublisherState(sessionId: String, state: String) {
+    onEvent?("publisherStateChanged", ["sessionId": sessionId, "state": state])
   }
 
   private static func parsePosition(_ raw: String) -> CameraPosition {

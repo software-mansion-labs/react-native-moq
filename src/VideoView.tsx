@@ -2,6 +2,7 @@ import { requireNativeComponent, type ViewProps } from 'react-native';
 import type { Player } from './types';
 
 interface NativeVideoViewProps extends ViewProps {
+  sessionId: string;
   broadcastPath: string;
 }
 
@@ -17,5 +18,11 @@ const NativeMoQVideoView =
 // building block for fully custom video UIs. If you want a ready-made layout
 // with fullscreen + platform-styled controls, reach for `<VideoPlayerView>`.
 export function VideoView({ player, ...rest }: VideoViewProps) {
-  return <NativeMoQVideoView broadcastPath={player.broadcastPath} {...rest} />;
+  return (
+    <NativeMoQVideoView
+      sessionId={player.sessionId}
+      broadcastPath={player.broadcastPath}
+      {...rest}
+    />
+  );
 }

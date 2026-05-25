@@ -8,6 +8,7 @@ export function useAudioPlayer(
   broadcastInfo: BroadcastInfo,
   setup?: (player: AudioPlayer) => void
 ): AudioPlayer {
+  const { sessionId } = broadcastInfo;
   const audioKey = broadcastInfo.path + AUDIO_PLAYER_KEY_SUFFIX;
 
   // Bridge-only handle: audio-only players don't use JSI since the native
@@ -15,25 +16,27 @@ export function useAudioPlayer(
   const audioHandle = useMemo(
     () =>
       new PlayerHandle(
+        sessionId,
         audioKey,
         undefined,
         undefined,
         broadcastInfo.audioTracks[0]?.name
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [audioKey]
+    [sessionId, audioKey]
   );
 
   useEffect(() => {
-    NativeMoQ.createAudioOnlyPlayer(broadcastInfo.path);
+    NativeMoQ.createAudioOnlyPlayer(sessionId, broadcastInfo.path);
     return () => {
-      NativeMoQ.stopPlayer(audioKey);
+      NativeMoQ.stopPlayer(sessionId, audioKey);
     };
-  }, [broadcastInfo.path, audioKey]);
+  }, [sessionId, broadcastInfo.path, audioKey]);
 
   const player: Player = usePlayer(audioHandle);
 
   const audioPlayer: AudioPlayer = {
+    sessionId: player.sessionId,
     broadcastPath: player.broadcastPath,
     isPlaying: player.isPlaying,
     playbackStats: player.playbackStats,

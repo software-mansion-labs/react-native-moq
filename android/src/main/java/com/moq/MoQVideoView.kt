@@ -7,18 +7,33 @@ import android.view.SurfaceView
 
 class MoQVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
+  var sessionId: String? = null
+    set(value) {
+      val oldSession = field
+      val oldPath = broadcastPath
+      field = value
+      reregisterListener(oldSession, oldPath)
+    }
+
   var broadcastPath: String? = null
     set(value) {
-      val old = field
+      val oldSession = sessionId
+      val oldPath = field
       field = value
-      if (old != null) {
-        MoQModule.removePlayerListener(old, playerChangedCallback)
-      }
-      if (value != null) {
-        MoQModule.addPlayerListener(value, playerChangedCallback)
-        setSurface(holder.surface)
-      }
+      reregisterListener(oldSession, oldPath)
     }
+
+  private fun reregisterListener(oldSession: String?, oldPath: String?) {
+    if (oldSession != null && oldPath != null) {
+      MoQModule.removePlayerListener(oldSession, oldPath, playerChangedCallback)
+    }
+    val s = sessionId
+    val p = broadcastPath
+    if (s != null && p != null) {
+      MoQModule.addPlayerListener(s, p, playerChangedCallback)
+      setSurface(holder.surface)
+    }
+  }
 
   private val playerChangedCallback: () -> Unit = { setSurface(holder.surface) }
 
@@ -51,12 +66,18 @@ class MoQVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callb
   }
 
   fun setSurface(surface: Surface?) {
-    broadcastPath?.let { path -> MoQModule.playerHandles[path]?.setSurface(surface) }
+    val s = sessionId ?: return
+    val p = broadcastPath ?: return
+    MoQModule.playerHandle(s, p)?.setSurface(surface)
   }
 
   fun cleanup() {
     holder.removeCallback(this)
-    broadcastPath?.let { path -> MoQModule.removePlayerListener(path, playerChangedCallback) }
+    val s = sessionId
+    val p = broadcastPath
+    if (s != null && p != null) {
+      MoQModule.removePlayerListener(s, p, playerChangedCallback)
+    }
     setSurface(null)
   }
 }

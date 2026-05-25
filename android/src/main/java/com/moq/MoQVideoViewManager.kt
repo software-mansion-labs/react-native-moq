@@ -14,6 +14,11 @@ class MoQVideoViewManager : SimpleViewManager<MoQVideoView>() {
 
   override fun createViewInstance(context: ThemedReactContext) = MoQVideoView(context)
 
+  @ReactProp(name = "sessionId")
+  fun setSessionId(view: MoQVideoView, sessionId: String?) {
+    view.sessionId = sessionId
+  }
+
   @ReactProp(name = "broadcastPath")
   fun setBroadcastPath(view: MoQVideoView, broadcastPath: String?) {
     view.broadcastPath = broadcastPath

@@ -12,6 +12,7 @@ RCT_EXPORT_MODULE(MoQVideoView)
   return [MoQVideoView new];
 }
 
+RCT_EXPORT_VIEW_PROPERTY(sessionId, NSString)
 RCT_EXPORT_VIEW_PROPERTY(broadcastPath, NSString)
 
 + (BOOL)requiresMainQueueSetup {

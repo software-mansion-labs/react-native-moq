@@ -29,19 +29,24 @@ export const AUDIO_PLAYER_KEY_SUFFIX = '_audio';
 
 // Opaque handle returned in broadcastAvailable events.
 // On iOS the native field is a JSI HostObject with direct methods;
-// on Android it falls back to bridge calls keyed by broadcastPath.
+// on Android it falls back to bridge calls keyed by (sessionId, broadcastPath).
+// Two sessions can surface the same broadcastPath, so the session id is part
+// of the routing key.
 export class PlayerHandle {
+  readonly sessionId: string;
   readonly broadcastPath: string;
   readonly initialVideoTrackName?: string;
   readonly initialAudioTrackName?: string;
   readonly #native: any;
 
   constructor(
+    sessionId: string,
     broadcastPath: string,
     native?: unknown,
     initialVideoTrackName?: string,
     initialAudioTrackName?: string
   ) {
+    this.sessionId = sessionId;
     this.broadcastPath = broadcastPath;
     this.#native = native;
     this.initialVideoTrackName = initialVideoTrackName;
@@ -50,41 +55,44 @@ export class PlayerHandle {
 
   play() {
     if (this.#native) this.#native.play();
-    else NativeMoQ.play(this.broadcastPath);
+    else NativeMoQ.play(this.sessionId, this.broadcastPath);
   }
 
   pause() {
     if (this.#native) this.#native.pause();
-    else NativeMoQ.pause(this.broadcastPath);
+    else NativeMoQ.pause(this.sessionId, this.broadcastPath);
   }
 
   stop() {
     if (this.#native) this.#native.stop();
-    else NativeMoQ.stopPlayer(this.broadcastPath);
+    else NativeMoQ.stopPlayer(this.sessionId, this.broadcastPath);
   }
 
   updateTargetLatency(ms: number) {
     if (this.#native) this.#native.updateTargetLatency(ms);
-    else NativeMoQ.updateTargetLatency(this.broadcastPath, ms);
+    else NativeMoQ.updateTargetLatency(this.sessionId, this.broadcastPath, ms);
   }
 
   switchVideoTrack(trackName: string) {
     if (this.#native) this.#native.switchVideoTrack(trackName);
-    else NativeMoQ.switchVideoTrack(this.broadcastPath, trackName);
+    else
+      NativeMoQ.switchVideoTrack(this.sessionId, this.broadcastPath, trackName);
   }
 
   switchAudioTrack(trackName: string) {
     if (this.#native) this.#native.switchAudioTrack(trackName);
-    else NativeMoQ.switchAudioTrack(this.broadcastPath, trackName);
+    else
+      NativeMoQ.switchAudioTrack(this.sessionId, this.broadcastPath, trackName);
   }
 
   setVolume(volume: number) {
     if (this.#native) this.#native.setVolume(volume);
-    else NativeMoQ.setVolume(this.broadcastPath, volume);
+    else NativeMoQ.setVolume(this.sessionId, this.broadcastPath, volume);
   }
 }
 
 export interface BroadcastInfo {
+  sessionId: string;
   path: string;
   videoTracks: VideoTrackInfo[];
   audioTracks: AudioTrackInfo[];
@@ -128,6 +136,8 @@ export type SessionEvents = {
 };
 
 export interface Session {
+  readonly id: string;
+  readonly url: string;
   state: SessionState;
   readonly emitter: EventEmitter<SessionEvents>;
   addListener<TEventName extends keyof SessionEvents>(
@@ -139,6 +149,7 @@ export interface Session {
 }
 
 export interface Player {
+  readonly sessionId: string;
   readonly broadcastPath: string;
   readonly isPlaying: boolean;
   readonly playbackStats: PlaybackStats | null;
@@ -160,6 +171,7 @@ export interface Player {
 }
 
 export interface AudioPlayer {
+  readonly sessionId: string;
   readonly broadcastPath: string;
   readonly isPlaying: boolean;
   readonly playbackStats: PlaybackStats | null;

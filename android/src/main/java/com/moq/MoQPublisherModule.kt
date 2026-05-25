@@ -15,7 +15,6 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import com.swmansion.moqkit.Session
 import com.swmansion.moqkit.publish.PublishedTrack
 import com.swmansion.moqkit.publish.PublishedTrackState
 import com.swmansion.moqkit.publish.Publisher
@@ -28,6 +27,7 @@ import com.swmansion.moqkit.publish.encoder.VideoEncoderConfig
 import com.swmansion.moqkit.publish.source.CameraCapture
 import com.swmansion.moqkit.publish.source.CameraPosition
 import com.swmansion.moqkit.publish.source.MicrophoneCapture
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,13 +76,19 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
   private var cameraPosition: CameraPosition = CameraPosition.Front
   private var previewRefCount: Int = 0
 
-  private var session: Session? = null
-  private var publisher: Publisher? = null
-  private var microphone: MicrophoneCapture? = null
+  // Per-session publisher context. Multiple sessions can host concurrent
+  // publishers. Camera and microphone are device-singletons so they're shared
+  // across publishers with ref-counts.
+  private class PublisherContext(val sessionId: String, val publisher: Publisher) {
+    val jobs = mutableListOf<Job>()
+    var usesCamera: Boolean = false
+    var usesMicrophone: Boolean = false
+  }
 
-  private var sessionStateJob: Job? = null
-  private var publisherJobs = mutableListOf<Job>()
-  private var publishing: Boolean = false
+  private val publishers = ConcurrentHashMap<String, PublisherContext>()
+  private var microphone: MicrophoneCapture? = null
+  private var microphoneRefCount: Int = 0
+  private val publishing: Boolean get() = publishers.isNotEmpty()
 
   companion object {
     const val NAME = NativeMoQPublisherSpec.NAME
@@ -159,30 +165,23 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
 
   // MARK: - Publish
 
-  override fun publish(url: String, path: String, optsJson: String) {
-    if (publishing) return
-    publishing = true
+  override fun publish(sessionId: String, path: String, optsJson: String) {
+    if (publishers.containsKey(sessionId)) return
+    val s = MoQModule.connectedSession(sessionId) ?: run {
+      emitState(sessionId, "error:session is not connected")
+      return
+    }
 
     val opts = parseOpts(optsJson)
-    val s = Session(url = url, parentScope = moduleScope)
-    session = s
-
-    sessionStateJob = s.state.onEach { state ->
-      when (state) {
-        Session.State.Idle -> emitState("idle")
-        Session.State.Connecting -> emitState("connecting")
-        Session.State.Connected -> { /* publisher state drives UI */ }
-        Session.State.Closed -> emitState("stopped")
-        is Session.State.Error -> emitState("error:${state.message}")
-      }
-    }.launchIn(moduleScope)
 
     moduleScope.launch {
+      var startedMic = false
       try {
-        s.connect()
-
         val pub = Publisher()
-        publisher = pub
+        val ctx = PublisherContext(sessionId, pub)
+        ctx.usesCamera = opts.cameraEnabled
+        ctx.usesMicrophone = opts.micEnabled
+        publishers[sessionId] = ctx
 
         val tracks = mutableListOf<PublishedTrack>()
 
@@ -203,9 +202,12 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
         }
 
         if (opts.micEnabled) {
-          val mic = MicrophoneCapture(sampleRate = opts.audioSampleRate)
-          microphone = mic
-          @Suppress("MissingPermission") mic.start()
+          val mic = microphone ?: MicrophoneCapture(sampleRate = opts.audioSampleRate).also {
+            microphone = it
+            @Suppress("MissingPermission") it.start()
+          }
+          microphoneRefCount += 1
+          startedMic = true
           val audioConfig = AudioEncoderConfig(
             codec = opts.audioCodec,
             sampleRate = opts.audioSampleRate,
@@ -216,43 +218,56 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
         s.publish(path, pub)
         pub.start()
 
-        observePublisher(pub, tracks)
+        observePublisher(ctx, tracks)
       } catch (e: Exception) {
-        emitState("error:${e.message ?: "publish failed"}")
-        stopInternal()
+        if (startedMic) {
+          microphoneRefCount -= 1
+          if (microphoneRefCount <= 0) {
+            microphoneRefCount = 0
+            microphone?.stop(); microphone = null
+          }
+        }
+        publishers.remove(sessionId)
+        emitState(sessionId, "error:${e.message ?: "publish failed"}")
+        stopInternal(sessionId)
       }
     }
   }
 
-  override fun stop() {
-    moduleScope.launch { stopInternal() }
+  override fun stop(sessionId: String) {
+    moduleScope.launch { stopInternal(sessionId) }
   }
 
-  private suspend fun stopInternal() {
-    val wasPublishing = publishing
-    publishing = false
+  private suspend fun stopInternal(sessionId: String) {
+    val ctx = publishers.remove(sessionId) ?: return
 
-    publisherJobs.forEach { it.cancel() }
-    publisherJobs.clear()
-    sessionStateJob?.cancel(); sessionStateJob = null
+    ctx.jobs.forEach { it.cancel() }
+    ctx.jobs.clear()
 
-    val pub = publisher
-    val sess = session
-    publisher = null
-    session = null
+    if (ctx.usesMicrophone) {
+      microphoneRefCount -= 1
+      if (microphoneRefCount <= 0) {
+        microphoneRefCount = 0
+        microphone?.stop(); microphone = null
+      }
+    }
 
-    microphone?.stop(); microphone = null
-
-    if (previewRefCount == 0) {
+    // Stop the camera only if neither preview nor any other publisher uses it.
+    val cameraStillUsed = previewRefCount > 0 || publishers.values.any { it.usesCamera }
+    if (!cameraStillUsed) {
       cameraCapture?.stop()
       cameraCapture = null
       publishSharedCamera(null)
     }
 
-    try { pub?.stop() } catch (_: Exception) {}
-    sess?.close()
+    try { ctx.publisher.stop() } catch (_: Exception) {}
 
-    if (wasPublishing) emitState("idle")
+    // Session is owned by MoQModule and stays alive across publish cycles.
+    emitState(sessionId, "idle")
+  }
+
+  private suspend fun stopAllInternal() {
+    for (sid in publishers.keys.toList()) stopInternal(sid)
   }
 
   override fun invalidate() {
@@ -261,7 +276,7 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
     pendingScreenPromise?.reject("module_invalidated", "Module invalidated")
     pendingScreenPromise = null
     stopScreenBroadcastService()
-    moduleScope.launch { stopInternal() }
+    moduleScope.launch { stopAllInternal() }
     moduleScope.cancel()
   }
 
@@ -381,17 +396,19 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
 
   // MARK: - Observers
 
-  private fun observePublisher(pub: Publisher, tracks: List<PublishedTrack>) {
-    publisherJobs += pub.state.onEach { state ->
+  private fun observePublisher(ctx: PublisherContext, tracks: List<PublishedTrack>) {
+    val pub = ctx.publisher
+    val sessionId = ctx.sessionId
+    ctx.jobs += pub.state.onEach { state ->
       when (state) {
         PublisherState.Idle -> {}
-        PublisherState.Publishing -> emitState("publishing")
-        PublisherState.Stopped -> emitState("stopped")
-        is PublisherState.Error -> emitState("error:${state.message}")
+        PublisherState.Publishing -> emitState(sessionId, "publishing")
+        PublisherState.Stopped -> emitState(sessionId, "stopped")
+        is PublisherState.Error -> emitState(sessionId, "error:${state.message}")
       }
     }.launchIn(moduleScope)
 
-    publisherJobs += pub.events.onEach { event ->
+    ctx.jobs += pub.events.onEach { event ->
       val name = event.trackName
       val state = when (event) {
         is PublisherEvent.TrackStarted -> "active"
@@ -399,6 +416,7 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
         is PublisherEvent.TrackError -> "stopped"
       }
       val map = Arguments.createMap()
+      map.putString("sessionId", sessionId)
       map.putString("name", name)
       map.putString("state", state)
       if (event is PublisherEvent.TrackError) map.putString("error", event.message)
@@ -407,8 +425,9 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
 
     for (track in tracks) {
       val trackName = track.name
-      publisherJobs += track.state.onEach { st ->
+      ctx.jobs += track.state.onEach { st ->
         val map = Arguments.createMap()
+        map.putString("sessionId", sessionId)
         map.putString("name", trackName)
         map.putString("state", trackStateString(st))
         emit("publisherTrackStateChanged", map)
@@ -418,8 +437,18 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
 
   // MARK: - Helpers
 
+  // Camera errors (preview / flip) aren't bound to a particular publish
+  // session — they may happen before publish() is called. Broadcast to every
+  // active publisher so each one transitions to the error state; if none are
+  // active, drop the message (preview itself has no state surface in JS).
   private fun emitState(state: String) {
+    if (publishers.isEmpty()) return
+    for (sid in publishers.keys.toList()) emitState(sid, state)
+  }
+
+  private fun emitState(sessionId: String, state: String) {
     val map = Arguments.createMap()
+    map.putString("sessionId", sessionId)
     map.putString("state", state)
     emit("publisherStateChanged", map)
   }

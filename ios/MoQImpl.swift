@@ -16,54 +16,76 @@ private let audioKeySuffix = "_audio"
 
   // MARK: - Video layer notification
 
+  // userInfo carries the (sessionId, broadcastPath) pair so MoQVideoView can
+  // tell whether it's the one whose layer just changed. A nil object means
+  // "every player went away for one session" (sent on disconnect).
   static let playerChangedNotification = Notification.Name("MoQImpl.playerChanged")
+  static let playerChangedSessionIdKey = "sessionId"
+  static let playerChangedBroadcastPathKey = "broadcastPath"
 
-  @MainActor @objc public func videoLayer(for broadcastPath: String) -> AVSampleBufferDisplayLayer? {
-    playerRefs[broadcastPath]?.videoLayer
+  @MainActor @objc public func videoLayer(forSessionId sessionId: String, broadcastPath: String) -> AVSampleBufferDisplayLayer? {
+    contexts[sessionId]?.playerRefs[broadcastPath]?.videoLayer
   }
 
-  // MARK: - State (readable from any context)
-
-  private(set) var currentState: SessionState = .idle
-
-  // MARK: - Private
-
-  private var session: Session?
-  private var targetLatencyMs: UInt64 = 200
-
-  // One MoQPrefixSubscription per active prefix.  JS-side ref-counting in
-  // useBroadcasts ensures that calls to subscribe/unsubscribe are balanced.
-  private var subscriptions: [String: MoQPrefixSubscription] = [:]
-  // path → prefix that introduced it.  Players are still keyed by path; when
-  // the owning prefix's subscription tears down we tear down the player too.
-  // Overlapping prefixes that match the same broadcast are not supported and
-  // give last-writer-wins on player ownership.
-  private var prefixForPath: [String: String] = [:]
-
-  private var playerRefs: [String: MoQPlayerRef] = [:]
-  private var catalogs: [String: Catalog] = [:]
-
-  private var stateTask: Task<Void, Never>?
-
-  // MARK: - Public API
-
-  @objc(connect:targetLatencyMs:)
-  public func connect(url: String, targetLatencyMs: Int) {
-    Task { @MainActor in self._connect(url: url, targetLatencyMs: UInt64(targetLatencyMs)) }
+  // Exposed for MoQPublisherImpl, which reuses the host session instead of
+  // opening its own. nil until the JS `useSession` for this id has called
+  // connect() and the relay has accepted the session.
+  @MainActor public func currentSession(forSessionId sessionId: String) -> Session? {
+    guard let ctx = contexts[sessionId], case .connected = ctx.state else {
+      return nil
+    }
+    return ctx.session
   }
 
-  @objc public func disconnect() {
-    Task { @MainActor in self._disconnect() }
+  // MARK: - Private state
+
+  // Per-session context. Each useSession on the JS side corresponds to one of
+  // these. Two sessions can coexist (subscribe + publish to the same relay,
+  // talk to two different relays, etc.) so all state below is partitioned by
+  // sessionId.
+  private final class SessionContext {
+    let id: String
+    let session: Session
+    var targetLatencyMs: UInt64 = 200
+    var state: SessionState = .idle
+
+    var stateTask: Task<Void, Never>?
+    var subscriptions: [String: MoQPrefixSubscription] = [:]
+    var prefixForPath: [String: String] = [:]
+    var playerRefs: [String: MoQPlayerRef] = [:]
+    var catalogs: [String: Catalog] = [:]
+
+    init(id: String, session: Session) {
+      self.id = id
+      self.session = session
+    }
   }
 
-  @objc(subscribe:)
-  public func subscribe(prefix: String) {
-    Task { @MainActor in self._subscribe(prefix: prefix) }
+  private var contexts: [String: SessionContext] = [:]
+
+  // MARK: - Objc bridge
+
+  @objc(connectWithSessionId:url:targetLatencyMs:)
+  public func connect(sessionId: String, url: String, targetLatencyMs: Int) {
+    Task { @MainActor in
+      self._connect(
+        sessionId: sessionId, url: url, targetLatencyMs: UInt64(targetLatencyMs))
+    }
   }
 
-  @objc(unsubscribe:)
-  public func unsubscribe(prefix: String) {
-    Task { @MainActor in await self._unsubscribe(prefix: prefix) }
+  @objc(disconnectWithSessionId:)
+  public func disconnect(sessionId: String) {
+    Task { @MainActor in self._disconnect(sessionId: sessionId) }
+  }
+
+  @objc(subscribeWithSessionId:prefix:)
+  public func subscribe(sessionId: String, prefix: String) {
+    Task { @MainActor in self._subscribe(sessionId: sessionId, prefix: prefix) }
+  }
+
+  @objc(unsubscribeWithSessionId:prefix:)
+  public func unsubscribe(sessionId: String, prefix: String) {
+    Task { @MainActor in await self._unsubscribe(sessionId: sessionId, prefix: prefix) }
   }
 
   // All control methods route through MainActor so they observe writes from
@@ -71,71 +93,83 @@ private let audioKeySuffix = "_audio"
   // Without this, a follow-up play(audioKey) right after createAudioOnlyPlayer
   // would race the create Task and find an empty playerRefs map.
 
-  @objc(play:)
-  public func play(broadcastPath: String) {
-    Task { @MainActor in self.playerRefs[broadcastPath]?.play() }
+  @objc(playWithSessionId:broadcastPath:)
+  public func play(sessionId: String, broadcastPath: String) {
+    Task { @MainActor in self.contexts[sessionId]?.playerRefs[broadcastPath]?.play() }
   }
 
-  @objc(pause:)
-  public func pause(broadcastPath: String) {
-    Task { @MainActor in self.playerRefs[broadcastPath]?.pause() }
+  @objc(pauseWithSessionId:broadcastPath:)
+  public func pause(sessionId: String, broadcastPath: String) {
+    Task { @MainActor in self.contexts[sessionId]?.playerRefs[broadcastPath]?.pause() }
   }
 
-  @objc(stopPlayer:)
-  public func stopPlayer(broadcastPath: String) {
+  @objc(stopPlayerWithSessionId:broadcastPath:)
+  public func stopPlayer(sessionId: String, broadcastPath: String) {
     Task { @MainActor in
-      await self._removePlayer(for: broadcastPath)
+      await self._removePlayer(sessionId: sessionId, path: broadcastPath)
     }
   }
 
-  @objc(updateTargetLatency:ms:)
-  public func updateTargetLatency(broadcastPath: String, ms: Int) {
-    Task { @MainActor in self.playerRefs[broadcastPath]?.updateTargetLatency(ms: ms) }
-  }
-
-  @objc(switchVideoTrack:trackName:)
-  public func switchVideoTrack(broadcastPath: String, trackName: String) {
-    Task { @MainActor in self.playerRefs[broadcastPath]?.switchVideoTrack(name: trackName) }
-  }
-
-  @objc(switchAudioTrack:trackName:)
-  public func switchAudioTrack(broadcastPath: String, trackName: String) {
-    Task { @MainActor in self.playerRefs[broadcastPath]?.switchAudioTrack(name: trackName) }
-  }
-
-  @objc(setVolume:volume:)
-  public func setVolume(broadcastPath: String, volume: Float) {
-    Task { @MainActor in self.playerRefs[broadcastPath]?.setVolume(volume) }
-  }
-
-  @objc(createAudioOnlyPlayer:)
-  public func createAudioOnlyPlayer(broadcastPath: String) {
+  @objc(updateTargetLatencyWithSessionId:broadcastPath:ms:)
+  public func updateTargetLatency(sessionId: String, broadcastPath: String, ms: Int) {
     Task { @MainActor in
-      await self._createAudioOnlyPlayer(broadcastPath: broadcastPath)
+      self.contexts[sessionId]?.playerRefs[broadcastPath]?.updateTargetLatency(ms: ms)
+    }
+  }
+
+  @objc(switchVideoTrackWithSessionId:broadcastPath:trackName:)
+  public func switchVideoTrack(sessionId: String, broadcastPath: String, trackName: String) {
+    Task { @MainActor in
+      self.contexts[sessionId]?.playerRefs[broadcastPath]?.switchVideoTrack(name: trackName)
+    }
+  }
+
+  @objc(switchAudioTrackWithSessionId:broadcastPath:trackName:)
+  public func switchAudioTrack(sessionId: String, broadcastPath: String, trackName: String) {
+    Task { @MainActor in
+      self.contexts[sessionId]?.playerRefs[broadcastPath]?.switchAudioTrack(name: trackName)
+    }
+  }
+
+  @objc(setVolumeWithSessionId:broadcastPath:volume:)
+  public func setVolume(sessionId: String, broadcastPath: String, volume: Float) {
+    Task { @MainActor in
+      self.contexts[sessionId]?.playerRefs[broadcastPath]?.setVolume(volume)
+    }
+  }
+
+  @objc(createAudioOnlyPlayerWithSessionId:broadcastPath:)
+  public func createAudioOnlyPlayer(sessionId: String, broadcastPath: String) {
+    Task { @MainActor in
+      await self._createAudioOnlyPlayer(sessionId: sessionId, broadcastPath: broadcastPath)
     }
   }
 
   // MARK: - JSI: called from MoQ.mm C++ getPlayer override
 
-  @objc(playerRefForPath:)
-  public func playerRef(for path: String) -> MoQPlayerRef? {
-    playerRefs[path]
+  @objc(playerRefForSessionId:broadcastPath:)
+  public func playerRef(forSessionId sessionId: String, broadcastPath: String) -> MoQPlayerRef? {
+    contexts[sessionId]?.playerRefs[broadcastPath]
   }
 
   // MARK: - Private: connect / disconnect
 
   @MainActor
-  private func _connect(url: String, targetLatencyMs: UInt64) {
-    guard session == nil else { return }
-    self.targetLatencyMs = targetLatencyMs
+  private func _connect(sessionId: String, url: String, targetLatencyMs: UInt64) {
+    guard contexts[sessionId] == nil else { return }
 
     let s = Session(url: url)
-    session = s
+    let ctx = SessionContext(id: sessionId, session: s)
+    ctx.targetLatencyMs = targetLatencyMs
+    contexts[sessionId] = ctx
 
-    stateTask = Task { @MainActor in
+    ctx.stateTask = Task { @MainActor in
       for await state in s.state {
-        self.currentState = state
-        self.onEvent?("sessionStateChanged", ["state": state.stringValue])
+        guard let ctx = self.contexts[sessionId] else { break }
+        ctx.state = state
+        self.onEvent?(
+          "sessionStateChanged",
+          ["sessionId": sessionId, "state": state.stringValue])
       }
     }
 
@@ -145,17 +179,20 @@ private let audioKeySuffix = "_audio"
   }
 
   @MainActor
-  private func _subscribe(prefix: String) {
-    guard let s = session else { return }
+  private func _subscribe(sessionId: String, prefix: String) {
+    guard let ctx = contexts[sessionId] else { return }
     // Idempotent: a JS-side ref-count already ensures this call only fires
-    // once per prefix going from 0 → 1 subscribers, but guard anyway in case
-    // the relay had pending state.
-    if subscriptions[prefix] != nil { return }
+    // once per (session, prefix) going from 0 → 1 subscribers, but guard
+    // anyway in case the relay had pending state.
+    if ctx.subscriptions[prefix] != nil { return }
 
+    let s = ctx.session
     Task { @MainActor in
       guard let sub = try? await s.subscribe(prefix: prefix) else { return }
       // Bail out if the user disconnected or already subscribed while we awaited.
-      guard self.session === s, self.subscriptions[prefix] == nil else {
+      guard let ctx = self.contexts[sessionId], ctx.session === s,
+        ctx.subscriptions[prefix] == nil
+      else {
         sub.cancel()
         return
       }
@@ -163,65 +200,87 @@ private let audioKeySuffix = "_audio"
         prefix: prefix,
         subscription: sub,
         onBroadcastAvailable: { [weak self] prefix, catalog in
-          await self?._handleBroadcastAvailable(prefix: prefix, catalog: catalog)
+          await self?._handleBroadcastAvailable(
+            sessionId: sessionId, prefix: prefix, catalog: catalog)
         },
         onBroadcastUnavailable: { [weak self] prefix, path in
-          await self?._handleBroadcastUnavailable(prefix: prefix, path: path)
+          await self?._handleBroadcastUnavailable(
+            sessionId: sessionId, prefix: prefix, path: path)
         }
       )
-      self.subscriptions[prefix] = ps
+      ctx.subscriptions[prefix] = ps
       ps.start()
     }
   }
 
   @MainActor
-  private func _unsubscribe(prefix: String) async {
-    guard let ps = subscriptions.removeValue(forKey: prefix) else { return }
+  private func _unsubscribe(sessionId: String, prefix: String) async {
+    guard let ctx = contexts[sessionId],
+      let ps = ctx.subscriptions.removeValue(forKey: prefix)
+    else { return }
     let paths = ps.cancel()
 
     // Tear down players for the paths this prefix owned.  We don't emit
     // broadcastUnavailable events here — the JS-side useBroadcasts already
     // cleared its local state synchronously when its ref count hit zero.
-    for path in paths where prefixForPath[path] == prefix {
-      prefixForPath.removeValue(forKey: path)
-      catalogs.removeValue(forKey: path)
-      await _removePlayer(for: path, cancelCatalogTask: false)
-      await _removePlayer(for: path + audioKeySuffix, notifyVideoViews: false, cancelCatalogTask: false)
+    for path in paths where ctx.prefixForPath[path] == prefix {
+      ctx.prefixForPath.removeValue(forKey: path)
+      ctx.catalogs.removeValue(forKey: path)
+      await _removePlayer(sessionId: sessionId, path: path, cancelCatalogTask: false)
+      await _removePlayer(
+        sessionId: sessionId, path: path + audioKeySuffix,
+        notifyVideoViews: false, cancelCatalogTask: false)
     }
   }
 
   @MainActor
-  private func _unsubscribeAll() async {
-    for prefix in Array(subscriptions.keys) {
-      await _unsubscribe(prefix: prefix)
+  private func _unsubscribeAll(sessionId: String) async {
+    guard let ctx = contexts[sessionId] else { return }
+    for prefix in Array(ctx.subscriptions.keys) {
+      await _unsubscribe(sessionId: sessionId, prefix: prefix)
     }
   }
 
   @MainActor
-  private func _disconnect() {
-    stateTask?.cancel(); stateTask = nil
-    currentState = .idle
+  private func _disconnect(sessionId: String) {
+    guard let ctx = contexts[sessionId] else { return }
+    ctx.stateTask?.cancel(); ctx.stateTask = nil
+    ctx.state = .idle
 
-    let s = session
-    session = nil
+    let s = ctx.session
+    contexts.removeValue(forKey: sessionId)
 
     Task { @MainActor in
-      await self._unsubscribeAll()
-      await s?.close()
+      // Unsubscribe needs the context to still exist; recreate a minimal one
+      // briefly so the existing unsubscribe path can tear subscriptions down.
+      let temp = SessionContext(id: sessionId, session: s)
+      temp.subscriptions = ctx.subscriptions
+      temp.prefixForPath = ctx.prefixForPath
+      temp.playerRefs = ctx.playerRefs
+      temp.catalogs = ctx.catalogs
+      self.contexts[sessionId] = temp
+      await self._unsubscribeAll(sessionId: sessionId)
+      self.contexts.removeValue(forKey: sessionId)
+      await s.close()
     }
   }
 
   // MARK: - Private: broadcast events
 
   @MainActor
-  private func _handleBroadcastAvailable(prefix: String, catalog: Catalog) async {
+  private func _handleBroadcastAvailable(
+    sessionId: String, prefix: String, catalog: Catalog
+  ) async {
+    guard let ctx = contexts[sessionId] else { return }
     let path = catalog.path
 
-    catalogs[path] = catalog
-    prefixForPath[path] = prefix
+    ctx.catalogs[path] = catalog
+    ctx.prefixForPath[path] = prefix
 
-    let hadPlayer = playerRefs[path] != nil
-    await _removePlayer(for: path, notifyVideoViews: false, cancelCatalogTask: false)
+    let hadPlayer = ctx.playerRefs[path] != nil
+    await _removePlayer(
+      sessionId: sessionId, path: path, notifyVideoViews: false,
+      cancelCatalogTask: false)
 
     let videoTrackName = catalog.videoTracks.first?.name
     let audioTrackName = catalog.audioTracks.first?.name
@@ -230,14 +289,15 @@ private let audioKeySuffix = "_audio"
       catalog: catalog,
       videoTrackName: videoTrackName,
       audioTrackName: audioTrackName,
-      targetBufferingMs: targetLatencyMs
+      targetBufferingMs: ctx.targetLatencyMs
     )
     if let p {
-      let ref = MoQPlayerRef(player: p, broadcastPath: path, videoTrackName: videoTrackName, audioTrackName: audioTrackName)
+      let ref = MoQPlayerRef(
+        player: p, sessionId: sessionId, broadcastPath: path,
+        videoTrackName: videoTrackName, audioTrackName: audioTrackName)
       ref.onEvent = { [weak self] name, body in self?.onEvent?(name, body) }
-      playerRefs[path] = ref
-      NotificationCenter.default.post(
-        name: MoQImpl.playerChangedNotification, object: path)
+      ctx.playerRefs[path] = ref
+      postPlayerChanged(sessionId: sessionId, broadcastPath: path)
       ref.startObservingEvents()
 
       if hadPlayer {
@@ -246,12 +306,13 @@ private let audioKeySuffix = "_audio"
 
       // Re-create the audio-only player if one was previously active.
       let audioKey = path + audioKeySuffix
-      if playerRefs[audioKey] != nil {
-        await _createAudioOnlyPlayer(broadcastPath: path)
+      if ctx.playerRefs[audioKey] != nil {
+        await _createAudioOnlyPlayer(sessionId: sessionId, broadcastPath: path)
       }
     }
 
     var broadcastAvailableBody: [String: Any] = [
+      "sessionId": sessionId,
       "prefix": prefix,
       "path": path,
       "videoTracks": catalog.videoTracks.map { t -> [String: Any] in
@@ -281,58 +342,80 @@ private let audioKeySuffix = "_audio"
   }
 
   @MainActor
-  private func _handleBroadcastUnavailable(prefix: String, path: String) async {
+  private func _handleBroadcastUnavailable(
+    sessionId: String, prefix: String, path: String
+  ) async {
+    guard let ctx = contexts[sessionId] else { return }
     // If the prefix's subscription was already torn down (e.g. by _unsubscribe)
     // the catalog task may still call into here once after cancellation.  Skip
     // double-emit / double-tear-down.
-    guard prefixForPath[path] == prefix else { return }
+    guard ctx.prefixForPath[path] == prefix else { return }
 
-    await _removePlayer(for: path)
-    await _removePlayer(for: path + audioKeySuffix, notifyVideoViews: false, cancelCatalogTask: false)
-    catalogs.removeValue(forKey: path)
-    prefixForPath.removeValue(forKey: path)
-    onEvent?("broadcastUnavailable", ["prefix": prefix, "path": path])
+    await _removePlayer(sessionId: sessionId, path: path)
+    await _removePlayer(
+      sessionId: sessionId, path: path + audioKeySuffix,
+      notifyVideoViews: false, cancelCatalogTask: false)
+    ctx.catalogs.removeValue(forKey: path)
+    ctx.prefixForPath.removeValue(forKey: path)
+    onEvent?(
+      "broadcastUnavailable",
+      ["sessionId": sessionId, "prefix": prefix, "path": path])
   }
 
   @MainActor
-  private func _createAudioOnlyPlayer(broadcastPath: String) async {
-    guard let catalog = catalogs[broadcastPath],
-          let audioTrackName = catalog.audioTracks.first?.name
+  private func _createAudioOnlyPlayer(sessionId: String, broadcastPath: String) async {
+    guard let ctx = contexts[sessionId],
+      let catalog = ctx.catalogs[broadcastPath],
+      let audioTrackName = catalog.audioTracks.first?.name
     else { return }
 
     let audioKey = broadcastPath + audioKeySuffix
-    await _removePlayer(for: audioKey, notifyVideoViews: false, cancelCatalogTask: false)
+    await _removePlayer(
+      sessionId: sessionId, path: audioKey, notifyVideoViews: false,
+      cancelCatalogTask: false)
 
     let p = try? Player(
       catalog: catalog,
       videoTrackName: nil,
       audioTrackName: audioTrackName,
-      targetBufferingMs: targetLatencyMs
+      targetBufferingMs: ctx.targetLatencyMs
     )
     if let p {
-      let ref = MoQPlayerRef(player: p, broadcastPath: audioKey, videoTrackName: nil, audioTrackName: audioTrackName)
+      let ref = MoQPlayerRef(
+        player: p, sessionId: sessionId, broadcastPath: audioKey,
+        videoTrackName: nil, audioTrackName: audioTrackName)
       ref.onEvent = { [weak self] name, body in self?.onEvent?(name, body) }
-      playerRefs[audioKey] = ref
+      ctx.playerRefs[audioKey] = ref
       ref.startObservingEvents()
     }
   }
 
   @MainActor
   private func _removePlayer(
-    for path: String,
+    sessionId: String,
+    path: String,
     notifyVideoViews: Bool = true,
     cancelCatalogTask: Bool = true
   ) async {
-    if let ref = playerRefs.removeValue(forKey: path) {
-      if cancelCatalogTask, let owningPrefix = prefixForPath[path] {
-        subscriptions[owningPrefix]?.cancelCatalogTask(for: path)
+    guard let ctx = contexts[sessionId] else { return }
+    if let ref = ctx.playerRefs.removeValue(forKey: path) {
+      if cancelCatalogTask, let owningPrefix = ctx.prefixForPath[path] {
+        ctx.subscriptions[owningPrefix]?.cancelCatalogTask(for: path)
       }
       await ref.stopAll()
     }
     if notifyVideoViews {
-      NotificationCenter.default.post(
-        name: MoQImpl.playerChangedNotification, object: path)
+      postPlayerChanged(sessionId: sessionId, broadcastPath: path)
     }
+  }
+
+  private func postPlayerChanged(sessionId: String, broadcastPath: String?) {
+    var userInfo: [String: Any] = [Self.playerChangedSessionIdKey: sessionId]
+    if let path = broadcastPath {
+      userInfo[Self.playerChangedBroadcastPathKey] = path
+    }
+    NotificationCenter.default.post(
+      name: MoQImpl.playerChangedNotification, object: nil, userInfo: userInfo)
   }
 }
 
