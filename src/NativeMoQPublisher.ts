@@ -4,30 +4,20 @@ export interface Spec extends TurboModule {
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 
-  // Returns the set of codecs whose encoder can actually be initialized on
-  // this device. Lets the JS layer hide picker options that would otherwise
-  // silently terminate the publisher when selected (Android's moq-kit layer
-  // doesn't surface encoder-init failures as error states).
-  // Shape: { video: ('h264' | 'h265')[]; audio: ('opus' | 'aac')[] }
-  getSupportedCodecs(): { video: string[]; audio: string[] };
-
-  // The publisher is a singleton: at most one active publish at a time, and
-  // the preview camera is shared between the <PublisherView /> preview and
-  // the live capture. Mounting a PublisherView ref-counts startPreview.
-  startPreview(cameraPosition: string): void;
-  stopPreview(): void;
-  flipCamera(): void;
-
-  // optsJson keeps the TurboModule schema small while still letting the JS
-  // hook expose optional codec/resolution/framerate props. Shape:
-  // { cameraEnabled?: boolean, micEnabled?: boolean,
-  //   videoCodec?: 'h264' | 'h265', width?: number, height?: number,
-  //   framerate?: number, audioCodec?: 'opus' | 'aac', audioSampleRate?: number }
+  // tracksJson lists the sources to publish, snapshotted at this call. Each
+  // entry references a capture that must already be started via the
+  // corresponding hook (useCamera / useMicrophone). Shape:
+  // [
+  //   { type: 'camera', name: string,
+  //     encoder: { codec: 'h264'|'h265', width: number, height: number, framerate: number } },
+  //   { type: 'microphone', name: string,
+  //     encoder: { codec: 'opus'|'aac', sampleRate: number } }
+  // ]
   // Reuses the MoQ Session opened via NativeMoQ.connect() for the given
-  // sessionId; errors out if no such session is connected. Multiple sessions
-  // may host concurrent publishers — track-state and publisher-state events
-  // carry the sessionId so JS can route them back to the right hook.
-  publish(sessionId: string, path: string, optsJson: string): void;
+  // sessionId; errors out if no such session is connected or if a referenced
+  // capture has not been started. Multiple sessions may host concurrent
+  // publishers — track-state and publisher-state events carry the sessionId.
+  publish(sessionId: string, path: string, tracksJson: string): void;
   stop(sessionId: string): void;
 
   // Screen broadcasting runs out-of-process on iOS (Broadcast Upload Extension)

@@ -5,17 +5,16 @@ import UIKit
 public class MoQCameraPreviewView: UIView {
   private var previewLayer: AVCaptureVideoPreviewLayer?
 
-  private var startedPreview = false
-
   public override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .black
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(captureSessionChanged(_:)),
-      name: MoQPublisherImpl.cameraSessionChangedNotification,
+      name: MoQCameraImpl.captureSessionChangedNotification,
       object: nil
     )
+    Task { @MainActor in self.attach() }
   }
 
   required init?(coder: NSCoder) {
@@ -24,22 +23,6 @@ public class MoQCameraPreviewView: UIView {
 
   deinit {
     NotificationCenter.default.removeObserver(self)
-    if startedPreview {
-      Task { @MainActor in MoQPublisherImpl.shared.stopPreview() }
-    }
-  }
-
-  @objc var cameraPosition: String? {
-    didSet {
-      guard let new = cameraPosition else { return }
-      if !startedPreview {
-        startedPreview = true
-        MoQPublisherImpl.shared.startPreview(cameraPosition: new)
-        attach()
-      } else if new != oldValue {
-        MoQPublisherImpl.shared.flipCamera()
-      }
-    }
   }
 
   public override func layoutSubviews() {
@@ -48,12 +31,12 @@ public class MoQCameraPreviewView: UIView {
   }
 
   @objc private func captureSessionChanged(_ notification: Notification) {
-    attach()
+    Task { @MainActor in self.attach() }
   }
 
   @MainActor
   private func attach() {
-    let session = MoQPublisherImpl.shared.currentCaptureSession()
+    let session = MoQCameraImpl.shared.currentCaptureSession()
 
     if previewLayer?.session !== session {
       previewLayer?.removeFromSuperlayer()

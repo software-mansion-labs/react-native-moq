@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import { EventEmitter, type EventSubscription } from './EventEmitter';
 import NativeMoQPublisher from './NativeMoQPublisher';
+import type { CameraTrack, VideoCodec } from './useCamera';
+import type { AudioCodec, MicrophoneTrack } from './useMicrophone';
 import type { Session } from './types';
 
 const publisherEmitter = new NativeEventEmitter(NativeMoQPublisher);
@@ -22,36 +24,14 @@ export type ScreenBroadcastState =
 
 export type PublishedTrackState = 'idle' | 'starting' | 'active' | 'stopped';
 
-export type VideoCodec = 'h264' | 'h265';
-export type AudioCodec = 'opus' | 'aac';
-
-export interface SupportedCodecs {
-  video: VideoCodec[];
-  audio: AudioCodec[];
-}
-
-// Synchronous query for codecs whose encoder can actually be initialized on
-// this device. Use this to gate codec picker options in publishing UI —
-// otherwise selecting an unsupported codec silently terminates the broadcast
-// on Android (moq-kit reports the failure as a clean stop).
-export function getSupportedCodecs(): SupportedCodecs {
-  const result = NativeMoQPublisher.getSupportedCodecs();
-  return {
-    video: (result.video as VideoCodec[]) ?? [],
-    audio: (result.audio as AudioCodec[]) ?? [],
-  };
-}
+export type PublishTrack = CameraTrack | MicrophoneTrack;
 
 export interface PublishOptions {
   path: string;
-  cameraEnabled?: boolean;
-  micEnabled?: boolean;
-  videoCodec?: VideoCodec;
-  width?: number;
-  height?: number;
-  framerate?: number;
-  audioCodec?: AudioCodec;
-  audioSampleRate?: number;
+  // Snapshotted at this call — changing the array later does not affect a
+  // running broadcast. To change the published source set, call publish() again
+  // (which restarts the broadcast).
+  tracks: PublishTrack[];
 }
 
 export interface ScreenBroadcastOptions {
@@ -93,7 +73,6 @@ export interface Publisher {
   ): EventSubscription;
   publish(opts: PublishOptions): void;
   stop(): void;
-  flipCamera(): void;
   // Persist the screen-broadcast config. On iOS this writes to the App Group
   // descriptor store so the Broadcast Upload Extension can read it on launch.
   // On Android this caches it for the next startScreenBroadcast() call.
@@ -102,6 +81,21 @@ export interface Publisher {
   // rejects — the user must tap the <BroadcastPickerView/> to start.
   startScreenBroadcast(): Promise<void>;
   stopScreenBroadcast(): void;
+}
+
+interface SerializedTrack {
+  type: 'camera' | 'microphone';
+  name: string;
+  encoder: Record<string, unknown>;
+}
+
+function serializeTracks(tracks: PublishTrack[]): SerializedTrack[] {
+  return tracks.map((t) => {
+    if (t.__type === 'camera') {
+      return { type: 'camera', name: 'camera', encoder: { ...t.encoder } };
+    }
+    return { type: 'microphone', name: 'mic', encoder: { ...t.encoder } };
+  });
 }
 
 export function usePublisher(session: Session): Publisher {
@@ -182,8 +176,8 @@ export function usePublisher(session: Session): Publisher {
   const publish = useCallback(
     (opts: PublishOptions) => {
       setLastError(null);
-      const { path, ...rest } = opts;
-      NativeMoQPublisher.publish(sessionId, path, JSON.stringify(rest));
+      const tracksJson = JSON.stringify(serializeTracks(opts.tracks));
+      NativeMoQPublisher.publish(sessionId, opts.path, tracksJson);
     },
     [sessionId]
   );
@@ -191,10 +185,6 @@ export function usePublisher(session: Session): Publisher {
   const stop = useCallback(() => {
     NativeMoQPublisher.stop(sessionId);
   }, [sessionId]);
-
-  const flipCamera = useCallback(() => {
-    NativeMoQPublisher.flipCamera();
-  }, []);
 
   const configureScreenBroadcast = useCallback(
     (opts: ScreenBroadcastOptions) => {
@@ -233,7 +223,6 @@ export function usePublisher(session: Session): Publisher {
       addListener,
       publish,
       stop,
-      flipCamera,
       configureScreenBroadcast,
       startScreenBroadcast,
       stopScreenBroadcast,
@@ -246,7 +235,6 @@ export function usePublisher(session: Session): Publisher {
       addListener,
       publish,
       stop,
-      flipCamera,
       configureScreenBroadcast,
       startScreenBroadcast,
       stopScreenBroadcast,

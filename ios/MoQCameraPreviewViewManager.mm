@@ -12,8 +12,6 @@ RCT_EXPORT_MODULE(MoQCameraPreviewView)
   return [MoQCameraPreviewView new];
 }
 
-RCT_EXPORT_VIEW_PROPERTY(cameraPosition, NSString)
-
 + (BOOL)requiresMainQueueSetup {
   return YES;
 }

@@ -24,33 +24,17 @@ public enum MoQScreenBroadcastSharedKeys {
 
   @objc public var onEvent: ((_ name: String, _ body: [String: Any]) -> Void)?
 
-  // Notification posted whenever the shared AVCaptureSession is created or
-  // torn down. MoQCameraPreviewView observes this to (re)attach its layer.
-  static let cameraSessionChangedNotification = Notification.Name(
-    "MoQPublisherImpl.cameraSessionChanged")
-
-  @MainActor @objc public func currentCaptureSession() -> AVCaptureSession? {
-    cameraCapture?.captureSession
-  }
-
   // MARK: - Private state (MainActor)
 
-  private var cameraCapture: CameraCapture?
-  private var cameraPosition: CameraPosition = .front
-  private var previewRefCount: Int = 0
-
-  // Per-session publisher context. Multiple sessions can host concurrent
-  // publishers; the camera and microphone are shared as singletons since the
-  // device only has one each, but each session owns its own Publisher and
-  // observation tasks.
+  // Per-session publisher context. Camera and microphone are owned by
+  // MoQCameraImpl / MoQMicrophoneImpl respectively; the publisher just
+  // references them and lets the underlying impls handle refcounting.
   private final class PublisherContext {
     let sessionId: String
     let publisher: Publisher
     var stateTask: Task<Void, Never>?
     var eventsTask: Task<Void, Never>?
     var trackStateTasks: [Task<Void, Never>] = []
-    var usesCamera: Bool = false
-    var ownsMicrophone: Bool = false
 
     init(sessionId: String, publisher: Publisher) {
       self.sessionId = sessionId
@@ -59,14 +43,6 @@ public enum MoQScreenBroadcastSharedKeys {
   }
 
   private var publishers: [String: PublisherContext] = [:]
-  private var microphone: MicrophoneCapture?
-  // Ref count for who currently uses the shared microphone (one per active
-  // mic-enabled publisher). Lets us stop the mic only when the last publisher
-  // that needed it has stopped.
-  private var microphoneRefCount: Int = 0
-  // True while any publish() is in flight (used to keep the shared camera
-  // alive even after preview is unmounted).
-  private var publishing: Bool { !publishers.isEmpty }
 
   // App Group identifier currently configured for screen broadcasting. We keep
   // it so we can read state written by the Broadcast Upload Extension and clear
@@ -76,26 +52,11 @@ public enum MoQScreenBroadcastSharedKeys {
 
   // MARK: - Objc bridge
 
-  @objc(startPreview:)
-  public func startPreview(cameraPosition: String) {
+  @objc(publishWithSessionId:path:tracksJson:)
+  public func publish(sessionId: String, path: String, tracksJson: String) {
+    let tracks = Self.parseTracks(tracksJson)
     Task { @MainActor in
-      await self._startPreview(position: Self.parsePosition(cameraPosition))
-    }
-  }
-
-  @objc public func stopPreview() {
-    Task { @MainActor in self._stopPreview() }
-  }
-
-  @objc public func flipCamera() {
-    Task { @MainActor in self._flipCamera() }
-  }
-
-  @objc(publishWithSessionId:path:optsJson:)
-  public func publish(sessionId: String, path: String, optsJson: String) {
-    let opts = Self.parseOpts(optsJson)
-    Task { @MainActor in
-      await self._publish(sessionId: sessionId, path: path, opts: opts)
+      await self._publish(sessionId: sessionId, path: path, tracks: tracks)
     }
   }
 
@@ -113,146 +74,41 @@ public enum MoQScreenBroadcastSharedKeys {
     Task { @MainActor in self._stopScreenBroadcast() }
   }
 
-  // Mirror moq-kit's iOS demo CodecConfigView gating — return only codecs
-  // whose encoder will actually initialize on this device.
-  @objc public func supportedCodecs() -> [String: [String]] {
-    let video = VideoEncoderConfig.supportedCodecs().map { codec -> String in
-      switch codec {
-      case .h264: return "h264"
-      case .h265: return "h265"
-      @unknown default: return ""
-      }
-    }.filter { !$0.isEmpty }
-    let audio = AudioEncoderConfig.supportedCodecs().map { codec -> String in
-      switch codec {
-      case .opus: return "opus"
-      case .aac: return "aac"
-      @unknown default: return ""
-      }
-    }.filter { !$0.isEmpty }
-    return ["video": video, "audio": audio]
-  }
-
-  // MARK: - Preview
-
-  @MainActor
-  private func _startPreview(position: CameraPosition) async {
-    previewRefCount += 1
-    cameraPosition = position
-    if cameraCapture != nil { return }
-
-    let cam = CameraCapture(camera: Camera(position: position))
-    cameraCapture = cam
-    NotificationCenter.default.post(
-      name: MoQPublisherImpl.cameraSessionChangedNotification, object: nil)
-
-    do {
-      try await cam.start()
-    } catch {
-      cameraCapture = nil
-      NotificationCenter.default.post(
-        name: MoQPublisherImpl.cameraSessionChangedNotification, object: nil)
-      broadcastCameraError(error)
-    }
-  }
-
-  @MainActor
-  private func _stopPreview() {
-    if previewRefCount > 0 { previewRefCount -= 1 }
-    // Keep the camera running while publishing — it's the live source.
-    if previewRefCount == 0, !publishing {
-      cameraCapture?.stop()
-      cameraCapture = nil
-      NotificationCenter.default.post(
-        name: MoQPublisherImpl.cameraSessionChangedNotification, object: nil)
-    }
-  }
-
-  @MainActor
-  private func _flipCamera() {
-    let new: CameraPosition = cameraPosition == .front ? .back : .front
-    cameraPosition = new
-    guard let cam = cameraCapture else { return }
-    do {
-      try cam.switch(to: Camera(position: new))
-    } catch {
-      broadcastCameraError(error)
-    }
-  }
-
   // MARK: - Publish
 
   @MainActor
-  private func _publish(sessionId: String, path: String, opts: PublishOpts) async {
+  private func _publish(sessionId: String, path: String, tracks: [TrackDescriptor]) async {
     guard publishers[sessionId] == nil else { return }
     guard let s = MoQImpl.shared.currentSession(forSessionId: sessionId) else {
       emitPublisherState(sessionId: sessionId, state: "error:session is not connected")
       return
     }
 
-    Self.configurePublishingAudioSession()
-
-    var didStartMic = false
-
     do {
       let pub = try Publisher()
       let ctx = PublisherContext(sessionId: sessionId, publisher: pub)
-      ctx.usesCamera = opts.cameraEnabled
-      ctx.ownsMicrophone = opts.micEnabled
       publishers[sessionId] = ctx
 
-      var tracks: [PublishedTrack] = []
+      var publishedTracks: [PublishedTrack] = []
 
-      if opts.cameraEnabled {
-        let cam: CameraCapture
-        if let existing = cameraCapture {
-          cam = existing
-        } else {
-          cam = CameraCapture(camera: Camera(position: cameraPosition))
-          cameraCapture = cam
-          try await cam.start()
-          NotificationCenter.default.post(
-            name: MoQPublisherImpl.cameraSessionChangedNotification, object: nil)
+      for descriptor in tracks {
+        switch descriptor {
+        case .camera(let name, let config):
+          let cam = try await MoQCameraImpl.shared.waitForCameraCapture()
+          publishedTracks.append(
+            pub.addVideoTrack(name: name, source: cam, config: config))
+        case .microphone(let name, let config):
+          let mic = try await MoQMicrophoneImpl.shared.waitForMicrophone()
+          publishedTracks.append(
+            pub.addAudioTrack(name: name, source: mic, config: config))
         }
-        let videoConfig = VideoEncoderConfig(
-          codec: opts.videoCodec,
-          width: opts.width,
-          height: opts.height,
-          maxFrameRate: opts.framerate
-        )
-        tracks.append(pub.addVideoTrack(name: "camera", source: cam, config: videoConfig))
-      }
-
-      if opts.micEnabled {
-        let mic: MicrophoneCapture
-        if let existing = microphone {
-          mic = existing
-        } else {
-          mic = MicrophoneCapture()
-          microphone = mic
-          try await mic.start()
-        }
-        didStartMic = true
-        microphoneRefCount += 1
-        let audioConfig = AudioEncoderConfig(
-          codec: opts.audioCodec,
-          sampleRate: opts.audioSampleRate
-        )
-        tracks.append(pub.addAudioTrack(name: "mic", source: mic, config: audioConfig))
       }
 
       try await s.publish(path: path, publisher: pub)
       try await pub.start()
 
-      observePublisher(ctx, tracks: tracks)
+      observePublisher(ctx, tracks: publishedTracks)
     } catch {
-      if didStartMic {
-        microphoneRefCount -= 1
-        if microphoneRefCount <= 0 {
-          microphoneRefCount = 0
-          microphone?.stop(); microphone = nil
-        }
-      }
       publishers.removeValue(forKey: sessionId)
       emitPublisherState(sessionId: sessionId, state: "error:\(error.localizedDescription)")
       await _stop(sessionId: sessionId)
@@ -314,32 +170,13 @@ public enum MoQScreenBroadcastSharedKeys {
     ctx.eventsTask?.cancel()
     ctx.trackStateTasks.forEach { $0.cancel() }
 
-    if ctx.ownsMicrophone {
-      microphoneRefCount -= 1
-      if microphoneRefCount <= 0 {
-        microphoneRefCount = 0
-        microphone?.stop()
-        microphone = nil
-      }
-    }
-
-    // Stop the camera if neither preview nor any other publisher needs it.
-    let cameraStillUsed = previewRefCount > 0 || publishers.values.contains { $0.usesCamera }
-    if !cameraStillUsed {
-      cameraCapture?.stop()
-      cameraCapture = nil
-      NotificationCenter.default.post(
-        name: MoQPublisherImpl.cameraSessionChangedNotification, object: nil)
-    }
-
     emitPublisherState(sessionId: sessionId, state: "idle")
-    if publishers.isEmpty {
-      Self.configurePlaybackAudioSession()
-    }
 
     // Tear down the publisher off the main thread — pub.stop() may block on
     // encoder flush. The Session is owned by MoQImpl and stays alive across
-    // publish cycles, so we don't close it here.
+    // publish cycles, so we don't close it here. The camera/mic captures are
+    // owned by their respective impls and stay alive as long as a hook is
+    // mounted, so we don't stop them either.
     let pub = ctx.publisher
     Task.detached {
       pub.stop()
@@ -519,23 +356,8 @@ public enum MoQScreenBroadcastSharedKeys {
 
   // MARK: - Helpers
 
-  // Camera errors aren't bound to a particular publish session — they may
-  // happen during preview before anyone called publish(). Broadcast the error
-  // to every active publisher so each one transitions to the error state; if
-  // none are active, drop it (the preview itself doesn't have a state surface).
-  private func broadcastCameraError(_ error: Error) {
-    let msg = "error:\(error.localizedDescription)"
-    for sid in publishers.keys {
-      emitPublisherState(sessionId: sid, state: msg)
-    }
-  }
-
   private func emitPublisherState(sessionId: String, state: String) {
     onEvent?("publisherStateChanged", ["sessionId": sessionId, "state": state])
-  }
-
-  private static func parsePosition(_ raw: String) -> CameraPosition {
-    raw == "back" ? .back : .front
   }
 
   private static func trackStateString(_ state: PublishedTrackState) -> String {
@@ -547,55 +369,46 @@ public enum MoQScreenBroadcastSharedKeys {
     }
   }
 
-  private struct PublishOpts {
-    var cameraEnabled: Bool = true
-    var micEnabled: Bool = true
-    var videoCodec: VideoCodec = .h265
-    var width: Int32 = 1280
-    var height: Int32 = 720
-    var framerate: Double = 30
-    var audioCodec: MoQKit.AudioCodec = .opus
-    var audioSampleRate: Double = 48_000
+  // MARK: - Track parsing
+
+  private enum TrackDescriptor {
+    case camera(name: String, config: VideoEncoderConfig)
+    case microphone(name: String, config: AudioEncoderConfig)
   }
 
-  private static func parseOpts(_ json: String) -> PublishOpts {
-    var opts = PublishOpts()
+  private static func parseTracks(_ json: String) -> [TrackDescriptor] {
     guard
       let data = json.data(using: .utf8),
-      let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    else {
-      // Default: H.265 if supported, else H.264 — same heuristic as MoQDemo.
-      if !VideoEncoderConfig.supportedCodecs().contains(.h265) { opts.videoCodec = .h264 }
-      return opts
-    }
-    if let v = dict["cameraEnabled"] as? Bool { opts.cameraEnabled = v }
-    if let v = dict["micEnabled"] as? Bool { opts.micEnabled = v }
-    if let v = dict["videoCodec"] as? String, let parsed = VideoCodec(rawValue: v) {
-      opts.videoCodec = parsed
-    } else if !VideoEncoderConfig.supportedCodecs().contains(.h265) {
-      opts.videoCodec = .h264
-    }
-    if let v = dict["width"] as? NSNumber { opts.width = v.int32Value }
-    if let v = dict["height"] as? NSNumber { opts.height = v.int32Value }
-    if let v = dict["framerate"] as? NSNumber { opts.framerate = v.doubleValue }
-    if let v = dict["audioCodec"] as? String, let parsed = MoQKit.AudioCodec(rawValue: v) {
-      opts.audioCodec = parsed
-    }
-    if let v = dict["audioSampleRate"] as? NSNumber { opts.audioSampleRate = v.doubleValue }
-    return opts
-  }
+      let arr = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]
+    else { return [] }
 
-  static func configurePublishingAudioSession() {
-    let s = AVAudioSession.sharedInstance()
-    try? s.setCategory(
-      .playAndRecord, mode: .videoRecording,
-      options: [.defaultToSpeaker, .allowBluetoothHFP])
-    try? s.setActive(true)
-  }
-
-  static func configurePlaybackAudioSession() {
-    let s = AVAudioSession.sharedInstance()
-    try? s.setCategory(.playback, mode: .moviePlayback, options: [])
-    try? s.setActive(true)
+    var out: [TrackDescriptor] = []
+    for entry in arr {
+      guard
+        let type = entry["type"] as? String,
+        let name = entry["name"] as? String,
+        let enc = entry["encoder"] as? [String: Any]
+      else { continue }
+      switch type {
+      case "camera":
+        let codec = (enc["codec"] as? String).flatMap(VideoCodec.init(rawValue:)) ?? .h264
+        let width = (enc["width"] as? NSNumber)?.int32Value ?? 1280
+        let height = (enc["height"] as? NSNumber)?.int32Value ?? 720
+        let framerate = (enc["framerate"] as? NSNumber)?.doubleValue ?? 30
+        out.append(.camera(
+          name: name,
+          config: VideoEncoderConfig(
+            codec: codec, width: width, height: height, maxFrameRate: framerate)))
+      case "microphone":
+        let codec = (enc["codec"] as? String)
+          .flatMap(MoQKit.AudioCodec.init(rawValue:)) ?? .opus
+        let sampleRate = (enc["sampleRate"] as? NSNumber)?.doubleValue ?? 48_000
+        out.append(.microphone(
+          name: name,
+          config: AudioEncoderConfig(codec: codec, sampleRate: sampleRate)))
+      default: continue
+      }
+    }
+    return out
   }
 }

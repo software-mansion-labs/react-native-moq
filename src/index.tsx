@@ -14,21 +14,36 @@ export { useMiniPlayerControls } from './MiniPlayerContext';
 export type { MiniPlayerControlsAPI } from './MiniPlayerContext';
 export { useSession } from './useSession';
 export { useBroadcasts } from './useBroadcasts';
-export { usePublisher, getSupportedCodecs } from './usePublisher';
+export { usePublisher } from './usePublisher';
 export type {
   Publisher,
   PublisherEvents,
   PublisherState,
   PublishOptions,
+  PublishTrack,
   PublishedTrackState,
   ScreenBroadcastOptions,
   ScreenBroadcastState,
-  SupportedCodecs,
-  VideoCodec,
-  AudioCodec,
 } from './usePublisher';
+export { useCamera, getSupportedVideoCodecs } from './useCamera';
+export type {
+  CameraOptions,
+  CameraPosition,
+  CameraTrack,
+  CameraCaptureState,
+  VideoCodec,
+  VideoEncoderOptions,
+} from './useCamera';
+export { useMicrophone, getSupportedAudioCodecs } from './useMicrophone';
+export type {
+  AudioCodec,
+  AudioEncoderOptions,
+  MicrophoneOptions,
+  MicrophoneTrack,
+  MicrophoneCaptureState,
+} from './useMicrophone';
 export { PublisherView } from './PublisherView';
-export type { PublisherViewProps, CameraPosition } from './PublisherView';
+export type { PublisherViewProps } from './PublisherView';
 export { BroadcastPickerView } from './BroadcastPickerView';
 export type { BroadcastPickerViewProps } from './BroadcastPickerView';
 export { useVideoPlayer } from './useVideoPlayer';

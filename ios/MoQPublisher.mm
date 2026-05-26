@@ -23,20 +23,8 @@ RCT_EXPORT_MODULE()
   [MoQPublisherImpl shared].onEvent = nil;
 }
 
-- (void)startPreview:(NSString *)cameraPosition {
-  [[MoQPublisherImpl shared] startPreview:cameraPosition];
-}
-
-- (void)stopPreview {
-  [[MoQPublisherImpl shared] stopPreview];
-}
-
-- (void)flipCamera {
-  [[MoQPublisherImpl shared] flipCamera];
-}
-
-- (void)publish:(NSString *)sessionId path:(NSString *)path optsJson:(NSString *)optsJson {
-  [[MoQPublisherImpl shared] publishWithSessionId:sessionId path:path optsJson:optsJson];
+- (void)publish:(NSString *)sessionId path:(NSString *)path tracksJson:(NSString *)tracksJson {
+  [[MoQPublisherImpl shared] publishWithSessionId:sessionId path:path tracksJson:tracksJson];
 }
 
 - (void)stop:(NSString *)sessionId {
@@ -58,10 +46,6 @@ RCT_EXPORT_MODULE()
 
 - (void)stopScreenBroadcast {
   [[MoQPublisherImpl shared] stopScreenBroadcast];
-}
-
-- (NSDictionary *)getSupportedCodecs {
-  return [[MoQPublisherImpl shared] supportedCodecs];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:

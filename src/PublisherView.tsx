@@ -1,26 +1,24 @@
 import { requireNativeComponent, type ViewProps } from 'react-native';
+import type { CameraTrack } from './useCamera';
 
-export type CameraPosition = 'front' | 'back';
-
-interface NativePublisherViewProps extends ViewProps {
-  cameraPosition: CameraPosition;
-}
+interface NativePublisherViewProps extends ViewProps {}
 
 export interface PublisherViewProps extends ViewProps {
-  cameraPosition?: CameraPosition;
+  // The camera hook driving this preview. Captures are started by the hook,
+  // not by mounting this view — the prop documents the dependency and ensures
+  // the camera capture is kept alive while the preview is on screen.
+  camera: CameraTrack;
 }
 
 const NativeMoQCameraPreviewView =
   requireNativeComponent<NativePublisherViewProps>('MoQCameraPreviewView');
 
-// Renders the publisher's camera preview. Mounting this view starts the
-// camera; unmounting stops it (unless a publish is in progress, in which
-// case the camera keeps running until publish stops).
+// Renders whatever the shared camera capture is producing. The capture
+// lifecycle is owned by useCamera — mounting/unmounting this view does not
+// start or stop the camera.
 export function PublisherView({
-  cameraPosition = 'front',
+  camera: _camera,
   ...rest
 }: PublisherViewProps) {
-  return (
-    <NativeMoQCameraPreviewView cameraPosition={cameraPosition} {...rest} />
-  );
+  return <NativeMoQCameraPreviewView {...rest} />;
 }

@@ -12,6 +12,8 @@ class MoQPackage : BaseReactPackage() {
     return when (name) {
       MoQModule.NAME -> MoQModule(reactContext)
       MoQPublisherModule.NAME -> MoQPublisherModule(reactContext)
+      MoQCameraModule.NAME -> MoQCameraModule(reactContext)
+      MoQMicrophoneModule.NAME -> MoQMicrophoneModule(reactContext)
       else -> null
     }
   }
@@ -29,6 +31,22 @@ class MoQPackage : BaseReactPackage() {
       MoQPublisherModule.NAME to ReactModuleInfo(
         name = MoQPublisherModule.NAME,
         className = MoQPublisherModule.NAME,
+        canOverrideExistingModule = false,
+        needsEagerInit = false,
+        isCxxModule = false,
+        isTurboModule = true,
+      ),
+      MoQCameraModule.NAME to ReactModuleInfo(
+        name = MoQCameraModule.NAME,
+        className = MoQCameraModule.NAME,
+        canOverrideExistingModule = false,
+        needsEagerInit = false,
+        isCxxModule = false,
+        isTurboModule = true,
+      ),
+      MoQMicrophoneModule.NAME to ReactModuleInfo(
+        name = MoQMicrophoneModule.NAME,
+        className = MoQMicrophoneModule.NAME,
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,

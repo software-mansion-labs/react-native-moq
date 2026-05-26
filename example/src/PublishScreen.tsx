@@ -13,16 +13,20 @@ import {
 } from 'react-native';
 import {
   BroadcastPickerView,
-  getSupportedCodecs,
   PublisherView,
+  getSupportedAudioCodecs,
+  getSupportedVideoCodecs,
+  useCamera,
+  useMicrophone,
   usePublisher,
   useSession,
   type AudioCodec,
-  type CameraPosition,
+  type PublishTrack,
   type VideoCodec,
 } from 'react-native-moq';
 
-const SUPPORTED_CODECS = getSupportedCodecs();
+const SUPPORTED_VIDEO = getSupportedVideoCodecs();
+const SUPPORTED_AUDIO = getSupportedAudioCodecs();
 
 // Landscape dimensions — Android's camera capture produces landscape frames
 // and the native default is 1280x720. Forcing portrait here caused the
@@ -67,7 +71,6 @@ export function PublishScreen({
   setUrl: (url: string) => void;
 }) {
   const [path, setPath] = useState('live/test');
-  const [cameraPosition, setCameraPosition] = useState<CameraPosition>('front');
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
   const [screenEnabled, setScreenEnabled] = useState(false);
@@ -75,12 +78,12 @@ export function PublishScreen({
   // Prefer H.265 when the device can actually initialize it, else fall back
   // to H.264. Mirrors moq-kit's iOS demo CodecConfigView gating.
   const [videoCodec, setVideoCodec] = useState<VideoCodec>(
-    SUPPORTED_CODECS.video.includes('h265') ? 'h265' : 'h264'
+    SUPPORTED_VIDEO.includes('h265') ? 'h265' : 'h264'
   );
   const [videoResolution, setVideoResolution] = useState<VideoResolution>('HD');
   const [frameRate, setFrameRate] = useState<FrameRate>(30);
   const [audioCodec, setAudioCodec] = useState<AudioCodec>(
-    SUPPORTED_CODECS.audio.includes('opus') ? 'opus' : 'aac'
+    SUPPORTED_AUDIO.includes('opus') ? 'opus' : 'aac'
   );
   const [audioSampleRate, setAudioSampleRate] = useState<SampleRate>(48000);
 
@@ -90,6 +93,22 @@ export function PublishScreen({
       setAudioSampleRate(48000);
     }
   }, [audioCodec, audioSampleRate]);
+
+  useEffect(() => {
+    requestCapturePermissions();
+  }, []);
+
+  // Camera and mic hooks own the native capture lifecycle. They start on
+  // mount, stop on unmount, and are refcounted natively so multiple consumers
+  // can share the same physical device. Codec config travels with the hook
+  // and is snapshotted by publisher.publish() at call time.
+  const camera = useCamera({
+    videoCodec,
+    width: RESOLUTIONS[videoResolution].width,
+    height: RESOLUTIONS[videoResolution].height,
+    framerate: frameRate,
+  });
+  const microphone = useMicrophone({ audioCodec, audioSampleRate });
 
   const encoderOpts = useMemo(
     () => ({
@@ -105,10 +124,6 @@ export function PublishScreen({
 
   const session = useSession(url);
   const publisher = usePublisher(session);
-
-  useEffect(() => {
-    requestCapturePermissions();
-  }, []);
 
   // Open the shared session as soon as the screen mounts so publish() has a
   // connection to reuse. usePublisher errors out if the session isn't
@@ -196,17 +211,9 @@ export function PublishScreen({
       />
 
       <View style={styles.preview}>
-        <PublisherView
-          style={StyleSheet.absoluteFill}
-          cameraPosition={cameraPosition}
-        />
+        <PublisherView style={StyleSheet.absoluteFill} camera={camera} />
         <View style={styles.previewControls}>
-          <Button
-            title="Flip"
-            onPress={() => {
-              setCameraPosition((p) => (p === 'front' ? 'back' : 'front'));
-            }}
-          />
+          <Button title="Flip" onPress={camera.flip} />
         </View>
       </View>
 
@@ -247,12 +254,12 @@ export function PublishScreen({
               {
                 value: 'h264',
                 label: 'H.264',
-                disabled: !SUPPORTED_CODECS.video.includes('h264'),
+                disabled: !SUPPORTED_VIDEO.includes('h264'),
               },
               {
                 value: 'h265',
                 label: 'H.265',
-                disabled: !SUPPORTED_CODECS.video.includes('h265'),
+                disabled: !SUPPORTED_VIDEO.includes('h265'),
               },
             ]}
             onChange={setVideoCodec}
@@ -284,12 +291,12 @@ export function PublishScreen({
               {
                 value: 'opus',
                 label: 'Opus',
-                disabled: !SUPPORTED_CODECS.audio.includes('opus'),
+                disabled: !SUPPORTED_AUDIO.includes('opus'),
               },
               {
                 value: 'aac',
                 label: 'AAC',
-                disabled: !SUPPORTED_CODECS.audio.includes('aac'),
+                disabled: !SUPPORTED_AUDIO.includes('aac'),
               },
             ]}
             onChange={setAudioCodec}
@@ -314,12 +321,10 @@ export function PublishScreen({
           if (isPublishing) {
             publisher.stop();
           } else if (canPublish) {
-            publisher.publish({
-              path,
-              cameraEnabled,
-              micEnabled,
-              ...encoderOpts,
-            });
+            const tracks: PublishTrack[] = [];
+            if (cameraEnabled) tracks.push(camera);
+            if (micEnabled) tracks.push(microphone);
+            publisher.publish({ path, tracks });
           }
         }}
         disabled={!isPublishing && !canPublish}
@@ -328,6 +333,12 @@ export function PublishScreen({
       <Text style={styles.stateLabel}>State: {publisher.state}</Text>
       {publisher.lastError && (
         <Text style={styles.error}>{publisher.lastError}</Text>
+      )}
+      {camera.lastError && (
+        <Text style={styles.error}>Camera: {camera.lastError}</Text>
+      )}
+      {microphone.lastError && (
+        <Text style={styles.error}>Mic: {microphone.lastError}</Text>
       )}
 
       {Object.entries(publisher.trackStates).map(([name, state]) => (

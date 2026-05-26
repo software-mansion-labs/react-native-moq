@@ -607,20 +607,25 @@ interface StallStats {
 
 ## Publishing
 
-The publisher captures audio + video from the device (camera/microphone, or the system screen) and pushes them to a MoQ relay. It reuses a [`Session`](#usesessionurl-setup) you've already opened with `useSession`, so the same connection can simultaneously publish and subscribe. The preview camera and microphone are device-level singletons, shared across the on-screen `<PublisherView>` and any live captures.
+The publisher captures audio + video from the device (camera/microphone, or the system screen) and pushes them to a MoQ relay. It reuses a [`Session`](#usesessionurl-setup) you've already opened with `useSession`, so the same connection can simultaneously publish and subscribe.
+
+Sources live in their own hooks — `useCamera` and `useMicrophone` each own the native capture lifecycle and are refcounted singletons (one physical camera and one physical mic shared across every consumer). The hooks start their capture on mount and stop it on unmount. `usePublisher` consumes the source objects: pass the ones you want to publish into `publish({ path, tracks })`.
 
 ```tsx
 import { useEffect } from 'react';
 import { Button, PermissionsAndroid, Platform } from 'react-native';
 import {
   PublisherView,
+  useCamera,
+  useMicrophone,
   usePublisher,
   useSession,
-  useEventListener,
 } from 'react-native-moq';
 
 function PublishScreen() {
   const session = useSession('http://relay.example.com:4443');
+  const camera = useCamera();
+  const microphone = useMicrophone();
   const publisher = usePublisher(session);
 
   // Open the shared session up front so publish() has a connection to reuse.
@@ -639,13 +644,14 @@ function PublishScreen() {
 
   return (
     <>
-      <PublisherView style={{ aspectRatio: 9 / 16 }} cameraPosition="front" />
+      <PublisherView camera={camera} style={{ aspectRatio: 9 / 16 }} />
+      <Button title="Flip" onPress={camera.flip} />
       <Button
         title={publisher.state === 'publishing' ? 'Stop' : 'Publish'}
         disabled={session.state !== 'connected' && publisher.state !== 'publishing'}
         onPress={() => {
           if (publisher.state === 'publishing') publisher.stop();
-          else publisher.publish({ path: 'live/test' });
+          else publisher.publish({ path: 'live/test', tracks: [camera, microphone] });
         }}
       />
     </>
@@ -659,28 +665,79 @@ The host app is responsible for requesting `CAMERA` / `RECORD_AUDIO` runtime per
 
 ---
 
-### `usePublisher(session)`
+### `useCamera(options?)`
 
-Attaches a publisher to a `Session` returned by [`useSession`](#usesessionurl-setup). Mounting the hook does not start anything — calling `publish()` creates a native `Publisher` on top of the existing session and starts the configured tracks; calling `stop()` tears the publisher down (the session stays open). Re-renders are driven by native state events (`publisherStateChanged`, `publisherTrackStateChanged`, `screenBroadcastStateChanged`).
+Owns the device camera. Starts capture on mount, stops on unmount. The capture is refcounted natively, so multiple `useCamera` hooks (or a hook + a live publish + an on-screen preview) share one `CameraCapture` instance. The position is global to the physical camera — calling `flip()` or `setPosition()` on any hook is visible to every other consumer.
 
-The session must be `connected` when `publish()` is called — otherwise the publisher transitions to `error:session is not connected` immediately. Wait for `session.state === 'connected'` (or gate the UI on it) before publishing.
+`publish()` snapshots the current encoder config (`videoCodec`, `width`, `height`, `framerate`) from the camera object at call time; to change those on a live broadcast, update the options and call `publish()` again.
 
 ```tsx
-const session = useSession('http://relay.example.com:4443');
-const publisher = usePublisher(session);
-
-publisher.publish({
-  path: 'live/cam-1',
-  cameraEnabled: true,
-  micEnabled: true,
-  videoCodec: 'h265',     // optional — defaults to the best supported codec
+const camera = useCamera({
+  position: 'front',     // initial — change at runtime via camera.setPosition / camera.flip
+  videoCodec: 'h264',
   width: 1280,
   height: 720,
   framerate: 30,
+});
+```
+
+Returns a `CameraTrack`:
+
+| Property / Method | Type | Description |
+|---|---|---|
+| `state` | `CameraCaptureState` | `'idle' \| 'starting' \| 'active' \| `error:${string}`` |
+| `lastError` | `string \| null` | Last capture error, or `null` if healthy |
+| `position` | `'front' \| 'back'` | Currently active camera |
+| `encoder` | `VideoEncoderOptions` | `{ codec, width, height, framerate }` — snapshotted by `publish()` |
+| `flip()` | `() => void` | Toggle between front and back |
+| `setPosition(pos)` | `('front' \| 'back') => void` | Switch to a specific camera |
+
+Pass it into `publisher.publish({ tracks: [camera, …] })` to include the camera in a broadcast, and into `<PublisherView camera={camera} />` to render the on-screen preview.
+
+---
+
+### `useMicrophone(options?)`
+
+Owns the device microphone. Starts capture on mount, stops on unmount. Refcounted in the same way as the camera. The audio session category is driven from the mic lifecycle: `playAndRecord` while the mic is capturing, `playback` otherwise.
+
+`publish()` snapshots the encoder config at call time; the `audioSampleRate` is also the AudioRecord capture format on Android, so changing it after the hook has mounted is a no-op until the hook is remounted (e.g. with a `key` prop).
+
+```tsx
+const microphone = useMicrophone({
   audioCodec: 'opus',
   audioSampleRate: 48000,
 });
 ```
+
+Returns a `MicrophoneTrack`:
+
+| Property | Type | Description |
+|---|---|---|
+| `state` | `MicrophoneCaptureState` | `'idle' \| 'starting' \| 'active' \| `error:${string}`` |
+| `lastError` | `string \| null` | Last capture error, or `null` if healthy |
+| `encoder` | `AudioEncoderOptions` | `{ codec, sampleRate }` — snapshotted by `publish()` |
+
+---
+
+### `usePublisher(session)`
+
+Attaches a publisher to a `Session` returned by [`useSession`](#usesessionurl-setup). Mounting the hook does not start anything — calling `publish()` creates a native `Publisher` on top of the existing session, adds the tracks you pass, and starts it; calling `stop()` tears the publisher down (the session stays open). Re-renders are driven by native state events (`publisherStateChanged`, `publisherTrackStateChanged`, `screenBroadcastStateChanged`).
+
+The session must be `connected` when `publish()` is called — otherwise the publisher transitions to `error:session is not connected` immediately. Wait for `session.state === 'connected'` (or gate the UI on it) before publishing. Each `PublishTrack` in `tracks` must come from a currently-mounted source hook (`useCamera` / `useMicrophone`); if the underlying capture is still starting, `publish()` awaits it.
+
+```tsx
+const session = useSession('http://relay.example.com:4443');
+const camera = useCamera({ videoCodec: 'h265', width: 1280, height: 720, framerate: 30 });
+const microphone = useMicrophone({ audioCodec: 'opus', audioSampleRate: 48000 });
+const publisher = usePublisher(session);
+
+publisher.publish({
+  path: 'live/cam-1',
+  tracks: [camera, microphone], // any subset — audio-only, video-only, both
+});
+```
+
+Changing the published track set (e.g. dropping the mic) is a `publish()` again — moq-kit finalizes the track set when the broadcaster starts, so swapping sources restarts the broadcast.
 
 Returns a `Publisher` object:
 
@@ -692,9 +749,8 @@ Returns a `Publisher` object:
 | `screenBroadcastState` | `ScreenBroadcastState` | Independent state machine for the screen-broadcast track |
 | `emitter` | `EventEmitter<PublisherEvents>` | Stable emitter for publisher events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a publisher event imperatively; call `.remove()` to unsubscribe |
-| `publish(opts)` | `(opts: PublishOptions) => void` | Start publishing the configured tracks on the bound session. Requires `session.state === 'connected'` |
-| `stop()` | `() => void` | Stop all tracks and clear `trackStates`. Does not disconnect the underlying session |
-| `flipCamera()` | `() => void` | Switch the active camera between front and back |
+| `publish(opts)` | `(opts: PublishOptions) => void` | Start publishing the listed tracks on the bound session. Requires `session.state === 'connected'` |
+| `stop()` | `() => void` | Stop all tracks and clear `trackStates`. Does not disconnect the underlying session, nor stop the capture hooks |
 | `configureScreenBroadcast(opts)` | `(opts: ScreenBroadcastOptions) => void` | Persist screen-broadcast config (relay URL, path, encoder settings). See [Screen broadcasting](#screen-broadcasting) |
 | `startScreenBroadcast()` | `() => Promise<void>` | Android only — starts the foreground MediaProjection service. Rejects on iOS |
 | `stopScreenBroadcast()` | `() => void` | Stop the active screen broadcast |
@@ -709,44 +765,40 @@ Returns a `Publisher` object:
 
 ### `<PublisherView />`
 
-Renders the publisher's camera preview. Mounting the view starts the camera; unmounting stops it — unless `publish()` is in progress, in which case the camera keeps running until the publish stops (the preview and the live capture share a single `CameraCapture`).
+Renders whatever the shared camera capture is producing. The capture lifecycle belongs to `useCamera` — mounting or unmounting the view does **not** start or stop the camera. Pass the camera hook in via the `camera` prop so the dependency is explicit and the capture is guaranteed to be alive while the preview is on screen.
 
 ```tsx
-<PublisherView cameraPosition="front" style={{ aspectRatio: 9 / 16 }} />
+const camera = useCamera({ position: 'front' });
+
+<PublisherView camera={camera} style={{ aspectRatio: 9 / 16 }} />
 ```
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `cameraPosition` | `'front' \| 'back'` | No | Initial camera. Defaults to `'front'`. Call `publisher.flipCamera()` to switch at runtime |
+| `camera` | `CameraTrack` | Yes | The `useCamera` hook driving this preview |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
 
 The component accepts the rest of the standard `ViewProps` and forwards them to the native view.
 
 ---
 
-### `getSupportedCodecs()`
+### `getSupportedVideoCodecs()` / `getSupportedAudioCodecs()`
 
-Synchronous query for the codecs whose encoder will actually initialize on this device. Use it to gate codec pickers in publishing UI — selecting a codec the device can't encode silently terminates the broadcast on Android (moq-kit reports the failure as a clean stop, not an error state).
+Synchronous queries for the codecs whose encoder will actually initialize on this device. Use them to gate codec pickers in publishing UI — selecting a codec the device can't encode silently terminates the broadcast on Android (moq-kit reports the failure as a clean stop, not an error state).
 
 ```tsx
-import { getSupportedCodecs } from 'react-native-moq';
+import {
+  getSupportedVideoCodecs,
+  getSupportedAudioCodecs,
+} from 'react-native-moq';
 
-const SUPPORTED = getSupportedCodecs();
-// → { video: ['h264', 'h265'], audio: ['opus', 'aac'] }
+const VIDEO = getSupportedVideoCodecs(); // → ['h264', 'h265']
+const AUDIO = getSupportedAudioCodecs(); // → ['opus', 'aac']
 
-const initialCodec = SUPPORTED.video.includes('h265') ? 'h265' : 'h264';
+const initialVideoCodec = VIDEO.includes('h265') ? 'h265' : 'h264';
 ```
 
-Returns a `SupportedCodecs`:
-
-```ts
-interface SupportedCodecs {
-  video: ('h264' | 'h265')[];
-  audio: ('opus' | 'aac')[];
-}
-```
-
-The result depends only on hardware/OS capabilities and won't change at runtime, so it's safe to call once at module load and cache the result.
+Both depend only on hardware/OS capabilities and won't change at runtime, so it's safe to call once at module load and cache the result.
 
 ---
 
@@ -824,15 +876,27 @@ Subscribe via `useEventListener`, `useEvent`, or `publisher.addListener` — sam
 
 ```ts
 interface PublishOptions {
-  path: string;            // Broadcast path published to the relay
-  cameraEnabled?: boolean; // Default: true
-  micEnabled?: boolean;    // Default: true
-  videoCodec?: VideoCodec; // 'h264' | 'h265'
-  width?: number;          // Default: 1280
-  height?: number;         // Default: 720
-  framerate?: number;      // Default: 30
-  audioCodec?: AudioCodec; // 'opus' | 'aac'
-  audioSampleRate?: number;// Default: 48000
+  path: string;           // Broadcast path published to the relay
+  tracks: PublishTrack[]; // Sources from useCamera / useMicrophone
+}
+
+type PublishTrack = CameraTrack | MicrophoneTrack;
+```
+
+#### `CameraOptions` / `MicrophoneOptions`
+
+```ts
+interface CameraOptions {
+  position?: 'front' | 'back'; // Default: 'front'
+  videoCodec?: VideoCodec;     // 'h264' | 'h265', default: 'h264'
+  width?: number;              // Default: 1280
+  height?: number;             // Default: 720
+  framerate?: number;          // Default: 30
+}
+
+interface MicrophoneOptions {
+  audioCodec?: AudioCodec;     // 'opus' | 'aac', default: 'opus'
+  audioSampleRate?: number;    // Default: 48000
 }
 ```
 
