@@ -22,9 +22,13 @@ export type {
   PublishOptions,
   PublishTrack,
   PublishedTrackState,
+} from './usePublisher';
+export { useScreenBroadcast } from './useScreenBroadcast';
+export type {
+  ScreenBroadcast,
   ScreenBroadcastOptions,
   ScreenBroadcastState,
-} from './usePublisher';
+} from './useScreenBroadcast';
 export { useCamera, getSupportedVideoCodecs } from './useCamera';
 export type {
   CameraOptions,

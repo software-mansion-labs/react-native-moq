@@ -1,13 +1,6 @@
 package com.moq
 
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
-import android.media.projection.MediaProjectionManager
-import android.os.Build
-import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
@@ -33,32 +26,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class MoQPublisherModule(reactContext: ReactApplicationContext) :
-  NativeMoQPublisherSpec(reactContext), ActivityEventListener {
-
-  init {
-    reactContext.addActivityEventListener(this)
-  }
-
-  // Screen-broadcast: configured ahead of time by JS, consumed when
-  // startScreenBroadcast() launches the system MediaProjection consent flow.
-  private var screenBroadcastUrl: String? = null
-  private var screenBroadcastOptsJson: String? = null
-  private var pendingScreenPromise: Promise? = null
-  private val screenBroadcastRequestCode = 0xC051
-
-  private val screenStateListener: (String) -> Unit = { state ->
-    val map = Arguments.createMap()
-    map.putString("state", state)
-    emit("screenBroadcastStateChanged", map)
-  }
-
-  private val screenTrackListener: (String, String, String?) -> Unit = { name, state, error ->
-    val map = Arguments.createMap()
-    map.putString("name", name)
-    map.putString("state", state)
-    if (error != null) map.putString("error", error)
-    emit("publisherTrackStateChanged", map)
-  }
+  NativeMoQPublisherSpec(reactContext) {
 
   private val moduleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -149,102 +117,9 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
 
   override fun invalidate() {
     super.invalidate()
-    reactApplicationContext.removeActivityEventListener(this)
-    pendingScreenPromise?.reject("module_invalidated", "Module invalidated")
-    pendingScreenPromise = null
-    stopScreenBroadcastService()
     moduleScope.launch { stopAllInternal() }
     moduleScope.cancel()
   }
-
-  // MARK: - Screen broadcast
-
-  override fun configureScreenBroadcast(url: String, optsJson: String) {
-    screenBroadcastUrl = url
-    screenBroadcastOptsJson = optsJson
-  }
-
-  override fun startScreenBroadcast(promise: Promise) {
-    val url = screenBroadcastUrl
-    val opts = screenBroadcastOptsJson
-    if (url.isNullOrEmpty() || opts == null) {
-      promise.reject(
-        "not_configured", "configureScreenBroadcast must be called before startScreenBroadcast"
-      )
-      return
-    }
-    val activity = currentActivity ?: run {
-      promise.reject("no_activity", "No foreground activity available to request screen capture")
-      return
-    }
-    if (pendingScreenPromise != null) {
-      promise.reject("in_progress", "A screen broadcast request is already in flight")
-      return
-    }
-    pendingScreenPromise = promise
-    val mpm = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
-      as MediaProjectionManager
-    try {
-      activity.startActivityForResult(
-        mpm.createScreenCaptureIntent(), screenBroadcastRequestCode
-      )
-    } catch (e: Exception) {
-      pendingScreenPromise = null
-      promise.reject("launch_failed", e.message ?: "Failed to launch projection intent")
-    }
-  }
-
-  override fun stopScreenBroadcast() {
-    stopScreenBroadcastService()
-  }
-
-  private fun stopScreenBroadcastService() {
-    val ctx = reactApplicationContext
-    val intent = Intent(ctx, MoQScreenBroadcastService::class.java)
-      .setAction(MoQScreenBroadcastService.ACTION_STOP)
-    try { ctx.startService(intent) } catch (_: Exception) {}
-    MoQScreenBroadcastService.stateListener = null
-    MoQScreenBroadcastService.trackListener = null
-    screenStateListener("idle")
-  }
-
-  override fun onActivityResult(
-    activity: Activity, requestCode: Int, resultCode: Int, data: Intent?
-  ) {
-    if (requestCode != screenBroadcastRequestCode) return
-    val promise = pendingScreenPromise ?: return
-    pendingScreenPromise = null
-
-    if (resultCode != Activity.RESULT_OK || data == null) {
-      promise.reject("user_cancelled", "User did not grant screen capture permission")
-      return
-    }
-
-    val ctx = reactApplicationContext
-    MoQScreenBroadcastService.stateListener = screenStateListener
-    MoQScreenBroadcastService.trackListener = screenTrackListener
-
-    val serviceIntent = Intent(ctx, MoQScreenBroadcastService::class.java)
-      .setAction(MoQScreenBroadcastService.ACTION_START)
-      .putExtra(MoQScreenBroadcastService.EXTRA_RESULT_CODE, resultCode)
-      .putExtra(MoQScreenBroadcastService.EXTRA_PROJECTION_DATA, data)
-      .putExtra(MoQScreenBroadcastService.EXTRA_URL, screenBroadcastUrl)
-      .putExtra(MoQScreenBroadcastService.EXTRA_CONFIG_JSON, screenBroadcastOptsJson)
-    try {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        ctx.startForegroundService(serviceIntent)
-      } else {
-        ctx.startService(serviceIntent)
-      }
-      promise.resolve(null)
-    } catch (e: Exception) {
-      MoQScreenBroadcastService.stateListener = null
-      MoQScreenBroadcastService.trackListener = null
-      promise.reject("service_start_failed", e.message ?: "Failed to start broadcast service")
-    }
-  }
-
-  override fun onNewIntent(intent: Intent) {}
 
   // MARK: - Observers
 

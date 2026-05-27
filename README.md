@@ -607,9 +607,11 @@ interface StallStats {
 
 ## Publishing
 
-The publisher captures audio + video from the device (camera/microphone, or the system screen) and pushes them to a MoQ relay. It reuses a [`Session`](#usesessionurl-setup) you've already opened with `useSession`, so the same connection can simultaneously publish and subscribe.
+The publisher captures audio + video from the device camera + microphone and pushes them to a MoQ relay. It reuses a [`Session`](#usesessionurl-setup) you've already opened with `useSession`, so the same connection can simultaneously publish and subscribe.
 
 Sources live in their own hooks — `useCamera` and `useMicrophone` each own the native capture lifecycle and are refcounted singletons (one physical camera and one physical mic shared across every consumer). The hooks start their capture on mount and stop it on unmount. `usePublisher` consumes the source objects: pass the ones you want to publish into `publish({ path, tracks })`.
+
+Screen sharing is a different beast — it runs out-of-process and opens its own MoQ connection — so it has its own hook, [`useScreenBroadcast`](#screen-broadcasting), independent of `usePublisher`.
 
 ```tsx
 import { useEffect } from 'react';
@@ -721,7 +723,7 @@ Returns a `MicrophoneTrack`:
 
 ### `usePublisher(session)`
 
-Attaches a publisher to a `Session` returned by [`useSession`](#usesessionurl-setup). Mounting the hook does not start anything — calling `publish()` creates a native `Publisher` on top of the existing session, adds the tracks you pass, and starts it; calling `stop()` tears the publisher down (the session stays open). Re-renders are driven by native state events (`publisherStateChanged`, `publisherTrackStateChanged`, `screenBroadcastStateChanged`).
+Attaches a publisher to a `Session` returned by [`useSession`](#usesessionurl-setup). Mounting the hook does not start anything — calling `publish()` creates a native `Publisher` on top of the existing session, adds the tracks you pass, and starts it; calling `stop()` tears the publisher down (the session stays open). Re-renders are driven by native state events (`publisherStateChanged`, `publisherTrackStateChanged`).
 
 The session must be `connected` when `publish()` is called — otherwise the publisher transitions to `error:session is not connected` immediately. Wait for `session.state === 'connected'` (or gate the UI on it) before publishing. Each `PublishTrack` in `tracks` must come from a currently-mounted source hook (`useCamera` / `useMicrophone`); if the underlying capture is still starting, `publish()` awaits it.
 
@@ -744,22 +746,16 @@ Returns a `Publisher` object:
 | Property / Method | Type | Description |
 |---|---|---|
 | `state` | `PublisherState` | Current publishing state |
-| `trackStates` | `Record<string, PublishedTrackState>` | Per-track lifecycle, keyed by track name (`"camera"`, `"mic"`, `"screen"`, …) |
+| `trackStates` | `Record<string, PublishedTrackState>` | Per-track lifecycle, keyed by track name (`"camera"`, `"mic"`, …) |
 | `lastError` | `string \| null` | Last error message, or `null` if the publisher is healthy |
-| `screenBroadcastState` | `ScreenBroadcastState` | Independent state machine for the screen-broadcast track |
 | `emitter` | `EventEmitter<PublisherEvents>` | Stable emitter for publisher events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a publisher event imperatively; call `.remove()` to unsubscribe |
 | `publish(opts)` | `(opts: PublishOptions) => void` | Start publishing the listed tracks on the bound session. Requires `session.state === 'connected'` |
 | `stop()` | `() => void` | Stop all tracks and clear `trackStates`. Does not disconnect the underlying session, nor stop the capture hooks |
-| `configureScreenBroadcast(opts)` | `(opts: ScreenBroadcastOptions) => void` | Persist screen-broadcast config (relay URL, path, encoder settings). See [Screen broadcasting](#screen-broadcasting) |
-| `startScreenBroadcast()` | `() => Promise<void>` | Android only — starts the foreground MediaProjection service. Rejects on iOS |
-| `stopScreenBroadcast()` | `() => void` | Stop the active screen broadcast |
 
 **`PublisherState`** is one of: `'idle'` · `'connecting'` · `'publishing'` · `'stopped'` · `` `error:${string}` ``
 
 **`PublishedTrackState`** is one of: `'idle'` · `'starting'` · `'active'` · `'stopped'`
-
-**`ScreenBroadcastState`** is one of: `'idle'` · `'connecting'` · `'broadcasting'` · `'stopped'` · `` `error:${string}` ``
 
 ---
 
@@ -804,12 +800,19 @@ Both depend only on hardware/OS capabilities and won't change at runtime, so it'
 
 ### Screen broadcasting
 
-Screen capture runs out-of-process on iOS (a `Broadcast Upload Extension`) and in a foreground `Service` on Android. It publishes to its own broadcast path (independent of the camera/mic publish), so subscribers can pick it up as a separate stream.
+Screen capture runs out-of-process on iOS (a `Broadcast Upload Extension`) and in a foreground `Service` on Android. Because it lives in another process, it can't share the host's `usePublisher` session — it opens its own MoQ connection from the session URL you pass in. It also publishes to its own broadcast path (independent of any camera/mic publish), so subscribers can pick it up as a separate stream.
 
-In all cases, call `publisher.configureScreenBroadcast(opts)` first to persist the relay URL + path + encoder config — this is what the extension/service reads at launch.
+#### `useScreenBroadcast(session, options)`
+
+Manages the out-of-process screen broadcast bound to the given `Session`. Mounting the hook reconfigures the native side with the current relay URL + options (on iOS this writes the App Group descriptor that the Broadcast Upload Extension reads at launch; on Android it caches the config for the next `start()` call). The options are watched — change any field and the native config is rewritten automatically.
+
+Screen broadcast is a device singleton (one ReplayKit / MediaProjection session at a time), so multiple instances of this hook will all observe the same state.
 
 ```tsx
-publisher.configureScreenBroadcast({
+import { useScreenBroadcast, useSession } from 'react-native-moq';
+
+const session = useSession('http://relay.example.com:4443');
+const screen = useScreenBroadcast(session, {
   path: 'live/cam-1/screenshare',
   appGroupIdentifier: 'group.com.example.screenbroadcast', // iOS only
   appAudio: true, // iOS only — capture audio from the broadcasting app
@@ -821,7 +824,20 @@ publisher.configureScreenBroadcast({
 });
 ```
 
-**iOS** cannot start a system broadcast programmatically — the user must tap `<BroadcastPickerView>` to open the system sheet. `startScreenBroadcast()` always rejects. The extension reports its real state back through `publisher.screenBroadcastState`.
+Returns a `ScreenBroadcast` object:
+
+| Property / Method | Type | Description |
+|---|---|---|
+| `state` | `ScreenBroadcastState` | Current screen-broadcast state |
+| `lastError` | `string \| null` | Last error message, or `null` if healthy |
+| `start()` | `() => Promise<void>` | Android only — starts the foreground MediaProjection service. Rejects on iOS |
+| `stop()` | `() => void` | Stop the active screen broadcast |
+
+**`ScreenBroadcastState`** is one of: `'idle'` · `'connecting'` · `'broadcasting'` · `'stopped'` · `` `error:${string}` ``
+
+#### iOS
+
+iOS cannot start a system broadcast programmatically — the user must tap `<BroadcastPickerView>` to open the system sheet. `screen.start()` always rejects. The extension reports its real state back through `screen.state`.
 
 ```tsx
 import { BroadcastPickerView } from 'react-native-moq';
@@ -838,16 +854,16 @@ Setup on iOS requires:
 - An `App Group` entitlement on **both** the host app and the extension. Pass its identifier as `appGroupIdentifier` so the two processes can share the broadcast descriptor.
 - The extension's bundle identifier supplied via `preferredExtension` so the picker pre-selects it.
 
-**Android** drives the foreground service directly. `startScreenBroadcast()` triggers the system `MediaProjection` consent dialog and only resolves once the user grants it.
+#### Android
+
+Android drives the foreground service directly. `screen.start()` triggers the system `MediaProjection` consent dialog and only resolves once the user grants it.
 
 ```tsx
 const onToggleScreen = (next: boolean) => {
   if (next) {
-    publisher
-      .startScreenBroadcast()
-      .catch(() => {/* user denied consent */});
+    screen.start().catch(() => {/* user denied consent */});
   } else {
-    publisher.stopScreenBroadcast();
+    screen.stop();
   }
 };
 ```
@@ -864,7 +880,6 @@ Setup on Android requires the `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_P
 |---|---|---|
 | `stateChange` | `{ state: PublisherState }` | Publisher state transitioned |
 | `trackStateChange` | `{ name, state, error? }` | A published track changed lifecycle state (or errored) |
-| `screenBroadcastStateChange` | `{ state: ScreenBroadcastState }` | Screen-broadcast state transitioned |
 
 Subscribe via `useEventListener`, `useEvent`, or `publisher.addListener` — same patterns as the player/session events documented above.
 

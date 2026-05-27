@@ -19,6 +19,7 @@ import {
   useCamera,
   useMicrophone,
   usePublisher,
+  useScreenBroadcast,
   useSession,
   type AudioCodec,
   type PublishTrack,
@@ -136,23 +137,16 @@ export function PublishScreen({
 
   const screenPath = path + SCREEN_PATH_SUFFIX;
 
-  // Keep the native side's screen-broadcast descriptor in sync with the
-  // current relay URL and derived screen path. On iOS this writes the App
-  // Group descriptor the Broadcast Upload Extension reads at launch; on
-  // Android it caches config for the next startScreenBroadcast() call.
-  useEffect(() => {
-    publisher.configureScreenBroadcast({
-      path: screenPath,
-      appGroupIdentifier: SCREEN_APP_GROUP,
-      appAudio: true,
-      mic: true,
-      ...encoderOpts,
-    });
-  }, [publisher, screenPath, url, encoderOpts]);
+  const screen = useScreenBroadcast(session, {
+    path: screenPath,
+    appGroupIdentifier: SCREEN_APP_GROUP,
+    appAudio: true,
+    mic: true,
+    ...encoderOpts,
+  });
 
   const screenBroadcasting =
-    publisher.screenBroadcastState === 'broadcasting' ||
-    publisher.screenBroadcastState === 'connecting';
+    screen.state === 'broadcasting' || screen.state === 'connecting';
 
   const isPublishing =
     publisher.state === 'publishing' || publisher.state === 'connecting';
@@ -167,12 +161,12 @@ export function PublishScreen({
     setScreenEnabled(next);
     if (Platform.OS === 'android') {
       if (next) {
-        publisher.startScreenBroadcast().catch(() => setScreenEnabled(false));
+        screen.start().catch(() => setScreenEnabled(false));
       } else {
-        publisher.stopScreenBroadcast();
+        screen.stop();
       }
     } else if (!next && screenBroadcasting) {
-      publisher.stopScreenBroadcast();
+      screen.stop();
     }
   };
 
@@ -181,13 +175,10 @@ export function PublishScreen({
   // off when it stops.
   useEffect(() => {
     if (screenBroadcasting) setScreenEnabled(true);
-    else if (
-      publisher.screenBroadcastState === 'idle' ||
-      publisher.screenBroadcastState === 'stopped'
-    ) {
+    else if (screen.state === 'idle' || screen.state === 'stopped') {
       setScreenEnabled(false);
     }
-  }, [publisher.screenBroadcastState, screenBroadcasting]);
+  }, [screen.state, screenBroadcasting]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -348,8 +339,11 @@ export function PublishScreen({
       ))}
 
       <Text style={styles.stateLabel}>
-        Screen: {publisher.screenBroadcastState} ({screenPath})
+        Screen: {screen.state} ({screenPath})
       </Text>
+      {screen.lastError && (
+        <Text style={styles.error}>Screen: {screen.lastError}</Text>
+      )}
     </ScrollView>
   );
 }
