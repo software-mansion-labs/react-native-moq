@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { SubscribeScreen } from './SubscribeScreen';
-import { PublishScreen } from './PublishScreen';
+import { SubscribeScreen } from './screens/SubscribeScreen';
+import { PublishScreen } from './screens/PublishScreen';
 
 type Tab = 'subscribe' | 'publish';
 

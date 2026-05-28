@@ -1,20 +1,20 @@
-export { VideoView } from './VideoView';
-export type { VideoViewProps } from './VideoView';
-export { VideoPlayerView } from './VideoPlayerView';
+export { VideoView } from './views/VideoView';
+export type { VideoViewProps } from './views/VideoView';
+export { VideoPlayerView } from './views/VideoPlayerView';
 export type {
   VideoPlayerViewProps,
   VideoPlayerViewRef,
-} from './VideoPlayerView';
-export { FullscreenControls } from './FullscreenControls';
-export { useFullscreenControls } from './FullscreenContext';
-export type { FullscreenControlsAPI } from './FullscreenContext';
-export { MiniPlayerControls } from './MiniPlayerControls';
-export { VolumeSlider, SpeakerGlyph } from './VolumeSlider';
-export { useMiniPlayerControls } from './MiniPlayerContext';
-export type { MiniPlayerControlsAPI } from './MiniPlayerContext';
-export { useSession } from './useSession';
-export { useBroadcasts } from './useBroadcasts';
-export { usePublisher } from './usePublisher';
+} from './views/VideoPlayerView';
+export { FullscreenControls } from './components/FullscreenControls';
+export { useFullscreenControls } from './contexts/FullscreenContext';
+export type { FullscreenControlsAPI } from './contexts/FullscreenContext';
+export { MiniPlayerControls } from './components/MiniPlayerControls';
+export { VolumeSlider, SpeakerGlyph } from './components/VolumeSlider';
+export { useMiniPlayerControls } from './contexts/MiniPlayerContext';
+export type { MiniPlayerControlsAPI } from './contexts/MiniPlayerContext';
+export { useSession } from './hooks/useSession';
+export { useBroadcasts } from './hooks/useBroadcasts';
+export { usePublisher } from './hooks/usePublisher';
 export type {
   Publisher,
   PublisherEvents,
@@ -22,14 +22,14 @@ export type {
   PublishOptions,
   PublishTrack,
   PublishedTrackState,
-} from './usePublisher';
-export { useScreenBroadcast } from './useScreenBroadcast';
+} from './hooks/usePublisher';
+export { useScreenBroadcast } from './hooks/useScreenBroadcast';
 export type {
   ScreenBroadcast,
   ScreenBroadcastOptions,
   ScreenBroadcastState,
-} from './useScreenBroadcast';
-export { useCamera, getSupportedVideoCodecs } from './useCamera';
+} from './hooks/useScreenBroadcast';
+export { useCamera, getSupportedVideoCodecs } from './hooks/useCamera';
 export type {
   CameraOptions,
   CameraPosition,
@@ -37,22 +37,22 @@ export type {
   CameraCaptureState,
   VideoCodec,
   VideoEncoderOptions,
-} from './useCamera';
-export { useMicrophone, getSupportedAudioCodecs } from './useMicrophone';
+} from './hooks/useCamera';
+export { useMicrophone, getSupportedAudioCodecs } from './hooks/useMicrophone';
 export type {
   AudioCodec,
   AudioEncoderOptions,
   MicrophoneOptions,
   MicrophoneTrack,
   MicrophoneCaptureState,
-} from './useMicrophone';
-export { PublisherView } from './PublisherView';
-export type { PublisherViewProps } from './PublisherView';
-export { BroadcastPickerView } from './BroadcastPickerView';
-export type { BroadcastPickerViewProps } from './BroadcastPickerView';
-export { useVideoPlayer } from './useVideoPlayer';
-export { useAudioPlayer } from './useAudioPlayer';
-export { useEvent, useEventListener } from './useEvent';
+} from './hooks/useMicrophone';
+export { PublisherView } from './views/PublisherView';
+export type { PublisherViewProps } from './views/PublisherView';
+export { BroadcastPickerView } from './views/BroadcastPickerView';
+export type { BroadcastPickerViewProps } from './views/BroadcastPickerView';
+export { useVideoPlayer } from './hooks/useVideoPlayer';
+export { useAudioPlayer } from './hooks/useAudioPlayer';
+export { useEvent, useEventListener } from './hooks/useEvent';
 export { EventEmitter } from './EventEmitter';
 export type { EventSubscription } from './EventEmitter';
 export { PlayerHandle } from './types';

@@ -6,6 +6,12 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfo
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
+import com.moq.camera.MoQCameraModule
+import com.moq.camera.MoQCameraPreviewViewManager
+import com.moq.microphone.MoQMicrophoneModule
+import com.moq.player.MoQVideoViewManager
+import com.moq.publisher.MoQPublisherModule
+import com.moq.screenbroadcast.MoQScreenBroadcastModule
 
 class MoQPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {

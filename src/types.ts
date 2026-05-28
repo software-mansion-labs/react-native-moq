@@ -1,4 +1,4 @@
-import NativeMoQ from './NativeMoQ';
+import NativeMoQ from './native/NativeMoQ';
 import type { EventEmitter, EventSubscription } from './EventEmitter';
 
 export type SessionState =
