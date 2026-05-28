@@ -2,6 +2,45 @@
 
 React Native bindings for [MoQKit](https://github.com/swift-on-server/moq-kit) — a low-latency live streaming library built on the [Media over QUIC (MoQ)](https://datatracker.ietf.org/wg/moq/about/) protocol.
 
+## Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [API](#api)
+  - [`useSession(url, setup?)`](#usesessionurl-setup)
+  - [`useBroadcasts(session, prefix?)`](#usebroadcastssession-prefix)
+  - [`useVideoPlayer(broadcast, setup?)`](#usevideoplayerbroadcast-setup)
+  - [`useAudioPlayer(broadcast, setup?)`](#useaudioplayerbroadcast-setup)
+  - [`useEvent(source, eventName, initialValue?)`](#useeventsource-eventname-initialvalue)
+  - [`useEventListener(source, eventName, listener)`](#useeventlistenersource-eventname-listener)
+  - [`player.addListener` / `session.addListener`](#playeraddlistenereventname-listener--sessionaddlistenereventname-listener)
+  - [`<VideoView>`](#videoview)
+  - [`<VideoPlayerView>`](#videoplayerview)
+  - [`useFullscreenControls()`](#usefullscreencontrols)
+  - [`<FullscreenControls />`](#fullscreencontrols-)
+  - [`useMiniPlayerControls()`](#useminiplayercontrols)
+  - [`<MiniPlayerControls />`](#miniplayercontrols-)
+  - [`<VolumeSlider />` and `<SpeakerGlyph />`](#volumeslider--and-speakerglyph-)
+  - [`PlayerHandle`](#playerhandle)
+  - [Types](#types)
+- [Publishing](#publishing)
+  - [`useCamera(options?)`](#usecameraoptions)
+  - [`useMicrophone(options?)`](#usemicrophoneoptions)
+  - [`usePublisher(session)`](#usepublishersession)
+  - [`<PublisherView />`](#publisherview-)
+  - [`getSupportedVideoCodecs()` / `getSupportedAudioCodecs()`](#getsupportedvideocodecs--getsupportedaudiocodecs)
+  - [Screen broadcasting](#screen-broadcasting)
+  - [Publisher events](#publisher-events)
+  - [Types](#types-1)
+- [Advanced usage](#advanced-usage)
+  - [Quality / rendition switching](#quality--rendition-switching)
+  - [Fullscreen playback](#fullscreen-playback)
+  - [Custom target latency](#custom-target-latency)
+  - [Displaying live stats](#displaying-live-stats)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Requirements
 
 - React Native **New Architecture** (Fabric / TurboModules)
@@ -868,7 +907,7 @@ const onToggleScreen = (next: boolean) => {
 };
 ```
 
-Setup on Android requires the `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PROJECTION` permissions and the `MoQScreenBroadcastService` service declaration in `AndroidManifest.xml` (handled by the library's manifest merger — no manual step needed in typical apps).
+Setup on Android requires the `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PROJECTION` permissions and the `ScreenBroadcastService` service declaration in `AndroidManifest.xml` (handled by the library's manifest merger — no manual step needed in typical apps).
 
 `<BroadcastPickerView>` renders nothing on Android, so the same JSX can be conditionally branched on `Platform.OS` without crashing.
 
