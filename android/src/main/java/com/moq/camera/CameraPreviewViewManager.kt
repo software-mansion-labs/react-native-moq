@@ -3,7 +3,7 @@ package com.moq.camera
 import com.facebook.react.uimanager.SimpleViewManager
 import com.facebook.react.uimanager.ThemedReactContext
 
-class MoQCameraPreviewViewManager : SimpleViewManager<MoQCameraPreviewView>() {
+class CameraPreviewViewManager : SimpleViewManager<CameraPreviewView>() {
 
   companion object {
     const val NAME = "MoQCameraPreviewView"
@@ -11,9 +11,9 @@ class MoQCameraPreviewViewManager : SimpleViewManager<MoQCameraPreviewView>() {
 
   override fun getName() = NAME
 
-  override fun createViewInstance(context: ThemedReactContext) = MoQCameraPreviewView(context)
+  override fun createViewInstance(context: ThemedReactContext) = CameraPreviewView(context)
 
-  override fun onDropViewInstance(view: MoQCameraPreviewView) {
+  override fun onDropViewInstance(view: CameraPreviewView) {
     view.cleanup()
     super.onDropViewInstance(view)
   }

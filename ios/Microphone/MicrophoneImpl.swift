@@ -7,8 +7,8 @@ import MoQKit
 // physical mic only stops when the refcount drops to zero. The audio session
 // category is driven from here too: playAndRecord while the mic is active,
 // playback otherwise.
-@objc public class MoQMicrophoneImpl: NSObject {
-  @objc public static let shared = MoQMicrophoneImpl()
+@objc public class MicrophoneImpl: NSObject {
+  @objc public static let shared = MicrophoneImpl()
   private override init() {}
 
   @objc public var onEvent: ((_ name: String, _ body: [String: Any]) -> Void)?
@@ -63,7 +63,7 @@ import MoQKit
     if microphone != nil || startTask != nil { return }
 
     emitState("starting")
-    MoQMicrophoneImpl.configurePublishingAudioSession()
+    MicrophoneImpl.configurePublishingAudioSession()
 
     let task = Task<MicrophoneCapture, Error> { @MainActor in
       let mic = MicrophoneCapture()
@@ -79,7 +79,7 @@ import MoQKit
       if refCount == 0 {
         mic.stop()
         startTask = nil
-        MoQMicrophoneImpl.configurePlaybackAudioSession()
+        MicrophoneImpl.configurePlaybackAudioSession()
         emitState("idle")
         return
       }
@@ -91,7 +91,7 @@ import MoQKit
       // Roll back the refcount this start owned so a subsequent retry can
       // succeed without bookkeeping skew.
       if refCount > 0 { refCount -= 1 }
-      if refCount == 0 { MoQMicrophoneImpl.configurePlaybackAudioSession() }
+      if refCount == 0 { MicrophoneImpl.configurePlaybackAudioSession() }
       emitState("error:\(error.localizedDescription)")
     }
   }
@@ -102,7 +102,7 @@ import MoQKit
     guard refCount == 0 else { return }
     microphone?.stop()
     microphone = nil
-    MoQMicrophoneImpl.configurePlaybackAudioSession()
+    MicrophoneImpl.configurePlaybackAudioSession()
     emitState("idle")
   }
 

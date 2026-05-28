@@ -1,38 +1,38 @@
-#import "MoQCamera.h"
+#import "Camera.h"
 #import <MoQ/MoQ-Swift.h>
 
-@implementation MoQCamera
+@implementation Camera
 
-RCT_EXPORT_MODULE()
+RCT_EXPORT_MODULE(MoQCamera)
 
 - (NSArray<NSString *> *)supportedEvents {
   return @[ @"cameraStateChanged" ];
 }
 
 - (void)startObserving {
-  [MoQCameraImpl shared].onEvent = ^(NSString *name, NSDictionary *body) {
+  [CameraImpl shared].onEvent = ^(NSString *name, NSDictionary *body) {
     [self sendEventWithName:name body:body];
   };
 }
 
 - (void)stopObserving {
-  [MoQCameraImpl shared].onEvent = nil;
+  [CameraImpl shared].onEvent = nil;
 }
 
 - (void)startCapture:(NSString *)position {
-  [[MoQCameraImpl shared] startCaptureWithPosition:position];
+  [[CameraImpl shared] startCaptureWithPosition:position];
 }
 
 - (void)stopCapture {
-  [[MoQCameraImpl shared] stopCapture];
+  [[CameraImpl shared] stopCapture];
 }
 
 - (void)setPosition:(NSString *)position {
-  [[MoQCameraImpl shared] setPosition:position];
+  [[CameraImpl shared] setPosition:position];
 }
 
 - (NSArray<NSString *> *)getSupportedCodecs {
-  return [[MoQCameraImpl shared] supportedCodecs];
+  return [[CameraImpl shared] supportedCodecs];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:

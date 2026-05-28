@@ -15,10 +15,10 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 
 // Out-of-process screen broadcasting on Android. configureScreenBroadcast
 // caches the relay URL + options; startScreenBroadcast launches the system
-// MediaProjection consent flow and, on approval, starts MoQScreenBroadcastService
+// MediaProjection consent flow and, on approval, starts ScreenBroadcastService
 // in the foreground. The service opens its own MoQ session — it does not
 // reuse any host-side publisher session.
-class MoQScreenBroadcastModule(reactContext: ReactApplicationContext) :
+class ScreenBroadcastModule(reactContext: ReactApplicationContext) :
   NativeMoQScreenBroadcastSpec(reactContext), ActivityEventListener {
 
   init {
@@ -90,11 +90,11 @@ class MoQScreenBroadcastModule(reactContext: ReactApplicationContext) :
 
   private fun stopService() {
     val ctx = reactApplicationContext
-    val intent = Intent(ctx, MoQScreenBroadcastService::class.java)
-      .setAction(MoQScreenBroadcastService.ACTION_STOP)
+    val intent = Intent(ctx, ScreenBroadcastService::class.java)
+      .setAction(ScreenBroadcastService.ACTION_STOP)
     try { ctx.startService(intent) } catch (_: Exception) {}
-    MoQScreenBroadcastService.stateListener = null
-    MoQScreenBroadcastService.trackListener = null
+    ScreenBroadcastService.stateListener = null
+    ScreenBroadcastService.trackListener = null
     stateListener("idle")
   }
 
@@ -111,17 +111,17 @@ class MoQScreenBroadcastModule(reactContext: ReactApplicationContext) :
     }
 
     val ctx = reactApplicationContext
-    MoQScreenBroadcastService.stateListener = stateListener
+    ScreenBroadcastService.stateListener = stateListener
     // Per-track state events from the screen service are intentionally dropped —
     // useScreenBroadcast exposes only the aggregate state.
-    MoQScreenBroadcastService.trackListener = null
+    ScreenBroadcastService.trackListener = null
 
-    val serviceIntent = Intent(ctx, MoQScreenBroadcastService::class.java)
-      .setAction(MoQScreenBroadcastService.ACTION_START)
-      .putExtra(MoQScreenBroadcastService.EXTRA_RESULT_CODE, resultCode)
-      .putExtra(MoQScreenBroadcastService.EXTRA_PROJECTION_DATA, data)
-      .putExtra(MoQScreenBroadcastService.EXTRA_URL, configuredUrl)
-      .putExtra(MoQScreenBroadcastService.EXTRA_CONFIG_JSON, configuredOptsJson)
+    val serviceIntent = Intent(ctx, ScreenBroadcastService::class.java)
+      .setAction(ScreenBroadcastService.ACTION_START)
+      .putExtra(ScreenBroadcastService.EXTRA_RESULT_CODE, resultCode)
+      .putExtra(ScreenBroadcastService.EXTRA_PROJECTION_DATA, data)
+      .putExtra(ScreenBroadcastService.EXTRA_URL, configuredUrl)
+      .putExtra(ScreenBroadcastService.EXTRA_CONFIG_JSON, configuredOptsJson)
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         ctx.startForegroundService(serviceIntent)
@@ -130,7 +130,7 @@ class MoQScreenBroadcastModule(reactContext: ReactApplicationContext) :
       }
       promise.resolve(null)
     } catch (e: Exception) {
-      MoQScreenBroadcastService.stateListener = null
+      ScreenBroadcastService.stateListener = null
       promise.reject("service_start_failed", e.message ?: "Failed to start broadcast service")
     }
   }

@@ -31,9 +31,9 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 // Foreground service that runs the MediaProjection-backed screen broadcast.
-// Same process as the host app, so it talks back to MoQPublisherModule via
+// Same process as the host app, so it talks back to PublisherModule via
 // the stateListener callback (set by the module right before starting us).
-class MoQScreenBroadcastService : Service() {
+class ScreenBroadcastService : Service() {
 
   companion object {
     const val ACTION_START = "com.moq.screen.start"
@@ -184,7 +184,7 @@ class MoQScreenBroadcastService : Service() {
           frameRate = fps,
         )
         screenCapture = screen
-        screen.start(this@MoQScreenBroadcastService)
+        screen.start(this@ScreenBroadcastService)
 
         pub.addVideoTrack(
           name = "screen",

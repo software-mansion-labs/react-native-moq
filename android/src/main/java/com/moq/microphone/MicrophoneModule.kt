@@ -5,7 +5,7 @@ import com.moq.NativeMoQMicrophoneSpec
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import com.moq.camera.MoQCaptureException
+import com.moq.camera.CaptureException
 import com.swmansion.moqkit.publish.encoder.AudioCodec
 import com.swmansion.moqkit.publish.encoder.AudioEncoderConfig
 import com.swmansion.moqkit.publish.source.MicrophoneCapture
@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 // Owns the device microphone as a refcounted singleton. Multiple consumers
 // (useMicrophone hooks, live publishers) call start/stop independently — the
 // physical mic only stops when the refcount drops to zero.
-class MoQMicrophoneModule(reactContext: ReactApplicationContext) :
+class MicrophoneModule(reactContext: ReactApplicationContext) :
   NativeMoQMicrophoneSpec(reactContext) {
 
   init {
@@ -35,7 +35,7 @@ class MoQMicrophoneModule(reactContext: ReactApplicationContext) :
   companion object {
     const val NAME = NativeMoQMicrophoneSpec.NAME
 
-    @Volatile var instance: MoQMicrophoneModule? = null
+    @Volatile var instance: MicrophoneModule? = null
       private set
   }
 
@@ -45,7 +45,7 @@ class MoQMicrophoneModule(reactContext: ReactApplicationContext) :
   internal suspend fun waitForMicrophone(): MicrophoneCapture {
     microphone?.let { return it }
     startDeferred?.let { return it.await() }
-    throw MoQCaptureException("microphone capture not started")
+    throw CaptureException("microphone capture not started")
   }
 
   override fun startCapture(sampleRate: Double) {
@@ -90,7 +90,7 @@ class MoQMicrophoneModule(reactContext: ReactApplicationContext) :
         mic.stop()
         startDeferred = null
         deferred.completeExceptionally(
-          MoQCaptureException("microphone capture cancelled before start completed"))
+          CaptureException("microphone capture cancelled before start completed"))
         emitState("idle")
         return
       }

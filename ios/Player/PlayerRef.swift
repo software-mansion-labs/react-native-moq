@@ -1,7 +1,7 @@
 import AVFoundation
 import MoQKit
 
-@objc public class MoQPlayerRef: NSObject {
+@objc public class PlayerRef: NSObject {
   let player: Player
   @objc public let sessionId: String
   @objc public let broadcastPath: String

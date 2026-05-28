@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 // start/stop independently — the physical camera only stops when the
 // refcount drops to zero. Position changes are global to the device, so they
 // apply to every consumer at once.
-class MoQCameraModule(reactContext: ReactApplicationContext) :
+class CameraModule(reactContext: ReactApplicationContext) :
   NativeMoQCameraSpec(reactContext) {
 
   init {
@@ -44,7 +44,7 @@ class MoQCameraModule(reactContext: ReactApplicationContext) :
   companion object {
     const val NAME = NativeMoQCameraSpec.NAME
 
-    @Volatile var instance: MoQCameraModule? = null
+    @Volatile var instance: CameraModule? = null
       private set
 
     // Static listener list for the preview view — it talks to the camera
@@ -72,7 +72,7 @@ class MoQCameraModule(reactContext: ReactApplicationContext) :
   internal suspend fun waitForCamera(): CameraCapture {
     cameraCapture?.let { return it }
     startDeferred?.let { return it.await() }
-    throw MoQCaptureException("camera capture not started")
+    throw CaptureException("camera capture not started")
   }
 
   override fun startCapture(position: String) {
@@ -135,7 +135,7 @@ class MoQCameraModule(reactContext: ReactApplicationContext) :
         cam.stop()
         startDeferred = null
         deferred.completeExceptionally(
-          MoQCaptureException("camera capture cancelled before start completed"))
+          CaptureException("camera capture cancelled before start completed"))
         emitState("idle")
         return
       }
@@ -186,4 +186,4 @@ class MoQCameraModule(reactContext: ReactApplicationContext) :
     if (raw == "back") CameraPosition.Back else CameraPosition.Front
 }
 
-class MoQCaptureException(message: String) : RuntimeException(message)
+class CaptureException(message: String) : RuntimeException(message)

@@ -6,8 +6,8 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.moq.MoQModule
-import com.moq.camera.MoQCameraModule
-import com.moq.microphone.MoQMicrophoneModule
+import com.moq.camera.CameraModule
+import com.moq.microphone.MicrophoneModule
 import com.swmansion.moqkit.publish.PublishedTrack
 import com.swmansion.moqkit.publish.PublishedTrackState
 import com.swmansion.moqkit.publish.Publisher
@@ -29,13 +29,13 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
-class MoQPublisherModule(reactContext: ReactApplicationContext) :
+class PublisherModule(reactContext: ReactApplicationContext) :
   NativeMoQPublisherSpec(reactContext) {
 
   private val moduleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
   // Per-session publisher context. Camera and microphone are owned by
-  // MoQCameraModule / MoQMicrophoneModule respectively; the publisher just
+  // CameraModule / MicrophoneModule respectively; the publisher just
   // references them and lets the underlying modules handle refcounting.
   private class PublisherContext(val sessionId: String, val publisher: Publisher) {
     val jobs = mutableListOf<Job>()
@@ -72,14 +72,14 @@ class MoQPublisherModule(reactContext: ReactApplicationContext) :
         for (descriptor in tracks) {
           when (descriptor) {
             is TrackDescriptor.Camera -> {
-              val cam = MoQCameraModule.instance?.waitForCamera()
+              val cam = CameraModule.instance?.waitForCamera()
                 ?: error("camera module is not available")
               publishedTracks += pub.addVideoTrack(
                 name = descriptor.name, source = cam, config = descriptor.config
               )
             }
             is TrackDescriptor.Microphone -> {
-              val mic = MoQMicrophoneModule.instance?.waitForMicrophone()
+              val mic = MicrophoneModule.instance?.waitForMicrophone()
                 ?: error("microphone module is not available")
               publishedTracks += pub.addAudioTrack(
                 name = descriptor.name, source = mic, config = descriptor.config

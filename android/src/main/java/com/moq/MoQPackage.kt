@@ -6,21 +6,21 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfo
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
-import com.moq.camera.MoQCameraModule
-import com.moq.camera.MoQCameraPreviewViewManager
-import com.moq.microphone.MoQMicrophoneModule
-import com.moq.player.MoQVideoViewManager
-import com.moq.publisher.MoQPublisherModule
-import com.moq.screenbroadcast.MoQScreenBroadcastModule
+import com.moq.camera.CameraModule
+import com.moq.camera.CameraPreviewViewManager
+import com.moq.microphone.MicrophoneModule
+import com.moq.player.VideoViewManager
+import com.moq.publisher.PublisherModule
+import com.moq.screenbroadcast.ScreenBroadcastModule
 
 class MoQPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
     return when (name) {
       MoQModule.NAME -> MoQModule(reactContext)
-      MoQPublisherModule.NAME -> MoQPublisherModule(reactContext)
-      MoQCameraModule.NAME -> MoQCameraModule(reactContext)
-      MoQMicrophoneModule.NAME -> MoQMicrophoneModule(reactContext)
-      MoQScreenBroadcastModule.NAME -> MoQScreenBroadcastModule(reactContext)
+      PublisherModule.NAME -> PublisherModule(reactContext)
+      CameraModule.NAME -> CameraModule(reactContext)
+      MicrophoneModule.NAME -> MicrophoneModule(reactContext)
+      ScreenBroadcastModule.NAME -> ScreenBroadcastModule(reactContext)
       else -> null
     }
   }
@@ -35,33 +35,33 @@ class MoQPackage : BaseReactPackage() {
         isCxxModule = false,
         isTurboModule = true,
       ),
-      MoQPublisherModule.NAME to ReactModuleInfo(
-        name = MoQPublisherModule.NAME,
-        className = MoQPublisherModule.NAME,
+      PublisherModule.NAME to ReactModuleInfo(
+        name = PublisherModule.NAME,
+        className = PublisherModule.NAME,
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,
         isTurboModule = true,
       ),
-      MoQCameraModule.NAME to ReactModuleInfo(
-        name = MoQCameraModule.NAME,
-        className = MoQCameraModule.NAME,
+      CameraModule.NAME to ReactModuleInfo(
+        name = CameraModule.NAME,
+        className = CameraModule.NAME,
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,
         isTurboModule = true,
       ),
-      MoQMicrophoneModule.NAME to ReactModuleInfo(
-        name = MoQMicrophoneModule.NAME,
-        className = MoQMicrophoneModule.NAME,
+      MicrophoneModule.NAME to ReactModuleInfo(
+        name = MicrophoneModule.NAME,
+        className = MicrophoneModule.NAME,
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,
         isTurboModule = true,
       ),
-      MoQScreenBroadcastModule.NAME to ReactModuleInfo(
-        name = MoQScreenBroadcastModule.NAME,
-        className = MoQScreenBroadcastModule.NAME,
+      ScreenBroadcastModule.NAME to ReactModuleInfo(
+        name = ScreenBroadcastModule.NAME,
+        className = ScreenBroadcastModule.NAME,
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,
@@ -71,6 +71,6 @@ class MoQPackage : BaseReactPackage() {
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
-    return listOf(MoQVideoViewManager(), MoQCameraPreviewViewManager())
+    return listOf(VideoViewManager(), CameraPreviewViewManager())
   }
 }

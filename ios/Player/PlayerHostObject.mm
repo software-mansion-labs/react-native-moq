@@ -1,18 +1,18 @@
-#include "MoQPlayerHostObject.h"
+#include "PlayerHostObject.h"
 #import <MoQ/MoQ-Swift.h>
 
 using namespace facebook::jsi;
 
 namespace moq {
 
-PlayerHostObject::PlayerHostObject(MoQPlayerRef* ref)
+PlayerHostObject::PlayerHostObject(PlayerRef* ref)
     : _refBridge((__bridge_retained void*)ref) {}
 
 PlayerHostObject::~PlayerHostObject() { CFBridgingRelease(_refBridge); }
 
 Value PlayerHostObject::get(Runtime& rt, const PropNameID& name) {
   const auto n = name.utf8(rt);
-  MoQPlayerRef* ref = (__bridge MoQPlayerRef*)_refBridge;
+  PlayerRef* ref = (__bridge PlayerRef*)_refBridge;
 
   if (n == "broadcastPath") {
     return String::createFromUtf8(rt, ref.broadcastPath.UTF8String);

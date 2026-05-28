@@ -10,7 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-class MoQPlayerHandle(
+class PlayerHandle(
   val player: Player,
   val sessionId: String,
   val broadcastPath: String,

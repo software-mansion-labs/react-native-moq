@@ -4,13 +4,13 @@
 #include <vector>
 
 // Only include from ObjC++ (.mm) translation units.
-@class MoQPlayerRef;
+@class PlayerRef;
 
 namespace moq {
 
 class PlayerHostObject final : public facebook::jsi::HostObject {
  public:
-  explicit PlayerHostObject(MoQPlayerRef* ref);
+  explicit PlayerHostObject(PlayerRef* ref);
   ~PlayerHostObject();
 
   facebook::jsi::Value get(facebook::jsi::Runtime& rt,
@@ -19,7 +19,7 @@ class PlayerHostObject final : public facebook::jsi::HostObject {
       facebook::jsi::Runtime& rt) override;
 
  private:
-  void* _refBridge;  // CF-retained MoQPlayerRef*, managed via CFBridgingRetain/Release
+  void* _refBridge;  // CF-retained PlayerRef*, managed via CFBridgingRetain/Release
 };
 
 }  // namespace moq

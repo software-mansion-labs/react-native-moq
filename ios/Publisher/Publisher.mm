@@ -1,9 +1,9 @@
-#import "MoQPublisher.h"
+#import "Publisher.h"
 #import <MoQ/MoQ-Swift.h>
 
-@implementation MoQPublisher
+@implementation Publisher
 
-RCT_EXPORT_MODULE()
+RCT_EXPORT_MODULE(MoQPublisher)
 
 - (NSArray<NSString *> *)supportedEvents {
   return @[
@@ -13,21 +13,21 @@ RCT_EXPORT_MODULE()
 }
 
 - (void)startObserving {
-  [MoQPublisherImpl shared].onEvent = ^(NSString *name, NSDictionary *body) {
+  [PublisherImpl shared].onEvent = ^(NSString *name, NSDictionary *body) {
     [self sendEventWithName:name body:body];
   };
 }
 
 - (void)stopObserving {
-  [MoQPublisherImpl shared].onEvent = nil;
+  [PublisherImpl shared].onEvent = nil;
 }
 
 - (void)publish:(NSString *)sessionId path:(NSString *)path tracksJson:(NSString *)tracksJson {
-  [[MoQPublisherImpl shared] publishWithSessionId:sessionId path:path tracksJson:tracksJson];
+  [[PublisherImpl shared] publishWithSessionId:sessionId path:path tracksJson:tracksJson];
 }
 
 - (void)stop:(NSString *)sessionId {
-  [[MoQPublisherImpl shared] stopWithSessionId:sessionId];
+  [[PublisherImpl shared] stopWithSessionId:sessionId];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:

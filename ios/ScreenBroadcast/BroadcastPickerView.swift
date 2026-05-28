@@ -5,7 +5,7 @@ import UIKit
 // system button presents the broadcast sheet for the configured extension —
 // the only Apple-sanctioned way to start a system-wide ReplayKit broadcast.
 @objc(MoQBroadcastPickerView)
-public class MoQBroadcastPickerView: UIView {
+public class BroadcastPickerView: UIView {
   private let picker = RPSystemBroadcastPickerView()
 
   public override init(frame: CGRect) {

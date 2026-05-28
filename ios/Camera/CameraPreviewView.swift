@@ -2,7 +2,7 @@ import AVFoundation
 import UIKit
 
 @objc(MoQCameraPreviewView)
-public class MoQCameraPreviewView: UIView {
+public class CameraPreviewView: UIView {
   private var previewLayer: AVCaptureVideoPreviewLayer?
 
   public override init(frame: CGRect) {
@@ -11,7 +11,7 @@ public class MoQCameraPreviewView: UIView {
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(captureSessionChanged(_:)),
-      name: MoQCameraImpl.captureSessionChangedNotification,
+      name: CameraImpl.captureSessionChangedNotification,
       object: nil
     )
     Task { @MainActor in self.attach() }
@@ -36,7 +36,7 @@ public class MoQCameraPreviewView: UIView {
 
   @MainActor
   private func attach() {
-    let session = MoQCameraImpl.shared.currentCaptureSession()
+    let session = CameraImpl.shared.currentCaptureSession()
 
     if previewLayer?.session !== session {
       previewLayer?.removeFromSuperlayer()

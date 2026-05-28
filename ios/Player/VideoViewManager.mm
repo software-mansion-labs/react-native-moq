@@ -1,10 +1,10 @@
 #import <React/RCTViewManager.h>
 #import <MoQ/MoQ-Swift.h>
 
-@interface MoQVideoViewManager : RCTViewManager
+@interface VideoViewManager : RCTViewManager
 @end
 
-@implementation MoQVideoViewManager
+@implementation VideoViewManager
 
 RCT_EXPORT_MODULE(MoQVideoView)
 

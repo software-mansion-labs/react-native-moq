@@ -1,10 +1,10 @@
 #import <React/RCTViewManager.h>
 #import <MoQ/MoQ-Swift.h>
 
-@interface MoQBroadcastPickerViewManager : RCTViewManager
+@interface BroadcastPickerViewManager : RCTViewManager
 @end
 
-@implementation MoQBroadcastPickerViewManager
+@implementation BroadcastPickerViewManager
 
 RCT_EXPORT_MODULE(MoQBroadcastPickerView)
 

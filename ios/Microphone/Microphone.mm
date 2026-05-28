@@ -1,34 +1,34 @@
-#import "MoQMicrophone.h"
+#import "Microphone.h"
 #import <MoQ/MoQ-Swift.h>
 
-@implementation MoQMicrophone
+@implementation Microphone
 
-RCT_EXPORT_MODULE()
+RCT_EXPORT_MODULE(MoQMicrophone)
 
 - (NSArray<NSString *> *)supportedEvents {
   return @[ @"micStateChanged" ];
 }
 
 - (void)startObserving {
-  [MoQMicrophoneImpl shared].onEvent = ^(NSString *name, NSDictionary *body) {
+  [MicrophoneImpl shared].onEvent = ^(NSString *name, NSDictionary *body) {
     [self sendEventWithName:name body:body];
   };
 }
 
 - (void)stopObserving {
-  [MoQMicrophoneImpl shared].onEvent = nil;
+  [MicrophoneImpl shared].onEvent = nil;
 }
 
 - (void)startCapture:(double)sampleRate {
-  [[MoQMicrophoneImpl shared] startCaptureWithSampleRate:sampleRate];
+  [[MicrophoneImpl shared] startCaptureWithSampleRate:sampleRate];
 }
 
 - (void)stopCapture {
-  [[MoQMicrophoneImpl shared] stopCapture];
+  [[MicrophoneImpl shared] stopCapture];
 }
 
 - (NSArray<NSString *> *)getSupportedCodecs {
-  return [[MoQMicrophoneImpl shared] supportedCodecs];
+  return [[MicrophoneImpl shared] supportedCodecs];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:

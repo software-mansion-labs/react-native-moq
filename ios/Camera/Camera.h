@@ -1,6 +1,6 @@
 #import <React/RCTEventEmitter.h>
 #import <MoQSpec/MoQSpec.h>
 
-@interface MoQPublisher : RCTEventEmitter <NativeMoQPublisherSpec>
+@interface Camera : RCTEventEmitter <NativeMoQCameraSpec>
 
 @end

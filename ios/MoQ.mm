@@ -1,5 +1,5 @@
 #import "MoQ.h"
-#import "MoQPlayerHostObject.h"
+#import "PlayerHostObject.h"
 #import <MoQ/MoQ-Swift.h>
 
 // C++ subclass of the codegen-generated TurboModule that adds the `getPlayer`
@@ -22,7 +22,7 @@ class MoQJSIModule : public facebook::react::NativeMoQSpecJSI {
                 stringWithUTF8String:args[0].asString(rt).utf8(rt).c_str()];
             NSString* path = [NSString
                 stringWithUTF8String:args[1].asString(rt).utf8(rt).c_str()];
-            MoQPlayerRef* ref =
+            PlayerRef* ref =
                 [[MoQImpl shared] playerRefForSessionId:sessionId broadcastPath:path];
             if (!ref) return facebook::jsi::Value::undefined();
             auto hostObj = std::make_shared<moq::PlayerHostObject>(ref);

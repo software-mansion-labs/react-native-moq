@@ -2,7 +2,7 @@ import AVFoundation
 import UIKit
 
 @objc(MoQVideoView)
-public class MoQVideoView: UIView {
+public class VideoView: UIView {
   private var displayLayer: AVSampleBufferDisplayLayer?
 
   @objc var sessionId: String? { didSet { reattach() } }
@@ -54,8 +54,8 @@ public class MoQVideoView: UIView {
   }
 
   private func attach(layer newLayer: AVSampleBufferDisplayLayer?) {
-    // The video layer is shared via MoQPlayerRef and may currently be hosted
-    // by a sibling MoQVideoView (e.g. the inline copy while we mount the
+    // The video layer is shared via PlayerRef and may currently be hosted
+    // by a sibling VideoView (e.g. the inline copy while we mount the
     // fullscreen one). Only detach if it's still parented to us — otherwise
     // we'd yank it out of the new owner.
     if let current = displayLayer, current.superlayer === self.layer {

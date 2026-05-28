@@ -5,7 +5,7 @@
 
   <application>
     <service
-      android:name="com.moq.screenbroadcast.MoQScreenBroadcastService"
+      android:name="com.moq.screenbroadcast.ScreenBroadcastService"
       android:exported="false"
       android:foregroundServiceType="mediaProjection" />
   </application>

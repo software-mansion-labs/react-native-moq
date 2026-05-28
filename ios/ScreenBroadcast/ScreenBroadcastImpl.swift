@@ -17,8 +17,8 @@ public enum MoQScreenBroadcastSharedKeys {
   public static let stateNotificationName = "com.swmansion.moq.screenBroadcast.stateChanged"
 }
 
-@objc public class MoQScreenBroadcastImpl: NSObject {
-  @objc public static let shared = MoQScreenBroadcastImpl()
+@objc public class ScreenBroadcastImpl: NSObject {
+  @objc public static let shared = ScreenBroadcastImpl()
   private override init() {}
 
   @objc public var onEvent: ((_ name: String, _ body: [String: Any]) -> Void)?
@@ -124,7 +124,7 @@ public enum MoQScreenBroadcastSharedKeys {
       observer,
       { _, observer, _, _, _ in
         guard let observer else { return }
-        let impl = Unmanaged<MoQScreenBroadcastImpl>.fromOpaque(observer).takeUnretainedValue()
+        let impl = Unmanaged<ScreenBroadcastImpl>.fromOpaque(observer).takeUnretainedValue()
         Task { @MainActor in impl.emitCurrentState() }
       },
       MoQScreenBroadcastSharedKeys.stateNotificationName as CFString,

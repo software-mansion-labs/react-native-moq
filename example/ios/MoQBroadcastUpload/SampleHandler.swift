@@ -2,8 +2,8 @@ import Foundation
 import MoQKit
 import ReplayKit
 
-// Shared identifiers with the host app's MoQPublisherImpl. Kept in lockstep
-// with MoQScreenBroadcastSharedKeys (ios/MoQPublisherImpl.swift). The host
+// Shared identifiers with the host app's PublisherImpl. Kept in lockstep
+// with MoQScreenBroadcastSharedKeys (ios/ScreenBroadcast/ScreenBroadcastImpl.swift). The host
 // writes the configuration here and we read it back; we write state to the
 // state key and post a Darwin notification so the host can update its UI.
 private enum SharedKeys {

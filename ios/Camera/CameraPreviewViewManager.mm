@@ -1,10 +1,10 @@
 #import <React/RCTViewManager.h>
 #import <MoQ/MoQ-Swift.h>
 
-@interface MoQCameraPreviewViewManager : RCTViewManager
+@interface CameraPreviewViewManager : RCTViewManager
 @end
 
-@implementation MoQCameraPreviewViewManager
+@implementation CameraPreviewViewManager
 
 RCT_EXPORT_MODULE(MoQCameraPreviewView)
 

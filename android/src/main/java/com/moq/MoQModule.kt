@@ -6,7 +6,7 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import com.moq.player.MoQPlayerHandle
+import com.moq.player.PlayerHandle
 import com.swmansion.moqkit.Session
 import com.swmansion.moqkit.subscribe.Catalog
 import com.swmansion.moqkit.subscribe.PlaybackStats
@@ -41,12 +41,12 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   private val contexts = ConcurrentHashMap<String, SessionContext>()
 
-  // MARK: - Companion: shared handle map and listeners for MoQVideoView
+  // MARK: - Companion: shared handle map and listeners for VideoView
 
   companion object {
     const val NAME = NativeMoQSpec.NAME
 
-    // Connected sessions, exposed to MoQPublisherModule so it can attach a
+    // Connected sessions, exposed to PublisherModule so it can attach a
     // Publisher to one of them. Updated whenever the session reaches the
     // Connected state and cleared on disconnect/error.
     private val connectedSessions = ConcurrentHashMap<String, Session>()
@@ -58,16 +58,16 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     private fun playerKey(sessionId: String, broadcastPath: String) =
       "$sessionId $broadcastPath"
 
-    val playerHandles = ConcurrentHashMap<String, MoQPlayerHandle>()
+    val playerHandles = ConcurrentHashMap<String, PlayerHandle>()
 
-    fun playerHandle(sessionId: String, broadcastPath: String): MoQPlayerHandle? =
+    fun playerHandle(sessionId: String, broadcastPath: String): PlayerHandle? =
       playerHandles[playerKey(sessionId, broadcastPath)]
 
-    fun setPlayerHandle(sessionId: String, broadcastPath: String, handle: MoQPlayerHandle) {
+    fun setPlayerHandle(sessionId: String, broadcastPath: String, handle: PlayerHandle) {
       playerHandles[playerKey(sessionId, broadcastPath)] = handle
     }
 
-    fun removePlayerHandle(sessionId: String, broadcastPath: String): MoQPlayerHandle? =
+    fun removePlayerHandle(sessionId: String, broadcastPath: String): PlayerHandle? =
       playerHandles.remove(playerKey(sessionId, broadcastPath))
 
     private val playerChangeListeners =
@@ -277,7 +277,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       )
     } catch (_: Exception) { return }
 
-    val handle = MoQPlayerHandle(p, sessionId, audioKey, moduleScope, mainHandler)
+    val handle = PlayerHandle(p, sessionId, audioKey, moduleScope, mainHandler)
     handle.onEvent = { name, map -> emitEvent(name, map) }
     setPlayerHandle(sessionId, audioKey, handle)
     handle.startObservingEvents()
@@ -317,7 +317,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     } catch (_: Exception) { null }
 
     if (p != null) {
-      val handle = MoQPlayerHandle(p, sessionId, path, moduleScope, mainHandler)
+      val handle = PlayerHandle(p, sessionId, path, moduleScope, mainHandler)
       handle.onEvent = { name, map -> emitEvent(name, map) }
       setPlayerHandle(sessionId, path, handle)
       handle.startObservingEvents()

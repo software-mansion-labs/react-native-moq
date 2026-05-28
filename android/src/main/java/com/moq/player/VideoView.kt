@@ -6,7 +6,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.moq.MoQModule
 
-class MoQVideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
+class VideoView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
   var sessionId: String? = null
     set(value) {

@@ -1,26 +1,26 @@
-#import "MoQScreenBroadcast.h"
+#import "ScreenBroadcast.h"
 #import <MoQ/MoQ-Swift.h>
 
-@implementation MoQScreenBroadcast
+@implementation ScreenBroadcast
 
-RCT_EXPORT_MODULE()
+RCT_EXPORT_MODULE(MoQScreenBroadcast)
 
 - (NSArray<NSString *> *)supportedEvents {
   return @[ @"screenBroadcastStateChanged" ];
 }
 
 - (void)startObserving {
-  [MoQScreenBroadcastImpl shared].onEvent = ^(NSString *name, NSDictionary *body) {
+  [ScreenBroadcastImpl shared].onEvent = ^(NSString *name, NSDictionary *body) {
     [self sendEventWithName:name body:body];
   };
 }
 
 - (void)stopObserving {
-  [MoQScreenBroadcastImpl shared].onEvent = nil;
+  [ScreenBroadcastImpl shared].onEvent = nil;
 }
 
 - (void)configureScreenBroadcast:(NSString *)url optsJson:(NSString *)optsJson {
-  [[MoQScreenBroadcastImpl shared] configureWithUrl:url optsJson:optsJson];
+  [[ScreenBroadcastImpl shared] configureWithUrl:url optsJson:optsJson];
 }
 
 - (void)startScreenBroadcast:(RCTPromiseResolveBlock)resolve
@@ -33,7 +33,7 @@ RCT_EXPORT_MODULE()
 }
 
 - (void)stopScreenBroadcast {
-  [[MoQScreenBroadcastImpl shared] stop];
+  [[ScreenBroadcastImpl shared] stop];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:

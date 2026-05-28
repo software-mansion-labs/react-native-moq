@@ -7,16 +7,16 @@ import MoQKit
 // start/stop independently — the physical camera only stops when the
 // refcount drops to zero. Position changes are global to the device, so they
 // apply to every consumer at once.
-@objc public class MoQCameraImpl: NSObject {
-  @objc public static let shared = MoQCameraImpl()
+@objc public class CameraImpl: NSObject {
+  @objc public static let shared = CameraImpl()
   private override init() {}
 
   @objc public var onEvent: ((_ name: String, _ body: [String: Any]) -> Void)?
 
   // Notification posted whenever the shared AVCaptureSession is created or
-  // torn down. MoQCameraPreviewView observes this to (re)attach its layer.
+  // torn down. CameraPreviewView observes this to (re)attach its layer.
   @objc public static let captureSessionChangedNotification = Notification.Name(
-    "MoQCameraImpl.cameraSessionChanged")
+    "CameraImpl.cameraSessionChanged")
 
   @MainActor @objc public func currentCaptureSession() -> AVCaptureSession? {
     cameraCapture?.captureSession
@@ -78,7 +78,7 @@ import MoQKit
     emitState("starting")
 
     let task = Task<CameraCapture, Error> { @MainActor in
-      let cam = CameraCapture(camera: Camera(position: position))
+      let cam = CameraCapture(camera: MoQKit.Camera(position: position))
       try await cam.start()
       return cam
     }
@@ -121,7 +121,7 @@ import MoQKit
     cameraPosition = position
     guard let cam = cameraCapture else { return }
     do {
-      try cam.switch(to: Camera(position: position))
+      try cam.switch(to: MoQKit.Camera(position: position))
     } catch {
       emitState("error:\(error.localizedDescription)")
     }

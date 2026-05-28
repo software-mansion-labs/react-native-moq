@@ -2,8 +2,8 @@ import AVFoundation
 import Foundation
 import MoQKit
 
-@objc public class MoQPublisherImpl: NSObject {
-  @objc public static let shared = MoQPublisherImpl()
+@objc public class PublisherImpl: NSObject {
+  @objc public static let shared = PublisherImpl()
   private override init() {}
 
   @objc public var onEvent: ((_ name: String, _ body: [String: Any]) -> Void)?
@@ -11,16 +11,16 @@ import MoQKit
   // MARK: - Private state (MainActor)
 
   // Per-session publisher context. Camera and microphone are owned by
-  // MoQCameraImpl / MoQMicrophoneImpl respectively; the publisher just
+  // CameraImpl / MicrophoneImpl respectively; the publisher just
   // references them and lets the underlying impls handle refcounting.
   private final class PublisherContext {
     let sessionId: String
-    let publisher: Publisher
+    let publisher: MoQKit.Publisher
     var stateTask: Task<Void, Never>?
     var eventsTask: Task<Void, Never>?
     var trackStateTasks: [Task<Void, Never>] = []
 
-    init(sessionId: String, publisher: Publisher) {
+    init(sessionId: String, publisher: MoQKit.Publisher) {
       self.sessionId = sessionId
       self.publisher = publisher
     }
@@ -54,7 +54,7 @@ import MoQKit
     }
 
     do {
-      let pub = try Publisher()
+      let pub = try MoQKit.Publisher()
       let ctx = PublisherContext(sessionId: sessionId, publisher: pub)
       publishers[sessionId] = ctx
 
@@ -63,11 +63,11 @@ import MoQKit
       for descriptor in tracks {
         switch descriptor {
         case .camera(let name, let config):
-          let cam = try await MoQCameraImpl.shared.waitForCameraCapture()
+          let cam = try await CameraImpl.shared.waitForCameraCapture()
           publishedTracks.append(
             pub.addVideoTrack(name: name, source: cam, config: config))
         case .microphone(let name, let config):
-          let mic = try await MoQMicrophoneImpl.shared.waitForMicrophone()
+          let mic = try await MicrophoneImpl.shared.waitForMicrophone()
           publishedTracks.append(
             pub.addAudioTrack(name: name, source: mic, config: config))
         }

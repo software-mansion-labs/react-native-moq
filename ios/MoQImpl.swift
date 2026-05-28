@@ -16,7 +16,7 @@ private let audioKeySuffix = "_audio"
 
   // MARK: - Video layer notification
 
-  // userInfo carries the (sessionId, broadcastPath) pair so MoQVideoView can
+  // userInfo carries the (sessionId, broadcastPath) pair so VideoView can
   // tell whether it's the one whose layer just changed. A nil object means
   // "every player went away for one session" (sent on disconnect).
   static let playerChangedNotification = Notification.Name("MoQImpl.playerChanged")
@@ -27,7 +27,7 @@ private let audioKeySuffix = "_audio"
     contexts[sessionId]?.playerRefs[broadcastPath]?.videoLayer
   }
 
-  // Exposed for MoQPublisherImpl, which reuses the host session instead of
+  // Exposed for PublisherImpl, which reuses the host session instead of
   // opening its own. nil until the JS `useSession` for this id has called
   // connect() and the relay has accepted the session.
   @MainActor public func currentSession(forSessionId sessionId: String) -> Session? {
@@ -52,7 +52,7 @@ private let audioKeySuffix = "_audio"
     var stateTask: Task<Void, Never>?
     var subscriptions: [String: MoQPrefixSubscription] = [:]
     var prefixForPath: [String: String] = [:]
-    var playerRefs: [String: MoQPlayerRef] = [:]
+    var playerRefs: [String: PlayerRef] = [:]
     var catalogs: [String: Catalog] = [:]
 
     init(id: String, session: Session) {
@@ -148,7 +148,7 @@ private let audioKeySuffix = "_audio"
   // MARK: - JSI: called from MoQ.mm C++ getPlayer override
 
   @objc(playerRefForSessionId:broadcastPath:)
-  public func playerRef(forSessionId sessionId: String, broadcastPath: String) -> MoQPlayerRef? {
+  public func playerRef(forSessionId sessionId: String, broadcastPath: String) -> PlayerRef? {
     contexts[sessionId]?.playerRefs[broadcastPath]
   }
 
@@ -292,7 +292,7 @@ private let audioKeySuffix = "_audio"
       targetBufferingMs: ctx.targetLatencyMs
     )
     if let p {
-      let ref = MoQPlayerRef(
+      let ref = PlayerRef(
         player: p, sessionId: sessionId, broadcastPath: path,
         videoTrackName: videoTrackName, audioTrackName: audioTrackName)
       ref.onEvent = { [weak self] name, body in self?.onEvent?(name, body) }
@@ -381,7 +381,7 @@ private let audioKeySuffix = "_audio"
       targetBufferingMs: ctx.targetLatencyMs
     )
     if let p {
-      let ref = MoQPlayerRef(
+      let ref = PlayerRef(
         player: p, sessionId: sessionId, broadcastPath: audioKey,
         videoTrackName: nil, audioTrackName: audioTrackName)
       ref.onEvent = { [weak self] name, body in self?.onEvent?(name, body) }
