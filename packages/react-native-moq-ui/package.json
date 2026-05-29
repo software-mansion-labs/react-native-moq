@@ -1,0 +1,83 @@
+{
+  "name": "react-native-moq-ui",
+  "version": "0.0.1",
+  "description": "Default UI components for react-native-moq",
+  "main": "./lib/module/index.js",
+  "types": "./lib/typescript/src/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.tsx",
+      "types": "./lib/typescript/src/index.d.ts",
+      "default": "./lib/module/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
+  "scripts": {
+    "clean": "del-cli lib",
+    "prepare": "bob build",
+    "typecheck": "tsc",
+    "release": "release-it --only-version"
+  },
+  "keywords": [
+    "react-native",
+    "moq",
+    "video",
+    "ui"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/software-mansion-labs/react-native-moq.git",
+    "directory": "packages/react-native-moq-ui"
+  },
+  "author": "Software Mansion",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/software-mansion-labs/react-native-moq/issues"
+  },
+  "homepage": "https://github.com/software-mansion-labs/react-native-moq#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "react-native-moq": "*",
+    "react-native-safe-area-context": ">=4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "del-cli": "^7.0.0",
+    "react": "19.2.3",
+    "react-native": "0.84.1",
+    "react-native-builder-bob": "^0.41.0",
+    "react-native-moq": "workspace:^",
+    "react-native-safe-area-context": "^5.7.0",
+    "typescript": "^6.0.2"
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  }
+}

@@ -1,8 +1,7 @@
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
-import { useEvent } from '../hooks/useEvent';
+import { useEvent, type Player } from 'react-native-moq';
 import { useMiniPlayerControls } from '../contexts/MiniPlayerContext';
 import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
-import type { Player } from '../types';
 
 // Default inline chrome for VideoPlayerView. Mirrors the platform split used
 // by FullscreenControls but scaled down for an embedded view:

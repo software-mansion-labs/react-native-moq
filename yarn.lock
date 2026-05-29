@@ -11044,6 +11044,8 @@ __metadata:
     react-native: "npm:0.84.1"
     react-native-builder-bob: "npm:^0.41.0"
     react-native-monorepo-config: "npm:^0.3.3"
+    react-native-moq: "workspace:^"
+    react-native-moq-ui: "workspace:^"
     react-native-safe-area-context: "npm:^5.7.0"
     react-native-web: "npm:~0.21.1"
     vite: "npm:^7.1.1"
@@ -11051,9 +11053,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"react-native-moq@workspace:.":
+"react-native-moq-monorepo@workspace:.":
   version: 0.0.0-use.local
-  resolution: "react-native-moq@workspace:."
+  resolution: "react-native-moq-monorepo@workspace:."
   dependencies:
     "@commitlint/config-conventional": "npm:^20.5.0"
     "@eslint/compat": "npm:^2.0.3"
@@ -11081,10 +11083,42 @@ __metadata:
     release-it: "npm:^19.2.4"
     turbo: "npm:^2.9.4"
     typescript: "npm:^6.0.2"
+  languageName: unknown
+  linkType: soft
+
+"react-native-moq-ui@workspace:^, react-native-moq-ui@workspace:packages/react-native-moq-ui":
+  version: 0.0.0-use.local
+  resolution: "react-native-moq-ui@workspace:packages/react-native-moq-ui"
+  dependencies:
+    "@types/react": "npm:^19.2.0"
+    del-cli: "npm:^7.0.0"
+    react: "npm:19.2.3"
+    react-native: "npm:0.84.1"
+    react-native-builder-bob: "npm:^0.41.0"
+    react-native-moq: "workspace:^"
+    react-native-safe-area-context: "npm:^5.7.0"
+    typescript: "npm:^6.0.2"
   peerDependencies:
     react: "*"
     react-native: "*"
+    react-native-moq: "*"
     react-native-safe-area-context: ">=4.0.0"
+  languageName: unknown
+  linkType: soft
+
+"react-native-moq@workspace:^, react-native-moq@workspace:packages/react-native-moq":
+  version: 0.0.0-use.local
+  resolution: "react-native-moq@workspace:packages/react-native-moq"
+  dependencies:
+    "@types/react": "npm:^19.2.0"
+    del-cli: "npm:^7.0.0"
+    react: "npm:19.2.3"
+    react-native: "npm:0.84.1"
+    react-native-builder-bob: "npm:^0.41.0"
+    typescript: "npm:^6.0.2"
+  peerDependencies:
+    react: "*"
+    react-native: "*"
   languageName: unknown
   linkType: soft
 

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { Player } from '../types';
+import type { Player } from 'react-native-moq';
 
 /**
  * API exposed to whatever element is mounted in the fullscreen modal's

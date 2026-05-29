@@ -23,12 +23,11 @@ import {
   SafeAreaProvider,
   initialWindowMetrics,
 } from 'react-native-safe-area-context';
-import { FullscreenContext } from '../contexts/FullscreenContext';
-import { FullscreenControls } from '../components/FullscreenControls';
-import { MiniPlayerContext } from '../contexts/MiniPlayerContext';
-import { MiniPlayerControls } from '../components/MiniPlayerControls';
-import type { Player } from '../types';
-import { VideoView } from './VideoView';
+import { FullscreenContext } from './contexts/FullscreenContext';
+import { FullscreenControls } from './components/FullscreenControls';
+import { MiniPlayerContext } from './contexts/MiniPlayerContext';
+import { MiniPlayerControls } from './components/MiniPlayerControls';
+import { VideoView, type Player } from 'react-native-moq';
 
 export interface VideoPlayerViewProps extends ViewProps {
   player: Player;

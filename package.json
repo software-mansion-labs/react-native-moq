@@ -1,55 +1,16 @@
 {
-  "name": "react-native-moq",
-  "version": "0.0.1",
-  "description": "MoQ for React Native",
-  "main": "./lib/module/index.js",
-  "types": "./lib/typescript/src/index.d.ts",
-  "exports": {
-    ".": {
-      "source": "./src/index.tsx",
-      "types": "./lib/typescript/src/index.d.ts",
-      "default": "./lib/module/index.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "src",
-    "lib",
-    "android",
-    "ios",
-    "cpp",
-    "*.podspec",
-    "react-native.config.js",
-    "!ios/build",
-    "!android/build",
-    "!android/gradle",
-    "!android/gradlew",
-    "!android/gradlew.bat",
-    "!android/local.properties",
-    "!**/__tests__",
-    "!**/__fixtures__",
-    "!**/__mocks__",
-    "!**/.*"
-  ],
+  "name": "react-native-moq-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MoQ for React Native (monorepo)",
   "scripts": {
     "example": "yarn workspace react-native-moq-example",
-    "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
-    "prepare": "bob build",
-    "typecheck": "tsc",
+    "clean": "del-cli packages/*/lib packages/*/android/build example/android/build example/android/app/build example/ios/build",
+    "prepare": "turbo run prepare",
+    "typecheck": "turbo run typecheck",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "test": "jest",
-    "release": "release-it --only-version",
-    "web": "vite",
-    "build:web": "vite build"
+    "test": "jest"
   },
-  "keywords": [
-    "react-native",
-    "ios",
-    "android",
-    "quic",
-    "moq",
-    "video"
-  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/software-mansion-labs/react-native-moq.git"
@@ -60,9 +21,6 @@
     "url": "https://github.com/software-mansion-labs/react-native-moq/issues"
   },
   "homepage": "https://github.com/software-mansion-labs/react-native-moq#readme",
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
-  },
   "devDependencies": {
     "@commitlint/config-conventional": "^20.5.0",
     "@eslint/compat": "^2.0.3",
@@ -91,41 +49,11 @@
     "turbo": "^2.9.4",
     "typescript": "^6.0.2"
   },
-  "peerDependencies": {
-    "react": "*",
-    "react-native": "*",
-    "react-native-safe-area-context": ">=4.0.0"
-  },
   "workspaces": [
+    "packages/*",
     "example"
   ],
   "packageManager": "yarn@4.11.0",
-  "react-native-builder-bob": {
-    "source": "src",
-    "output": "lib",
-    "targets": [
-      [
-        "module",
-        {
-          "esm": true
-        }
-      ],
-      [
-        "typescript",
-        {
-          "project": "tsconfig.build.json"
-        }
-      ]
-    ]
-  },
-  "codegenConfig": {
-    "name": "MoQSpec",
-    "type": "modules",
-    "jsSrcsDir": "src",
-    "android": {
-      "javaPackageName": "com.moq"
-    }
-  },
   "prettier": {
     "quoteProps": "consistent",
     "singleQuote": true,
@@ -137,7 +65,7 @@
     "preset": "react-native",
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
-      "<rootDir>/lib/"
+      "<rootDir>/packages/*/lib/"
     ]
   },
   "commitlint": {
@@ -152,36 +80,5 @@
         0
       ]
     }
-  },
-  "release-it": {
-    "git": {
-      "commitMessage": "chore: release ${version}",
-      "tagName": "v${version}"
-    },
-    "npm": {
-      "publish": true
-    },
-    "github": {
-      "release": true
-    },
-    "plugins": {
-      "@release-it/conventional-changelog": {
-        "preset": {
-          "name": "angular"
-        }
-      }
-    }
-  },
-  "create-react-native-library": {
-    "type": "turbo-module",
-    "languages": "kotlin-objc",
-    "tools": [
-      "eslint",
-      "jest",
-      "lefthook",
-      "release-it",
-      "vite"
-    ],
-    "version": "0.59.0"
   }
 }

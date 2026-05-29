@@ -9,8 +9,7 @@ import {
   type PanResponderGestureState,
   type ViewStyle,
 } from 'react-native';
-import { useEvent } from '../hooks/useEvent';
-import type { Player, AudioPlayer } from '../types';
+import { useEvent, type Player, type AudioPlayer } from 'react-native-moq';
 
 // Lightweight horizontal volume slider, drawn with <View>s so the package
 // doesn't pull in @react-native-community/slider. Looks roughly like:

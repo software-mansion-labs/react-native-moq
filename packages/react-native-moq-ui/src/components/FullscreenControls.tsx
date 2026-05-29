@@ -1,9 +1,8 @@
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useEvent } from '../hooks/useEvent';
+import { useEvent, type Player } from 'react-native-moq';
 import { useFullscreenControls } from '../contexts/FullscreenContext';
 import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
-import type { Player } from '../types';
 
 // Default fullscreen chrome. The intent is to look like the platform's
 // native video player while staying pure-RN: AVPlayerViewController on iOS

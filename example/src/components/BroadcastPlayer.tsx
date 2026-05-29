@@ -6,14 +6,16 @@ import type {
 import { useEffect, useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 import {
-  SpeakerGlyph,
-  VideoPlayerView,
-  VolumeSlider,
   useAudioPlayer,
   useEvent,
   useEventListener,
   useVideoPlayer,
 } from 'react-native-moq';
+import {
+  SpeakerGlyph,
+  VideoPlayerView,
+  VolumeSlider,
+} from 'react-native-moq-ui';
 import type { AddEntry } from './EventLog';
 import { RenditionPicker } from './RenditionPicker';
 import { StatsPanel } from './StatsPanel';

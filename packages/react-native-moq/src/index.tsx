@@ -1,17 +1,5 @@
 export { VideoView } from './views/VideoView';
 export type { VideoViewProps } from './views/VideoView';
-export { VideoPlayerView } from './views/VideoPlayerView';
-export type {
-  VideoPlayerViewProps,
-  VideoPlayerViewRef,
-} from './views/VideoPlayerView';
-export { FullscreenControls } from './components/FullscreenControls';
-export { useFullscreenControls } from './contexts/FullscreenContext';
-export type { FullscreenControlsAPI } from './contexts/FullscreenContext';
-export { MiniPlayerControls } from './components/MiniPlayerControls';
-export { VolumeSlider, SpeakerGlyph } from './components/VolumeSlider';
-export { useMiniPlayerControls } from './contexts/MiniPlayerContext';
-export type { MiniPlayerControlsAPI } from './contexts/MiniPlayerContext';
 export { useSession } from './hooks/useSession';
 export { useBroadcasts } from './hooks/useBroadcasts';
 export { usePublisher } from './hooks/usePublisher';

@@ -3,14 +3,23 @@
   "globalDependencies": [".nvmrc", ".yarnrc.yml"],
   "globalEnv": ["NODE_ENV"],
   "tasks": {
+    "prepare": {
+      "dependsOn": ["^prepare"],
+      "inputs": ["src/**", "package.json", "tsconfig*.json"],
+      "outputs": ["lib/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^prepare"],
+      "inputs": ["src/**", "package.json", "tsconfig*.json"],
+      "outputs": []
+    },
     "build:android": {
       "env": ["ANDROID_HOME", "ORG_GRADLE_PROJECT_newArchEnabled"],
       "inputs": [
-        "package.json",
-        "android",
-        "!android/build",
-        "src/*.ts",
-        "src/*.tsx",
+        "packages/react-native-moq/package.json",
+        "packages/react-native-moq/android",
+        "!packages/react-native-moq/android/build",
+        "packages/react-native-moq/src/**",
         "example/package.json",
         "example/android",
         "!example/android/.gradle",
@@ -27,11 +36,10 @@
         "RCT_USE_PREBUILT_RNCORE"
       ],
       "inputs": [
-        "package.json",
-        "*.podspec",
-        "ios",
-        "src/*.ts",
-        "src/*.tsx",
+        "packages/react-native-moq/package.json",
+        "packages/react-native-moq/*.podspec",
+        "packages/react-native-moq/ios",
+        "packages/react-native-moq/src/**",
         "example/package.json",
         "example/ios",
         "!example/ios/build",
