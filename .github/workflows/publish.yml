@@ -1,0 +1,79 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-type:
+        description: Type of release to publish.
+        type: choice
+        options:
+          - stable
+          - rc
+          - beta
+          - alpha
+        default: stable
+      version:
+        description: Explicit version in x.y.z format (leave empty to infer from the branch / npm latest).
+        type: string
+        required: false
+        default: ''
+      dry-run:
+        description: Dry run — build and validate, but do not publish to npm or push git tags.
+        type: boolean
+        default: true
+
+# Never run two publishes at once — a release must finish before the next starts.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # push the release commit and version tag
+      id-token: write # mint the OIDC token used for npm provenance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      # Re-run setup-node only to write an .npmrc pointing at the public
+      # registry. Provenance + Trusted Publisher use OIDC, so no token is set.
+      - name: Configure npm registry
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org/
+
+      - name: Build packages
+        run: yarn prepare
+
+      # react-native-moq-ui depends on react-native-moq, so publish the core
+      # package first. It also owns the git release commit + tag.
+      - name: Publish react-native-moq
+        uses: software-mansion/npm-package-publish@d347fc2b353b9ffc6e80ac7a149a49171274d1a4
+        with:
+          package-name: react-native-moq
+          package-json-path: packages/react-native-moq/package.json
+          install-dependencies-command: yarn install --immutable
+          release-type: ${{ inputs.release-type }}
+          version: ${{ inputs.version }}
+          dry-run: ${{ inputs.dry-run }}
+
+      # Second package: skip git operations so we don't try to push a second
+      # tag for the same release.
+      - name: Publish react-native-moq-ui
+        uses: software-mansion/npm-package-publish@d347fc2b353b9ffc6e80ac7a149a49171274d1a4
+        with:
+          package-name: react-native-moq-ui
+          package-json-path: packages/react-native-moq-ui/package.json
+          install-dependencies-command: yarn install --immutable
+          release-type: ${{ inputs.release-type }}
+          version: ${{ inputs.version }}
+          dry-run: ${{ inputs.dry-run }}
+          perform-git-operations: false
