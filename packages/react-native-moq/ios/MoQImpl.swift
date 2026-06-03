@@ -289,7 +289,7 @@ private let audioKeySuffix = "_audio"
       catalog: catalog,
       videoTrackName: videoTrackName,
       audioTrackName: audioTrackName,
-      targetBufferingMs: ctx.targetLatencyMs
+      targetBuffering: .milliseconds(ctx.targetLatencyMs)
     )
     if let p {
       let ref = PlayerRef(
@@ -378,7 +378,7 @@ private let audioKeySuffix = "_audio"
       catalog: catalog,
       videoTrackName: nil,
       audioTrackName: audioTrackName,
-      targetBufferingMs: ctx.targetLatencyMs
+      targetBuffering: .milliseconds(ctx.targetLatencyMs)
     )
     if let p {
       let ref = PlayerRef(
@@ -451,29 +451,40 @@ extension SessionState {
 extension PlaybackStats {
   func asDictionary() -> [String: Any] {
     var d: [String: Any] = [:]
-    if let v = videoLatencyMs { d["videoLatencyMs"] = v }
-    if let v = audioLatencyMs { d["audioLatencyMs"] = v }
+    if let v = videoLatency { d["videoLatencyMs"] = v.inMilliseconds }
+    if let v = audioLatency { d["audioLatencyMs"] = v.inMilliseconds }
     if let v = videoBitrateKbps { d["videoBitrateKbps"] = v }
     if let v = audioBitrateKbps { d["audioBitrateKbps"] = v }
     if let v = videoFps { d["videoFps"] = v }
-    if let v = videoJitterBufferMs { d["videoJitterBufferMs"] = v }
-    if let v = audioRingBufferMs { d["audioRingBufferMs"] = v }
-    if let v = timeToFirstVideoFrameMs { d["timeToFirstVideoFrameMs"] = v }
-    if let v = timeToFirstAudioFrameMs { d["timeToFirstAudioFrameMs"] = v }
+    if let v = videoJitterBuffer { d["videoJitterBufferMs"] = v.inMilliseconds }
+    if let v = audioRingBuffer { d["audioRingBufferMs"] = v.inMilliseconds }
+    if let v = timeToFirst.videoFrame { d["timeToFirstVideoFrameMs"] = v.inMilliseconds }
+    if let v = timeToFirst.audioFrame { d["timeToFirstAudioFrameMs"] = v.inMilliseconds }
     if let v = videoFramesDropped { d["videoFramesDropped"] = Double(v) }
     if let v = audioFramesDropped { d["audioFramesDropped"] = Double(v) }
     if let s = videoStalls {
       d["videoStalls"] = [
-        "count": Double(s.count), "totalDurationMs": s.totalDurationMs,
+        "count": Double(s.count), "totalDurationMs": s.totalDuration.inMilliseconds,
         "rebufferingRatio": s.rebufferingRatio,
       ]
     }
     if let s = audioStalls {
       d["audioStalls"] = [
-        "count": Double(s.count), "totalDurationMs": s.totalDurationMs,
+        "count": Double(s.count), "totalDurationMs": s.totalDuration.inMilliseconds,
         "rebufferingRatio": s.rebufferingRatio,
       ]
     }
     return d
+  }
+}
+
+// MoQKit 0.2.0 reports timing as `Duration` instead of bare millisecond
+// Doubles. The library's own `Duration.milliseconds` helper is internal, so
+// mirror it here for the JS-facing stats payload (which stays in ms).
+private extension Duration {
+  var inMilliseconds: Double {
+    let c = components
+    return Double(c.seconds) * 1_000.0
+      + Double(c.attoseconds) / 1_000_000_000_000_000.0
   }
 }

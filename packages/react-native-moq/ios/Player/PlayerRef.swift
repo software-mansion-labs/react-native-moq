@@ -10,7 +10,7 @@ import MoQKit
   var currentAudioTrackName: String?
   var pendingVideoTrackName: String?
   var pendingAudioTrackName: String?
-  var eventsTask: Task<Void, Never>?
+  var eventsSubscription: PlayerEventSubscription?
   var statsTimer: Timer?
   var onEvent: ((String, [String: Any]) -> Void)?
 
@@ -41,7 +41,7 @@ import MoQKit
   @objc(updateTargetLatencyMs:)
   public func updateTargetLatency(ms: Int) {
     Task { @MainActor in
-      player.updateTargetLatency(ms: UInt64(ms))
+      player.updateTargetLatency(.milliseconds(ms))
     }
   }
 
@@ -70,64 +70,93 @@ import MoQKit
 
   // MARK: - Event observation
 
+  // MoQKit 0.2.0 replaced the flat `player.events` AsyncStream with a
+  // push-based `subscribeEvents` callback over a richer event model. Pause and
+  // end are now session-level rather than per-track, so we fold the lifecycle
+  // events onto the `trackPlaying` / `trackPaused` / `allTracksStopped` /
+  // `trackSwitched` types the usePlayer hook acts on, and forward the remaining
+  // diagnostic events under their own names (the JS side ignores unknown types).
   @MainActor
   func startObservingEvents() {
-    eventsTask?.cancel()
-    eventsTask = Task { @MainActor in
-      for await event in self.player.events {
-        let sid = self.sessionId
-        switch event {
-        case .trackPlaying(let kind):
-          self.startStatsPolling()
-          self.onEvent?("playerEvent", [
-            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "trackPlaying",
-            "trackKind": kind.rawValue,
-          ])
-        case .trackPaused(let kind):
-          self.onEvent?("playerEvent", [
-            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "trackPaused",
-            "trackKind": kind.rawValue,
-          ])
-        case .trackStopped(let kind):
-          self.onEvent?("playerEvent", [
-            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "trackStopped",
-            "trackKind": kind.rawValue,
-          ])
-        case .allTracksStopped:
-          self.stopStatsPolling()
-          self.onEvent?("playerEvent", [
-            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "allTracksStopped",
-          ])
-        case .error(let kind, let message):
-          self.onEvent?("playerEvent", [
-            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "error",
-            "trackKind": kind.rawValue, "message": message,
-          ])
-        case .trackSwitched(let kind):
-          var body: [String: Any] = [
-            "sessionId": sid, "broadcastPath": self.broadcastPath, "type": "trackSwitched",
-            "trackKind": kind.rawValue,
-          ]
-          switch kind {
-          case .video:
-            let name = self.pendingVideoTrackName ?? self.currentVideoTrackName
-            if let name = name {
-              body["trackName"] = name
-              self.currentVideoTrackName = name
-            }
-            self.pendingVideoTrackName = nil
-          case .audio:
-            let name = self.pendingAudioTrackName ?? self.currentAudioTrackName
-            if let name = name {
-              body["trackName"] = name
-              self.currentAudioTrackName = name
-            }
-            self.pendingAudioTrackName = nil
-          @unknown default:
-            break
+    eventsSubscription?.cancel()
+    eventsSubscription = player.subscribeEvents { [weak self] event in
+      guard let self = self else { return }
+      let sid = self.sessionId
+      let path = self.broadcastPath
+
+      func emit(_ type: String, _ extra: [String: Any] = [:]) {
+        var body: [String: Any] = ["sessionId": sid, "broadcastPath": path, "type": type]
+        for (key, value) in extra { body[key] = value }
+        self.onEvent?("playerEvent", body)
+      }
+      func trackFields(_ track: PlayerTrackEvent) -> [String: Any] {
+        var fields: [String: Any] = ["trackKind": track.kind.rawValue]
+        if let name = track.trackName { fields["trackName"] = name }
+        return fields
+      }
+
+      switch event.type {
+      case .playerInit:
+        emit("playerInit")
+      case .playerDestroy:
+        emit("playerDestroy")
+      case .playbackRequest:
+        emit("playbackRequest")
+      case .playbackStart(let playing):
+        emit("playbackStart", trackFields(playing.track))
+      case .playbackPause:
+        emit("trackPaused")
+      case .playbackResume:
+        emit("trackPlaying")
+      case .playbackEnd:
+        self.stopStatsPolling()
+        emit("allTracksStopped")
+      case .trackSubscribeStart(let track):
+        emit("trackSubscribeStart", trackFields(track))
+      case .trackReady(let ready):
+        emit("trackReady", trackFields(ready.track))
+      case .trackPlaying(let playing):
+        self.startStatsPolling()
+        emit("trackPlaying", trackFields(playing.track))
+      case .trackSubscribeError(let error), .decodeError(let error):
+        var fields = trackFields(error.track)
+        fields["message"] = error.message
+        emit("error", fields)
+      case .trackSubscribeEnd(let track):
+        emit("trackStopped", trackFields(track))
+      case .trackSelect(let selection):
+        var fields: [String: Any] = ["trackKind": selection.kind.rawValue]
+        if let name = selection.trackName { fields["trackName"] = name }
+        emit("trackSelect", fields)
+      case .trackSwitch(let track):
+        var fields: [String: Any] = ["trackKind": track.kind.rawValue]
+        switch track.kind {
+        case .video:
+          let name = track.trackName ?? self.pendingVideoTrackName ?? self.currentVideoTrackName
+          if let name = name {
+            fields["trackName"] = name
+            self.currentVideoTrackName = name
           }
-          self.onEvent?("playerEvent", body)
+          self.pendingVideoTrackName = nil
+        case .audio:
+          let name = track.trackName ?? self.pendingAudioTrackName ?? self.currentAudioTrackName
+          if let name = name {
+            fields["trackName"] = name
+            self.currentAudioTrackName = name
+          }
+          self.pendingAudioTrackName = nil
+        @unknown default:
+          break
         }
+        emit("trackSwitched", fields)
+      case .trackStallStart(let track):
+        emit("trackStallStart", trackFields(track))
+      case .trackStallEnd(let track):
+        emit("trackStallEnd", trackFields(track))
+      case .rebufferStart(let track):
+        emit("rebufferStart", trackFields(track))
+      case .rebufferEnd(let track):
+        emit("rebufferEnd", trackFields(track))
       }
     }
   }
@@ -162,7 +191,7 @@ import MoQKit
 
   @MainActor
   func stopAll() async {
-    eventsTask?.cancel(); eventsTask = nil
+    eventsSubscription?.cancel(); eventsSubscription = nil
     statsTimer?.invalidate(); statsTimer = nil
     await player.stopAll()
   }

@@ -6,6 +6,10 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableMap
 import com.moq.toWritableMap
 import com.swmansion.moqkit.subscribe.Player
+import com.swmansion.moqkit.subscribe.PlayerEventType
+import com.swmansion.moqkit.subscribe.PlayerTrackErrorEvent
+import com.swmansion.moqkit.subscribe.PlayerTrackEvent
+import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -26,7 +30,8 @@ class PlayerHandle(
 
   fun play() = player.play()
   fun pause() = player.pause()
-  fun updateTargetLatency(ms: Int) = player.updateTargetLatency(ms)
+  fun updateTargetLatency(ms: Int) =
+    player.updateTargetLatency(Duration.ofMillis(ms.toLong()))
   fun setSurface(surface: Surface?) = player.setSurface(surface)
   fun setVolume(volume: Float) = player.setVolume(volume)
 
@@ -54,44 +59,74 @@ class PlayerHandle(
 
   // MARK: - Event observation
 
+  // MoQKit 0.2.0 replaced the flat `Player.Event` sealed class with a richer
+  // event model delivered through `player.events` as `PlayerEvent`. Pause and end
+  // are now session-level rather than per-track, so we fold the lifecycle events
+  // onto the `trackPlaying` / `trackPaused` / `allTracksStopped` / `trackSwitched`
+  // types the usePlayer hook acts on, and forward the remaining diagnostic events
+  // under their own names (the JS side ignores unknown types).
   fun startObservingEvents() {
     eventJob?.cancel()
     eventJob = moduleScope.launch {
       player.events.collect { event ->
-        val map = Arguments.createMap()
-        map.putString("sessionId", sessionId)
-        map.putString("broadcastPath", broadcastPath)
-        when (event) {
-          is Player.Event.TrackPlaying -> {
-            map.putString("type", "trackPlaying")
-            map.putString("trackKind", event.kind)
-            mainHandler.post { startStatsPolling() }
-          }
-          is Player.Event.TrackPaused -> {
-            map.putString("type", "trackPaused")
-            map.putString("trackKind", event.kind)
-          }
-          is Player.Event.TrackSwitched -> {
-            map.putString("type", "trackSwitched")
-            map.putString("trackKind", event.kind)
-          }
-          is Player.Event.TrackStopped -> {
-            map.putString("type", "trackStopped")
-            map.putString("trackKind", event.kind)
-          }
-          Player.Event.AllTracksStopped -> {
-            map.putString("type", "allTracksStopped")
+        when (val type = event.type) {
+          is PlayerEventType.PlayerInit -> emitPlayerEvent("playerInit")
+          is PlayerEventType.PlayerDestroy -> emitPlayerEvent("playerDestroy")
+          is PlayerEventType.PlaybackRequest -> emitPlayerEvent("playbackRequest")
+          is PlayerEventType.PlaybackStart -> emitPlayerEvent("playbackStart", type.playback.track)
+          is PlayerEventType.PlaybackPause -> emitPlayerEvent("trackPaused")
+          is PlayerEventType.PlaybackResume -> emitPlayerEvent("trackPlaying")
+          is PlayerEventType.PlaybackEnd -> {
             mainHandler.post { stopStatsPolling() }
+            emitPlayerEvent("allTracksStopped")
           }
-          is Player.Event.Error -> {
-            map.putString("type", "error")
-            map.putString("trackKind", event.kind)
-            map.putString("message", event.message)
+          is PlayerEventType.TrackSubscribeStart -> emitPlayerEvent("trackSubscribeStart", type.track)
+          is PlayerEventType.TrackReady -> emitPlayerEvent("trackReady", type.ready.track)
+          is PlayerEventType.TrackPlaying -> {
+            mainHandler.post { startStatsPolling() }
+            emitPlayerEvent("trackPlaying", type.playing.track)
           }
+          is PlayerEventType.TrackSubscribeError -> emitErrorEvent(type.error)
+          is PlayerEventType.DecodeError -> emitErrorEvent(type.error)
+          is PlayerEventType.TrackSubscribeEnd -> emitPlayerEvent("trackStopped", type.track)
+          is PlayerEventType.TrackSelect -> {
+            val map = baseEventMap("trackSelect")
+            map.putString("trackKind", type.selection.kind.value)
+            type.selection.trackName?.let { map.putString("trackName", it) }
+            onEvent?.invoke("playerEvent", map)
+          }
+          is PlayerEventType.TrackSwitch -> emitPlayerEvent("trackSwitched", type.track)
+          is PlayerEventType.TrackStallStart -> emitPlayerEvent("trackStallStart", type.track)
+          is PlayerEventType.TrackStallEnd -> emitPlayerEvent("trackStallEnd", type.track)
+          is PlayerEventType.RebufferStart -> emitPlayerEvent("rebufferStart", type.track)
+          is PlayerEventType.RebufferEnd -> emitPlayerEvent("rebufferEnd", type.track)
         }
-        onEvent?.invoke("playerEvent", map)
       }
     }
+  }
+
+  private fun baseEventMap(type: String): WritableMap {
+    val map = Arguments.createMap()
+    map.putString("sessionId", sessionId)
+    map.putString("broadcastPath", broadcastPath)
+    map.putString("type", type)
+    return map
+  }
+
+  private fun emitPlayerEvent(type: String, track: PlayerTrackEvent? = null) {
+    val map = baseEventMap(type)
+    track?.let {
+      map.putString("trackKind", it.kind.value)
+      it.trackName?.let { name -> map.putString("trackName", name) }
+    }
+    onEvent?.invoke("playerEvent", map)
+  }
+
+  private fun emitErrorEvent(error: PlayerTrackErrorEvent) {
+    val map = baseEventMap("error")
+    map.putString("trackKind", error.track.kind.value)
+    map.putString("message", error.message)
+    onEvent?.invoke("playerEvent", map)
   }
 
   // MARK: - Stats polling

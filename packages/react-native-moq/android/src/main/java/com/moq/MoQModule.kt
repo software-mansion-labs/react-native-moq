@@ -12,6 +12,7 @@ import com.swmansion.moqkit.subscribe.Catalog
 import com.swmansion.moqkit.subscribe.PlaybackStats
 import com.swmansion.moqkit.subscribe.Player
 import com.swmansion.moqkit.subscribe.StallStats
+import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CoroutineScope
@@ -272,7 +273,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         catalog = catalog,
         videoTrackName = null,
         audioTrackName = audioTrackName,
-        targetLatencyMs = ctx.targetLatencyMs,
+        targetBuffering = Duration.ofMillis(ctx.targetLatencyMs.toLong()),
         parentScope = moduleScope,
       )
     } catch (_: Exception) { return }
@@ -311,7 +312,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         catalog = catalog,
         videoTrackName = videoTrackName,
         audioTrackName = audioTrackName,
-        targetLatencyMs = targetLatencyMs,
+        targetBuffering = Duration.ofMillis(targetLatencyMs.toLong()),
         parentScope = moduleScope,
       )
     } catch (_: Exception) { null }
@@ -413,15 +414,15 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
 fun PlaybackStats.toWritableMap(): WritableMap {
   val map = Arguments.createMap()
-  videoLatencyMs?.let { map.putDouble("videoLatencyMs", it) }
-  audioLatencyMs?.let { map.putDouble("audioLatencyMs", it) }
+  videoLatency?.let { map.putDouble("videoLatencyMs", it.toMillisDouble()) }
+  audioLatency?.let { map.putDouble("audioLatencyMs", it.toMillisDouble()) }
   videoBitrateKbps?.let { map.putDouble("videoBitrateKbps", it) }
   audioBitrateKbps?.let { map.putDouble("audioBitrateKbps", it) }
   videoFps?.let { map.putDouble("videoFps", it) }
-  videoJitterBufferMs?.let { map.putDouble("videoJitterBufferMs", it) }
-  audioRingBufferMs?.let { map.putDouble("audioRingBufferMs", it) }
-  timeToFirstVideoFrameMs?.let { map.putDouble("timeToFirstVideoFrameMs", it) }
-  timeToFirstAudioFrameMs?.let { map.putDouble("timeToFirstAudioFrameMs", it) }
+  videoJitterBuffer?.let { map.putDouble("videoJitterBufferMs", it.toMillisDouble()) }
+  audioRingBuffer?.let { map.putDouble("audioRingBufferMs", it.toMillisDouble()) }
+  timeToFirst.videoFrame?.let { map.putDouble("timeToFirstVideoFrameMs", it.toMillisDouble()) }
+  timeToFirst.audioFrame?.let { map.putDouble("timeToFirstAudioFrameMs", it.toMillisDouble()) }
   videoFramesDropped?.let { map.putDouble("videoFramesDropped", it.toDouble()) }
   audioFramesDropped?.let { map.putDouble("audioFramesDropped", it.toDouble()) }
   videoStalls?.let { map.putMap("videoStalls", it.toWritableMap()) }
@@ -432,7 +433,11 @@ fun PlaybackStats.toWritableMap(): WritableMap {
 private fun StallStats.toWritableMap(): WritableMap {
   val map = Arguments.createMap()
   map.putDouble("count", count.toDouble())
-  map.putDouble("totalDurationMs", totalDurationMs)
+  map.putDouble("totalDurationMs", totalDuration.toMillisDouble())
   map.putDouble("rebufferingRatio", rebufferingRatio)
   return map
 }
+
+// MoQKit 0.2.0 reports timing as java.time.Duration instead of bare millisecond
+// Doubles. The JS-facing stats payload stays in ms, so convert here.
+private fun Duration.toMillisDouble(): Double = toNanos() / 1_000_000.0
