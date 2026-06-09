@@ -1,15 +1,14 @@
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MaterialIcons } from '@react-native-vector-icons/material-icons/static';
 import { useEvent, type Player } from 'react-native-moq';
 import { useFullscreenControls } from '../contexts/FullscreenContext';
 import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
 
-// Default fullscreen chrome. The intent is to look like the platform's
-// native video player while staying pure-RN: AVPlayerViewController on iOS
-// (close button top-left, centered play/pause, no scrim) and Media3
-// PlayerView on Android (close button top-right, centered play/pause, soft
-// scrim). Icons are drawn with a handful of <View>s so we don't depend on
-// react-native-svg or an icon font.
+// Default fullscreen chrome. Mirrors the platform conventions: a close
+// button positioned per-platform (top-left on iOS like AVPlayerViewController,
+// top-right on Android like Media3 PlayerView), a centered play/pause, and
+// a volume row along the bottom.
 //
 // Visibility and exit are read from FullscreenContext; this component only
 // renders the chrome itself.
@@ -107,7 +106,7 @@ function IOSChrome({
             pressed && styles.pressed,
           ]}
         >
-          <CloseX size={14} />
+          <MaterialIcons name="close" size={20} color="#fff" />
         </Pressable>
       </View>
 
@@ -122,7 +121,11 @@ function IOSChrome({
             pressed && styles.pressed,
           ]}
         >
-          {isPlaying ? <PauseGlyph size={28} /> : <PlayGlyph size={28} />}
+          <MaterialIcons
+            name={isPlaying ? 'pause' : 'play-arrow'}
+            size={40}
+            color="#fff"
+          />
         </Pressable>
       </View>
 
@@ -138,7 +141,7 @@ function IOSChrome({
         pointerEvents="box-none"
       >
         <View style={styles.volumeRow}>
-          <SpeakerGlyph size={16} volume={player.volume} />
+          <SpeakerGlyph size={20} volume={player.volume} />
           <VolumeSlider player={player} width={160} />
         </View>
       </View>
@@ -194,7 +197,7 @@ function AndroidChrome({
             pressed && styles.pressed,
           ]}
         >
-          <CloseX />
+          <MaterialIcons name="close" size={24} color="#fff" />
         </Pressable>
       </View>
 
@@ -220,7 +223,11 @@ function AndroidChrome({
             pressed && styles.pressed,
           ]}
         >
-          {isPlaying ? <PauseGlyph size={30} /> : <PlayGlyph size={30} />}
+          <MaterialIcons
+            name={isPlaying ? 'pause' : 'play-arrow'}
+            size={42}
+            color="#fff"
+          />
         </Pressable>
       </View>
 
@@ -236,79 +243,10 @@ function AndroidChrome({
         pointerEvents="box-none"
       >
         <View style={styles.volumeRow}>
-          <SpeakerGlyph size={16} volume={player.volume} />
+          <SpeakerGlyph size={20} volume={player.volume} />
           <VolumeSlider player={player} width={160} />
         </View>
       </View>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Icons (drawn with <View>s — kept small and self-contained)
-// ---------------------------------------------------------------------------
-
-function PlayGlyph({
-  size = 28,
-  color = '#fff',
-}: {
-  size?: number;
-  color?: string;
-}) {
-  // CSS triangle trick: a zero-sized box with thick borders on three sides
-  // produces a right-pointing equilateral-ish triangle. Offsetting by half
-  // the right border keeps the optical center aligned with its container.
-  const half = size / 2;
-  const dynamic = {
-    borderLeftWidth: size,
-    borderTopWidth: half,
-    borderBottomWidth: half,
-    borderLeftColor: color,
-    marginLeft: size * 0.25, // optical centering inside a round button
-  };
-  return <View style={[styles.playGlyph, dynamic]} />;
-}
-
-function PauseGlyph({
-  size = 28,
-  color = '#fff',
-}: {
-  size?: number;
-  color?: string;
-}) {
-  const barWidth = Math.max(3, size * 0.22);
-  const gap = Math.max(4, size * 0.22);
-  const row = { gap };
-  const bar = { width: barWidth, height: size, backgroundColor: color };
-  return (
-    <View style={[styles.pauseRow, row]}>
-      <View style={[styles.pauseBar, bar]} />
-      <View style={[styles.pauseBar, bar]} />
-    </View>
-  );
-}
-
-function CloseX({
-  size = 18,
-  color = '#fff',
-  thickness = 2,
-}: {
-  size?: number;
-  color?: string;
-  thickness?: number;
-}) {
-  const container = { width: size, height: size };
-  const bar = {
-    top: (size - thickness) / 2,
-    width: size,
-    height: thickness,
-    backgroundColor: color,
-    borderRadius: thickness / 2,
-  };
-  return (
-    <View style={container}>
-      <View style={[styles.closeBar, bar, styles.rot45]} />
-      <View style={[styles.closeBar, bar, styles.rotNeg45]} />
     </View>
   );
 }
@@ -394,17 +332,4 @@ const styles = StyleSheet.create({
   androidScrim: {
     backgroundColor: 'rgba(0, 0, 0, 0.18)',
   },
-
-  playGlyph: {
-    width: 0,
-    height: 0,
-    borderRightWidth: 0,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-  },
-  pauseRow: { flexDirection: 'row' },
-  pauseBar: { borderRadius: 1.5 },
-  closeBar: { position: 'absolute', left: 0 },
-  rot45: { transform: [{ rotate: '45deg' }] },
-  rotNeg45: { transform: [{ rotate: '-45deg' }] },
 });

@@ -12,6 +12,7 @@
     "build:web": "vite build"
   },
   "dependencies": {
+    "@react-native-vector-icons/material-icons": "^13.1.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.84.1",

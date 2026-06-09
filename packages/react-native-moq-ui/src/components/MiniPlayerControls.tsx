@@ -1,4 +1,5 @@
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { MaterialIcons } from '@react-native-vector-icons/material-icons/static';
 import { useEvent, type Player } from 'react-native-moq';
 import { useMiniPlayerControls } from '../contexts/MiniPlayerContext';
 import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
@@ -9,9 +10,7 @@ import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
 //   - bottom-right fullscreen-enter button (the universal convention for
 //     inline players: YouTube embed, AVPlayerViewController inline, Media3
 //     PlayerView's default control bar)
-// No close button (you're already not fullscreen), no scrubber (live), no
-// volume (the Player API doesn't expose it). Icons are drawn with a handful
-// of <View>s so we don't depend on react-native-svg or an icon font.
+// No close button (you're already not fullscreen), no scrubber (live).
 //
 // Visibility and the enter-fullscreen action are read from MiniPlayerContext;
 // this component only renders the chrome itself.
@@ -84,13 +83,17 @@ function IOSChrome({
             pressed && styles.pressed,
           ]}
         >
-          {isPlaying ? <PauseGlyph size={20} /> : <PlayGlyph size={20} />}
+          <MaterialIcons
+            name={isPlaying ? 'pause' : 'play-arrow'}
+            size={28}
+            color="#fff"
+          />
         </Pressable>
       </View>
 
       <View style={styles.bottomLeft} pointerEvents="box-none">
         <View style={styles.volumeRow}>
-          <SpeakerGlyph size={14} volume={player.volume} />
+          <SpeakerGlyph size={16} volume={player.volume} />
           <VolumeSlider player={player} width={96} />
         </View>
       </View>
@@ -106,7 +109,7 @@ function IOSChrome({
             pressed && styles.pressed,
           ]}
         >
-          <FullscreenEnterGlyph size={14} />
+          <MaterialIcons name="fullscreen" size={20} color="#fff" />
         </Pressable>
       </View>
     </View>
@@ -155,13 +158,17 @@ function AndroidChrome({
             pressed && styles.pressed,
           ]}
         >
-          {isPlaying ? <PauseGlyph size={22} /> : <PlayGlyph size={22} />}
+          <MaterialIcons
+            name={isPlaying ? 'pause' : 'play-arrow'}
+            size={30}
+            color="#fff"
+          />
         </Pressable>
       </View>
 
       <View style={styles.bottomLeft} pointerEvents="box-none">
         <View style={styles.volumeRow}>
-          <SpeakerGlyph size={14} volume={player.volume} />
+          <SpeakerGlyph size={16} volume={player.volume} />
           <VolumeSlider player={player} width={96} />
         </View>
       </View>
@@ -178,96 +185,9 @@ function AndroidChrome({
             pressed && styles.pressed,
           ]}
         >
-          <FullscreenEnterGlyph size={16} />
+          <MaterialIcons name="fullscreen" size={22} color="#fff" />
         </Pressable>
       </View>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Icons (drawn with <View>s — kept small and self-contained)
-// ---------------------------------------------------------------------------
-
-function PlayGlyph({
-  size = 20,
-  color = '#fff',
-}: {
-  size?: number;
-  color?: string;
-}) {
-  const half = size / 2;
-  const dynamic = {
-    borderLeftWidth: size,
-    borderTopWidth: half,
-    borderBottomWidth: half,
-    borderLeftColor: color,
-    marginLeft: size * 0.25, // optical centering inside the round button
-  };
-  return <View style={[styles.playGlyph, dynamic]} />;
-}
-
-function PauseGlyph({
-  size = 20,
-  color = '#fff',
-}: {
-  size?: number;
-  color?: string;
-}) {
-  const barWidth = Math.max(3, size * 0.22);
-  const gap = Math.max(4, size * 0.22);
-  const row = { gap };
-  const bar = { width: barWidth, height: size, backgroundColor: color };
-  return (
-    <View style={[styles.pauseRow, row]}>
-      <View style={[styles.pauseBar, bar]} />
-      <View style={[styles.pauseBar, bar]} />
-    </View>
-  );
-}
-
-function FullscreenEnterGlyph({
-  size = 16,
-  color = '#fff',
-  thickness = 2,
-}: {
-  size?: number;
-  color?: string;
-  thickness?: number;
-}) {
-  // Four corner brackets pointing outward — the universal "enter fullscreen"
-  // glyph used by YouTube, Media3, etc. Each corner is two thin Views
-  // forming an L, anchored to that corner of the icon box.
-  const arm = Math.max(4, size * 0.4);
-  const horizontal = {
-    position: 'absolute' as const,
-    width: arm,
-    height: thickness,
-    backgroundColor: color,
-    borderRadius: thickness / 2,
-  };
-  const vertical = {
-    position: 'absolute' as const,
-    width: thickness,
-    height: arm,
-    backgroundColor: color,
-    borderRadius: thickness / 2,
-  };
-  const container = { width: size, height: size };
-  return (
-    <View style={container}>
-      {/* Top-left */}
-      <View style={[horizontal, styles.cornerTL]} />
-      <View style={[vertical, styles.cornerTL]} />
-      {/* Top-right */}
-      <View style={[horizontal, styles.cornerTR]} />
-      <View style={[vertical, styles.cornerTR]} />
-      {/* Bottom-left */}
-      <View style={[horizontal, styles.cornerBL]} />
-      <View style={[vertical, styles.cornerBL]} />
-      {/* Bottom-right */}
-      <View style={[horizontal, styles.cornerBR]} />
-      <View style={[vertical, styles.cornerBR]} />
     </View>
   );
 }
@@ -345,18 +265,4 @@ const styles = StyleSheet.create({
   androidScrim: {
     backgroundColor: 'rgba(0, 0, 0, 0.18)',
   },
-
-  playGlyph: {
-    width: 0,
-    height: 0,
-    borderRightWidth: 0,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-  },
-  pauseRow: { flexDirection: 'row' },
-  pauseBar: { borderRadius: 1.5 },
-  cornerTL: { top: 0, left: 0 },
-  cornerTR: { top: 0, right: 0 },
-  cornerBL: { bottom: 0, left: 0 },
-  cornerBR: { bottom: 0, right: 0 },
 });

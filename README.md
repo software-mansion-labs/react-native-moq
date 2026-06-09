@@ -46,10 +46,21 @@ cd ios && pod install
 The ready-made player chrome — `<VideoPlayerView>`, `<FullscreenControls>`, `<MiniPlayerControls>`, `<VolumeSlider>`, `<SpeakerGlyph>` and the matching context hooks — lives in a separate package so apps that build their own UI don't pay for it:
 
 ```sh
-npm install react-native-moq-ui
+npm install react-native-moq-ui @react-native-vector-icons/material-icons
 ```
 
-`react-native-moq-ui` peer-depends on `react-native-moq` and `react-native-safe-area-context`. Skip it entirely if you're composing your own player UI directly on top of [`<VideoView>`](docs/API.md#videoview).
+`react-native-moq-ui` peer-depends on `react-native-moq`, `react-native-safe-area-context`, and `@react-native-vector-icons/material-icons` (used for the play / pause / close / fullscreen / speaker glyphs). On iOS, register the icon font once in your app's `Info.plist`:
+
+```xml
+<key>UIAppFonts</key>
+<array>
+  <string>MaterialIcons.ttf</string>
+</array>
+```
+
+Then re-run `pod install`. Android picks the font up via autolinking — no extra step.
+
+Skip the package entirely if you're composing your own player UI directly on top of [`<VideoView>`](docs/API.md#videoview).
 
 ## Quick start
 

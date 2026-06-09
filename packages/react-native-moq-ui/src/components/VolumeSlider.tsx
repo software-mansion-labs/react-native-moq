@@ -2,13 +2,13 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
   Platform,
-  StyleSheet,
   View,
   type GestureResponderEvent,
   type LayoutChangeEvent,
   type PanResponderGestureState,
   type ViewStyle,
 } from 'react-native';
+import { MaterialIcons } from '@react-native-vector-icons/material-icons/static';
 import { useEvent, type Player, type AudioPlayer } from 'react-native-moq';
 
 // Lightweight horizontal volume slider, drawn with <View>s so the package
@@ -146,136 +146,28 @@ export function VolumeSlider({
   );
 }
 
-// Speaker icon used alongside the slider. Drawn from <View>s — three vertical
-// segments form a trapezoid speaker body, plus three wave bars to the right
-// (like iOS Control Center) that light up as volume increases. Inactive bars
-// stay visible in a muted shade so the icon still reads as a volume control.
+// Speaker icon used alongside the slider. Picks one of Material's four
+// volume glyphs based on level, matching how Media3 / system UIs swap
+// between mute, low, mid, and high volume states.
 export function SpeakerGlyph({
-  size = 16,
+  size = 20,
   volume = 1,
   color = '#fff',
 }: {
   size?: number;
-  // 0..1; sets which of the three wave bars are active. Volume === 0 also
-  // hides the waves entirely and shows the mute slash, matching iOS.
+  // 0..1; volume === 0 shows the muted (speaker-with-slash) glyph.
   volume?: number;
   // Defaults to white for video-overlay use; pass a darker shade on light
   // backgrounds (e.g. the audio-only card in the example app).
   color?: string;
 }) {
-  const muted = volume <= 0;
-  // 3 tiers: roughly third / two-thirds / full. Above 0 we always light at
-  // least one bar so a quiet-but-not-muted state is visible.
-  const activeBars = muted
-    ? 0
-    : Math.min(3, Math.max(1, Math.ceil(volume * 3)));
-  const inactiveColor = withAlpha(color, 0.35);
-
-  const stemH = size * 0.3;
-  const bodyH = size * 0.6;
-  const flareH = size * 0.9;
-  const segW = size * 0.18;
-  const arcThickness = Math.max(1.2, size * 0.1);
-  const arcGap = Math.max(1.5, size * 0.1);
-
-  const stem = {
-    width: segW,
-    height: stemH,
-    backgroundColor: color,
-    borderRadius: 1,
-  };
-  const body = {
-    width: segW,
-    height: bodyH,
-    backgroundColor: color,
-    marginLeft: -1,
-  };
-  const flare = {
-    width: segW,
-    height: flareH,
-    backgroundColor: color,
-    marginLeft: -1,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
-  };
-
-  // Three concentric ")" arcs of growing height, like the iOS Control Center
-  // speaker. Each arc is a Box with only its right border visible and the
-  // right corners rounded by half the height — that forces the right edge to
-  // curve into a semicircular arc.
-  //
-  // Each arc View is `h/2` wide but only the rightmost edge is visible, so a
-  // default flex-row layout would leave the visible curves far apart. We
-  // compensate with a negative marginLeft per arc, sized so neighbouring
-  // curves end up `arcSpacing` pixels apart regardless of the arc's height.
-  const arcHeights = [size * 0.4, size * 0.65, size * 0.9];
-  const arcSpacing = Math.max(1.5, size * 0.12);
-  const waves = arcHeights.map((h, i) => {
-    const w = h / 2;
-    return {
-      width: w,
-      height: h,
-      borderWidth: arcThickness,
-      borderColor: 'transparent' as const,
-      borderRightColor: i < activeBars ? color : inactiveColor,
-      borderTopRightRadius: h / 2,
-      borderBottomRightRadius: h / 2,
-      backgroundColor: 'transparent' as const,
-      marginLeft: i === 0 ? arcGap : arcSpacing - w,
-    };
-  });
-
-  const container = { height: size };
-  const muteBar = { width: size * 1.1, backgroundColor: color };
-
-  return (
-    <View style={[stylesIcon.row, container]}>
-      <View style={stem} />
-      <View style={body} />
-      <View style={flare} />
-      {muted ? null : waves.map((w, i) => <View key={i} style={w} />)}
-      {muted && (
-        <View pointerEvents="none" style={[stylesIcon.muteBar, muteBar]} />
-      )}
-    </View>
-  );
+  const name =
+    volume <= 0
+      ? ('volume-off' as const)
+      : volume < 1 / 3
+        ? ('volume-mute' as const)
+        : volume < 2 / 3
+          ? ('volume-down' as const)
+          : ('volume-up' as const);
+  return <MaterialIcons name={name} size={size} color={color} />;
 }
-
-// Lightly transparent variant of a color string. Used for the inactive wave
-// bars so they still read against dark / light backgrounds.
-function withAlpha(color: string, alpha: number): string {
-  if (color.startsWith('rgba(')) return color;
-  if (color.startsWith('rgb(')) {
-    return color.replace('rgb(', 'rgba(').replace(')', `, ${alpha})`);
-  }
-  // Hex (#fff, #ffffff). Anything else falls back to a generic gray, which
-  // is fine for the limited set of colors we hand it.
-  const hex = color.replace('#', '');
-  const full =
-    hex.length === 3
-      ? hex
-          .split('')
-          .map((c) => c + c)
-          .join('')
-      : hex;
-  if (full.length !== 6) return `rgba(127, 127, 127, ${alpha})`;
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-const stylesIcon = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  muteBar: {
-    position: 'absolute',
-    height: 2,
-    left: -2,
-    top: '50%',
-    transform: [{ rotate: '-30deg' }],
-    borderRadius: 1,
-  },
-});
