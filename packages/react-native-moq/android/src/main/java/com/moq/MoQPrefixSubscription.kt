@@ -3,6 +3,7 @@ package com.moq
 import com.swmansion.moqkit.subscribe.BroadcastSubscription
 import com.swmansion.moqkit.subscribe.Catalog
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -43,8 +44,9 @@ class MoQPrefixSubscription(
               }
             }
             // Natural end of the catalog flow — broadcast unavailable.
-            // Skipped on cancellation: `use` re-throws CancellationException
-            // before reaching this line.
+            onBroadcastUnavailable(prefix, path)
+          } catch (_: CancellationException) {
+          } catch (_: Exception) {
             onBroadcastUnavailable(prefix, path)
           } finally {
             catalogJobs.remove(path)
