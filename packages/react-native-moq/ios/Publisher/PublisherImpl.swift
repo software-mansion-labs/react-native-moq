@@ -62,10 +62,18 @@ import MoQKit
 
       for descriptor in tracks {
         switch descriptor {
-        case .camera(let name, let config):
-          let cam = try await CameraImpl.shared.waitForCameraCapture()
+        case .camera(let name, let source, let config):
+          let frameSource: FrameSource
+          switch source {
+          case "multi-front":
+            frameSource = try await MultiCameraImpl.shared.waitForCapture().frontSource
+          case "multi-back":
+            frameSource = try await MultiCameraImpl.shared.waitForCapture().backSource
+          default:
+            frameSource = try await CameraImpl.shared.waitForCameraCapture()
+          }
           publishedTracks.append(
-            pub.addVideoTrack(name: name, source: cam, config: config))
+            pub.addVideoTrack(name: name, source: frameSource, config: config))
         case .microphone(let name, let config):
           let mic = try await MicrophoneImpl.shared.waitForMicrophone()
           publishedTracks.append(
@@ -170,7 +178,7 @@ import MoQKit
   // MARK: - Track parsing
 
   private enum TrackDescriptor {
-    case camera(name: String, config: VideoEncoderConfig)
+    case camera(name: String, source: String, config: VideoEncoderConfig)
     case microphone(name: String, config: AudioEncoderConfig)
   }
 
@@ -193,8 +201,10 @@ import MoQKit
         let width = (enc["width"] as? NSNumber)?.int32Value ?? 1280
         let height = (enc["height"] as? NSNumber)?.int32Value ?? 720
         let framerate = (enc["framerate"] as? NSNumber)?.doubleValue ?? 30
+        let source = (entry["source"] as? String) ?? "single"
         out.append(.camera(
           name: name,
+          source: source,
           config: VideoEncoderConfig(
             codec: codec, width: width, height: height, maxFrameRate: framerate)))
       case "microphone":

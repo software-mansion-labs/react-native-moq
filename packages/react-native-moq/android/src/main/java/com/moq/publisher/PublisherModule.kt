@@ -7,6 +7,7 @@ import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.moq.MoQModule
 import com.moq.camera.CameraModule
+import com.moq.camera.MultiCameraModule
 import com.moq.microphone.MicrophoneModule
 import com.swmansion.moqkit.publish.PublishedTrack
 import com.swmansion.moqkit.publish.PublishedTrackState
@@ -37,7 +38,11 @@ class PublisherModule(reactContext: ReactApplicationContext) :
   // Per-session publisher context. Camera and microphone are owned by
   // CameraModule / MicrophoneModule respectively; the publisher just
   // references them and lets the underlying modules handle refcounting.
-  private class PublisherContext(val sessionId: String, val publisher: Publisher) {
+  private class PublisherContext(
+    val sessionId: String,
+    val path: String,
+    val publisher: Publisher,
+  ) {
     val jobs = mutableListOf<Job>()
   }
 
@@ -64,7 +69,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
     moduleScope.launch {
       try {
         val pub = Publisher()
-        val ctx = PublisherContext(sessionId, pub)
+        val ctx = PublisherContext(sessionId, path, pub)
         publishers[sessionId] = ctx
 
         val publishedTracks = mutableListOf<PublishedTrack>()
@@ -72,10 +77,16 @@ class PublisherModule(reactContext: ReactApplicationContext) :
         for (descriptor in tracks) {
           when (descriptor) {
             is TrackDescriptor.Camera -> {
-              val cam = CameraModule.instance?.waitForCamera()
-                ?: error("camera module is not available")
+              val source = when (descriptor.source) {
+                "multi-front" -> MultiCameraModule.instance?.waitForCapture()?.frontSource
+                  ?: error("multi-camera module is not available")
+                "multi-back" -> MultiCameraModule.instance?.waitForCapture()?.backSource
+                  ?: error("multi-camera module is not available")
+                else -> CameraModule.instance?.waitForCamera()
+                  ?: error("camera module is not available")
+              }
               publishedTracks += pub.addVideoTrack(
-                name = descriptor.name, source = cam, config = descriptor.config
+                name = descriptor.name, source = source, config = descriptor.config
               )
             }
             is TrackDescriptor.Microphone -> {
@@ -110,7 +121,15 @@ class PublisherModule(reactContext: ReactApplicationContext) :
     ctx.jobs.forEach { it.cancel() }
     ctx.jobs.clear()
 
-    try { ctx.publisher.stop() } catch (_: Exception) {}
+    // Unpublish through the session so it clears its activePublishers entry for
+    // this path; otherwise a subsequent publish() at the same path throws
+    // "Already publishing". unpublish() also calls Publisher.stop() internally.
+    val session = MoQModule.connectedSession(sessionId)
+    if (session != null) {
+      try { session.unpublish(ctx.path) } catch (_: Exception) {}
+    } else {
+      try { ctx.publisher.stop() } catch (_: Exception) {}
+    }
 
     emitState(sessionId, "idle")
   }
@@ -200,7 +219,11 @@ class PublisherModule(reactContext: ReactApplicationContext) :
 
   private sealed interface TrackDescriptor {
     val name: String
-    data class Camera(override val name: String, val config: VideoEncoderConfig) : TrackDescriptor
+    data class Camera(
+      override val name: String,
+      val source: String,
+      val config: VideoEncoderConfig,
+    ) : TrackDescriptor
     data class Microphone(override val name: String, val config: AudioEncoderConfig) : TrackDescriptor
   }
 
@@ -220,6 +243,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
           }
           out += TrackDescriptor.Camera(
             name = name,
+            source = entry.optString("source", "single"),
             config = VideoEncoderConfig(
               codec = codec,
               width = enc.optInt("width", 1280),

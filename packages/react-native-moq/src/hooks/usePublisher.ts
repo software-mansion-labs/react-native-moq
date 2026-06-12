@@ -52,13 +52,20 @@ export interface Publisher {
 interface SerializedTrack {
   type: 'camera' | 'microphone';
   name: string;
+  // Camera-only: which native capture source backs the track (see CameraSource).
+  source?: string;
   encoder: Record<string, unknown>;
 }
 
 function serializeTracks(tracks: PublishTrack[]): SerializedTrack[] {
   return tracks.map((t) => {
     if (t.__type === 'camera') {
-      return { type: 'camera', name: 'camera', encoder: { ...t.encoder } };
+      return {
+        type: 'camera',
+        name: t.__name,
+        source: t.__source,
+        encoder: { ...t.encoder },
+      };
     }
     return { type: 'microphone', name: 'mic', encoder: { ...t.encoder } };
   });

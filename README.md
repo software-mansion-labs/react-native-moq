@@ -143,7 +143,7 @@ The host app is responsible for camera/microphone runtime permissions. Screen sh
 The full API reference — every hook, component, type, and the `react-native-moq-ui` package — lives in [**docs/API.md**](docs/API.md):
 
 - [Playback API](docs/API.md#playback-api) — `useSession`, `useBroadcasts`, `useVideoPlayer`, `useAudioPlayer`, events, `<VideoView>`, types
-- [Publishing](docs/API.md#publishing) — `useCamera`, `useMicrophone`, `usePublisher`, `<PublisherView>`, screen broadcasting
+- [Publishing](docs/API.md#publishing) — `useCamera`, `useMultiCamera`, `useMicrophone`, `usePublisher`, `<PublisherView>`, screen broadcasting
 - [Advanced usage](docs/API.md#advanced-usage) — rendition switching, custom target latency, live stats
 - [Default UI components](docs/API.md#default-ui-components-react-native-moq-ui) — `<VideoPlayerView>`, fullscreen, controls, `<VolumeSlider>`
 

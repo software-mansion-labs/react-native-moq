@@ -16,8 +16,10 @@ import {
   PublisherView,
   getSupportedAudioCodecs,
   getSupportedVideoCodecs,
+  isMultiCameraSupported,
   useCamera,
   useMicrophone,
+  useMultiCamera,
   usePublisher,
   useScreenBroadcast,
   useSession,
@@ -76,6 +78,16 @@ export function PublishScreen({
   const [micEnabled, setMicEnabled] = useState(true);
   const [screenEnabled, setScreenEnabled] = useState(false);
 
+  // Dual-camera (concurrent front+back) is only available on some devices, so
+  // probe support before offering the mode.
+  const [multiSupported, setMultiSupported] = useState(false);
+  const [dualCamera, setDualCamera] = useState(false);
+  useEffect(() => {
+    isMultiCameraSupported()
+      .then(setMultiSupported)
+      .catch(() => {});
+  }, []);
+
   // Prefer H.265 when the device can actually initialize it, else fall back
   // to H.264. Mirrors moq-kit's iOS demo CodecConfigView gating.
   const [videoCodec, setVideoCodec] = useState<VideoCodec>(
@@ -103,12 +115,16 @@ export function PublishScreen({
   // mount, stop on unmount, and are refcounted natively so multiple consumers
   // can share the same physical device. Codec config travels with the hook
   // and is snapshotted by publisher.publish() at call time.
-  const camera = useCamera({
+  // Both camera hooks stay mounted, but `enabled` ensures only the active mode
+  // actually runs hardware — concurrent single + multi capture would conflict.
+  const cameraConfig = {
     videoCodec,
     width: RESOLUTIONS[videoResolution].width,
     height: RESOLUTIONS[videoResolution].height,
     framerate: frameRate,
-  });
+  };
+  const camera = useCamera({ ...cameraConfig, enabled: !dualCamera });
+  const multiCamera = useMultiCamera({ ...cameraConfig, enabled: dualCamera });
   const microphone = useMicrophone({ audioCodec, audioSampleRate });
 
   const encoderOpts = useMemo(
@@ -201,18 +217,44 @@ export function PublishScreen({
         editable={!isPublishing && !screenBroadcasting}
       />
 
-      <View style={styles.preview}>
-        <PublisherView style={StyleSheet.absoluteFill} camera={camera} />
-        <View style={styles.previewControls}>
-          <Button title="Flip" onPress={camera.flip} />
+      {dualCamera ? (
+        <View style={styles.dualPreview}>
+          <View style={[styles.preview, styles.dualPreviewItem]}>
+            <PublisherView
+              style={StyleSheet.absoluteFill}
+              camera={multiCamera.front}
+            />
+            <Text style={styles.previewBadge}>FRONT</Text>
+          </View>
+          <View style={[styles.preview, styles.dualPreviewItem]}>
+            <PublisherView
+              style={StyleSheet.absoluteFill}
+              camera={multiCamera.back}
+            />
+            <Text style={styles.previewBadge}>BACK</Text>
+          </View>
         </View>
-      </View>
+      ) : (
+        <View style={styles.preview}>
+          <PublisherView style={StyleSheet.absoluteFill} camera={camera} />
+          <View style={styles.previewControls}>
+            <Button title="Flip" onPress={camera.flip} />
+          </View>
+        </View>
+      )}
 
       <Row label="Camera">
         <Switch
           value={cameraEnabled}
           onValueChange={setCameraEnabled}
           disabled={isPublishing}
+        />
+      </Row>
+      <Row label="Dual camera (front + back)">
+        <Switch
+          value={dualCamera}
+          onValueChange={setDualCamera}
+          disabled={isPublishing || !cameraEnabled || !multiSupported}
         />
       </Row>
       <Row label="Microphone">
@@ -313,7 +355,13 @@ export function PublishScreen({
             publisher.stop();
           } else if (canPublish) {
             const tracks: PublishTrack[] = [];
-            if (cameraEnabled) tracks.push(camera);
+            if (cameraEnabled) {
+              if (dualCamera) {
+                tracks.push(multiCamera.front, multiCamera.back);
+              } else {
+                tracks.push(camera);
+              }
+            }
             if (micEnabled) tracks.push(microphone);
             publisher.publish({ path, tracks });
           }
@@ -325,8 +373,11 @@ export function PublishScreen({
       {publisher.lastError && (
         <Text style={styles.error}>{publisher.lastError}</Text>
       )}
-      {camera.lastError && (
+      {!dualCamera && camera.lastError && (
         <Text style={styles.error}>Camera: {camera.lastError}</Text>
+      )}
+      {dualCamera && multiCamera.lastError && (
+        <Text style={styles.error}>Dual camera: {multiCamera.lastError}</Text>
       )}
       {microphone.lastError && (
         <Text style={styles.error}>Mic: {microphone.lastError}</Text>
@@ -420,10 +471,30 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
   },
+  dualPreview: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dualPreviewItem: {
+    flex: 1,
+  },
   previewControls: {
     position: 'absolute',
     bottom: 8,
     right: 8,
+  },
+  previewBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
   },
   row: {
     flexDirection: 'row',

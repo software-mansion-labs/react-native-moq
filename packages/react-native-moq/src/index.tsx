@@ -21,11 +21,18 @@ export { useCamera, getSupportedVideoCodecs } from './hooks/useCamera';
 export type {
   CameraOptions,
   CameraPosition,
+  CameraSource,
   CameraTrack,
   CameraCaptureState,
   VideoCodec,
   VideoEncoderOptions,
 } from './hooks/useCamera';
+export { useMultiCamera, isMultiCameraSupported } from './hooks/useMultiCamera';
+export type {
+  MultiCameraOptions,
+  MultiCameraState,
+  MultiCameraTrack,
+} from './hooks/useMultiCamera';
 export { useMicrophone, getSupportedAudioCodecs } from './hooks/useMicrophone';
 export type {
   AudioCodec,

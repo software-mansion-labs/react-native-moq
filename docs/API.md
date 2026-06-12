@@ -505,6 +505,45 @@ Pass it into `publisher.publish({ tracks: [camera, …] })` to include the camer
 
 ---
 
+### `useMultiCamera(options?)`
+
+Captures the front and back cameras **simultaneously** and exposes them as two independent publishable tracks. This is a distinct capture path from `useCamera` (iOS `AVCaptureMultiCamSession`, Android CameraX concurrent camera), so it's a fixed front+back pair — not arbitrary cameras — and the two streams can't be flipped. Like `useCamera`, the capture is a refcounted native singleton started on mount and stopped on unmount.
+
+Concurrent capture isn't available on every device. Gate your UI on the returned `isSupported`, or call [`isMultiCameraSupported()`](#ismulticamerasupported) before mounting the hook (it doesn't start any hardware).
+
+```tsx
+const { isSupported, state, front, back } = useMultiCamera({
+  videoCodec: 'h264', // see the note below on dual-encoder support
+  width: 720,
+  height: 1280,
+  framerate: 30,
+});
+```
+
+Returns a `MultiCameraTrack`:
+
+| Property | Type | Description |
+|---|---|---|
+| `isSupported` | `boolean \| null` | Whether the device can run both cameras at once. `null` while the async capability check is in flight |
+| `state` | `MultiCameraState` | Shared capture state: `'idle' \| 'starting' \| 'active' \| `error:${string}`` |
+| `lastError` | `string \| null` | Last capture error, or `null` if healthy |
+| `front` | `CameraTrack` | The front camera, published as the `front-camera` track |
+| `back` | `CameraTrack` | The back camera, published as the `back-camera` track |
+
+`front` and `back` are ordinary `CameraTrack`s — pass them into `<PublisherView camera={front} />` to preview each, and into `publisher.publish({ tracks: [front, back, …] })` to publish both. Each becomes a separate video track in the broadcast, so a subscriber can play or switch between them. (`flip()` / `setPosition()` on these tracks are no-ops — the positions are fixed.)
+
+> **Dual encoder support.** Publishing two cameras runs two hardware video encoders at once. Two H.264 encoders run concurrently on a wide range of devices; two **H.265** encoders are far more limited — on many devices the second HEVC encoder is created but silently produces no frames, so only one track reaches the broadcast. Prefer `videoCodec: 'h264'` for dual-camera publishing unless you've verified H.265 works on your target hardware.
+
+#### `isMultiCameraSupported()`
+
+```ts
+function isMultiCameraSupported(): Promise<boolean>;
+```
+
+Resolves whether the device supports concurrent front+back capture, without starting any capture. Use it to decide whether to offer a dual-camera mode before mounting `useMultiCamera`.
+
+---
+
 ### `useMicrophone(options?)`
 
 Owns the device microphone. Starts capture on mount, stops on unmount. Refcounted in the same way as the camera. The audio session category is driven from the mic lifecycle: `playAndRecord` while the mic is capturing, `playback` otherwise.
@@ -578,7 +617,7 @@ const camera = useCamera({ position: 'front' });
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `camera` | `CameraTrack` | Yes | The `useCamera` hook driving this preview |
+| `camera` | `CameraTrack` | Yes | The camera driving this preview — a `useCamera` track, or a `front` / `back` track from [`useMultiCamera`](#usemulticameraoptions) |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
 
 The component accepts the rest of the standard `ViewProps` and forwards them to the native view.

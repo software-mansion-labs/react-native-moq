@@ -7,6 +7,12 @@ const cameraEmitter = new NativeEventEmitter(NativeMoQCamera);
 export type CameraPosition = 'front' | 'back';
 export type VideoCodec = 'h264' | 'h265';
 
+// Which native capture backs a camera track. 'single' is the shared
+// front-or-back camera owned by useCamera; the 'multi-*' values are the two
+// concurrent sources of a useMultiCamera session. usePublisher reads this to
+// route each track to the correct native frame source.
+export type CameraSource = 'single' | 'multi-front' | 'multi-back';
+
 export type CameraCaptureState =
   | 'idle'
   | 'starting'
@@ -26,12 +32,21 @@ export interface CameraOptions {
   width?: number;
   height?: number;
   framerate?: number;
+  // When false the camera isn't started (state stays 'idle'). Toggling it
+  // starts/stops the shared capture. Lets an app conditionally run the camera
+  // without conditionally calling the hook — useful when switching between
+  // single and multi-camera modes so only one capture is ever live.
+  enabled?: boolean;
 }
 
 export interface CameraTrack {
   // Discriminator used by usePublisher to route tracks to addVideoTrack on
   // the native side. Don't read it from app code.
   readonly __type: 'camera';
+  // Published track name and the native capture source backing it. Internal —
+  // usePublisher serializes these and PublisherView branches on __source.
+  readonly __name: string;
+  readonly __source: CameraSource;
   readonly state: CameraCaptureState;
   readonly lastError: string | null;
   readonly position: CameraPosition;
@@ -56,6 +71,7 @@ export function useCamera(options: CameraOptions = {}): CameraTrack {
   const width = options.width ?? 1280;
   const height = options.height ?? 720;
   const framerate = options.framerate ?? 30;
+  const enabled = options.enabled ?? true;
 
   const [state, setState] = useState<CameraCaptureState>('idle');
   const [lastError, setLastError] = useState<string | null>(null);
@@ -69,9 +85,10 @@ export function useCamera(options: CameraOptions = {}): CameraTrack {
   positionRef.current = position;
 
   useEffect(() => {
+    if (!enabled) return;
     NativeMoQCamera.startCapture(positionRef.current);
     return () => NativeMoQCamera.stopCapture();
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     const sub = cameraEmitter.addListener('cameraStateChanged', (event) => {
@@ -100,6 +117,8 @@ export function useCamera(options: CameraOptions = {}): CameraTrack {
   return useMemo<CameraTrack>(
     () => ({
       __type: 'camera',
+      __name: 'camera',
+      __source: 'single',
       state,
       lastError,
       position,

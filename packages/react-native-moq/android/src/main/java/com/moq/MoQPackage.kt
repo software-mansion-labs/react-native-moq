@@ -8,6 +8,8 @@ import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
 import com.moq.camera.CameraModule
 import com.moq.camera.CameraPreviewViewManager
+import com.moq.camera.MultiCameraModule
+import com.moq.camera.MultiCameraPreviewViewManager
 import com.moq.microphone.MicrophoneModule
 import com.moq.player.VideoViewManager
 import com.moq.publisher.PublisherModule
@@ -19,6 +21,7 @@ class MoQPackage : BaseReactPackage() {
       MoQModule.NAME -> MoQModule(reactContext)
       PublisherModule.NAME -> PublisherModule(reactContext)
       CameraModule.NAME -> CameraModule(reactContext)
+      MultiCameraModule.NAME -> MultiCameraModule(reactContext)
       MicrophoneModule.NAME -> MicrophoneModule(reactContext)
       ScreenBroadcastModule.NAME -> ScreenBroadcastModule(reactContext)
       else -> null
@@ -51,6 +54,14 @@ class MoQPackage : BaseReactPackage() {
         isCxxModule = false,
         isTurboModule = true,
       ),
+      MultiCameraModule.NAME to ReactModuleInfo(
+        name = MultiCameraModule.NAME,
+        className = MultiCameraModule.NAME,
+        canOverrideExistingModule = false,
+        needsEagerInit = false,
+        isCxxModule = false,
+        isTurboModule = true,
+      ),
       MicrophoneModule.NAME to ReactModuleInfo(
         name = MicrophoneModule.NAME,
         className = MicrophoneModule.NAME,
@@ -71,6 +82,10 @@ class MoQPackage : BaseReactPackage() {
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
-    return listOf(VideoViewManager(), CameraPreviewViewManager())
+    return listOf(
+      VideoViewManager(),
+      CameraPreviewViewManager(),
+      MultiCameraPreviewViewManager(),
+    )
   }
 }
