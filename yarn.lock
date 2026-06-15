@@ -3250,6 +3250,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@react-native-vector-icons/get-image@npm:^13.0.0":
+  version: 13.0.0
+  resolution: "@react-native-vector-icons/get-image@npm:13.0.0"
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+  checksum: 10c0/c13dd85b1e43b744456aac7be94edd62743fbd3815516b70f03fd0dde274c1ca862f7ea1c9826a2ab0fbd1b73da2ce2c2ad5fc0b09f018818d2d78c7d8880447
+  languageName: node
+  linkType: hard
+
 "@react-native-vector-icons/material-icons@npm:^13.1.2":
   version: 13.1.2
   resolution: "@react-native-vector-icons/material-icons@npm:13.1.2"
@@ -11065,6 +11075,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-freeze@npm:^1.0.0":
+  version: 1.0.4
+  resolution: "react-freeze@npm:1.0.4"
+  peerDependencies:
+    react: ">=17.0.0"
+  checksum: 10c0/8f51257c261bfefff86f618e958683536248f708019632d309ee5ebdd52f25d3c130660d06fb6f0f4fdef79f00f8ec7177233a872c2321f7d46b7e77ccc522a1
+  languageName: node
+  linkType: hard
+
 "react-is@npm:^16.13.1":
   version: 16.13.1
   resolution: "react-is@npm:16.13.1"
@@ -11131,6 +11150,7 @@ __metadata:
     "@react-native-community/cli": "npm:20.1.0"
     "@react-native-community/cli-platform-android": "npm:20.1.0"
     "@react-native-community/cli-platform-ios": "npm:20.1.0"
+    "@react-native-vector-icons/get-image": "npm:^13.0.0"
     "@react-native-vector-icons/material-icons": "npm:^13.1.2"
     "@react-native/babel-preset": "npm:0.84.1"
     "@react-native/metro-config": "npm:0.84.1"
@@ -11145,6 +11165,7 @@ __metadata:
     react-native-moq: "workspace:^"
     react-native-moq-ui: "workspace:^"
     react-native-safe-area-context: "npm:^5.7.0"
+    react-native-screens: "npm:^4.25.2"
     react-native-web: "npm:~0.21.1"
     vite: "npm:^7.1.1"
     vite-plugin-commonjs: "npm:^0.10.4"
@@ -11229,6 +11250,19 @@ __metadata:
     react: "*"
     react-native: "*"
   checksum: 10c0/c3799e17321b41df1e0a10492c98472f8f8225ef0bbaf8146c4a9acb9519aae9ac11429059143c215e4402c2808e8445274850a339f8477522ded2461e18da80
+  languageName: node
+  linkType: hard
+
+"react-native-screens@npm:^4.25.2":
+  version: 4.25.2
+  resolution: "react-native-screens@npm:4.25.2"
+  dependencies:
+    react-freeze: "npm:^1.0.0"
+    warn-once: "npm:^0.1.0"
+  peerDependencies:
+    react: "*"
+    react-native: ">=0.82.0"
+  checksum: 10c0/b1f155830e57c36e8ca60831f4b22079cd311f0e36f7c4465ff4094f9dec18e66cef2321a4ff8944aac51ead437720585080f1f4b2956106099a9ea7d9745d00
   languageName: node
   linkType: hard
 
@@ -13059,6 +13093,13 @@ __metadata:
   dependencies:
     makeerror: "npm:1.0.12"
   checksum: 10c0/a17e037bccd3ca8a25a80cb850903facdfed0de4864bd8728f1782370715d679fa72e0a0f5da7c1c1379365159901e5935f35be531229da53bbfc0efdabdb48e
+  languageName: node
+  linkType: hard
+
+"warn-once@npm:^0.1.0":
+  version: 0.1.1
+  resolution: "warn-once@npm:0.1.1"
+  checksum: 10c0/f531e7b2382124f51e6d8f97b8c865246db8ab6ff4e53257a2d274e0f02b97d7201eb35db481843dc155815e154ad7afb53b01c4d4db15fb5aa073562496aff7
   languageName: node
   linkType: hard
 

@@ -12,6 +12,7 @@
     "build:web": "vite build"
   },
   "dependencies": {
+    "@react-native-vector-icons/get-image": "^13.0.0",
     "@react-native-vector-icons/material-icons": "^13.1.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -19,6 +20,7 @@
     "react-native-moq": "workspace:^",
     "react-native-moq-ui": "workspace:^",
     "react-native-safe-area-context": "^5.7.0",
+    "react-native-screens": "^4.25.2",
     "react-native-web": "~0.21.1"
   },
   "devDependencies": {

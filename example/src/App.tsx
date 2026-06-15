@@ -1,70 +1,72 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { useRef, useState } from 'react';
+import { Platform, type NativeSyntheticEvent } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Tabs, type TabSelectedEvent } from 'react-native-screens';
+import { SafeAreaView } from 'react-native-screens/experimental';
+import MaterialIcons from '@react-native-vector-icons/material-icons';
 import { SubscribeScreen } from './screens/SubscribeScreen';
 import { PublishScreen } from './screens/PublishScreen';
 
-type Tab = 'subscribe' | 'publish';
+const edges =
+  Platform.OS === 'android'
+    ? { top: true, bottom: true, left: true, right: true }
+    : { top: false, bottom: false, left: false, right: false };
+
+const subscribeIcon = MaterialIcons.getImageSourceSync('live-tv', 24);
+const publishIcon = MaterialIcons.getImageSourceSync('videocam', 24);
+
+function iosTab(image: any) {
+  return {
+    icon: { type: 'templateSource', templateSource: image },
+  } as const;
+}
+
+function androidTab(image: any) {
+  return {
+    icon: { type: 'imageSource', imageSource: image },
+  } as const;
+}
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('subscribe');
+  const [selectedScreenKey, setSelectedScreenKey] = useState('subscribe');
+  const provenance = useRef(0);
   const [url, setUrl] = useState('http://192.168.1.48:4443');
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <View style={styles.content}>
-          {tab === 'subscribe' ? (
+      <Tabs.Host
+        navStateRequest={{
+          selectedScreenKey,
+          baseProvenance: provenance.current,
+        }}
+        onTabSelected={(e: NativeSyntheticEvent<TabSelectedEvent>) => {
+          provenance.current = e.nativeEvent.provenance;
+          setSelectedScreenKey(e.nativeEvent.selectedScreenKey);
+        }}
+      >
+        <Tabs.Screen
+          screenKey="subscribe"
+          title="Subscribe"
+          activityState={2}
+          ios={iosTab(subscribeIcon)}
+          android={androidTab(subscribeIcon)}
+        >
+          <SafeAreaView edges={edges}>
             <SubscribeScreen url={url} setUrl={setUrl} />
-          ) : (
+          </SafeAreaView>
+        </Tabs.Screen>
+        <Tabs.Screen
+          screenKey="publish"
+          title="Publish"
+          activityState={0}
+          ios={iosTab(publishIcon)}
+          android={androidTab(publishIcon)}
+        >
+          <SafeAreaView edges={edges}>
             <PublishScreen url={url} setUrl={setUrl} />
-          )}
-        </View>
-        <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.tabBar}>
-          <TabButton
-            label="Subscribe"
-            active={tab === 'subscribe'}
-            onPress={() => setTab('subscribe')}
-          />
-          <TabButton
-            label="Publish"
-            active={tab === 'publish'}
-            onPress={() => setTab('publish')}
-          />
-        </SafeAreaView>
-      </SafeAreaView>
+          </SafeAreaView>
+        </Tabs.Screen>
+      </Tabs.Host>
     </SafeAreaProvider>
   );
 }
-
-function TabButton({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.tabButton} onPress={onPress}>
-      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  content: { flex: 1 },
-  tabBar: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#d1d5db',
-    backgroundColor: '#fff',
-  },
-  tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center' },
-  tabLabel: { fontSize: 14, color: '#9ca3af', fontWeight: '500' },
-  tabLabelActive: { color: '#2563eb', fontWeight: '700' },
-});
