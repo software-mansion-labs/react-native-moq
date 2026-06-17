@@ -78,6 +78,12 @@ import MoQKit
           let mic = try await MicrophoneImpl.shared.waitForMicrophone()
           publishedTracks.append(
             pub.addAudioTrack(name: name, source: mic, config: config))
+        case .data(let name, let id):
+          guard let emitter = DataTrackImpl.shared.emitter(forId: id) else {
+            throw MoQCaptureError.notStarted("data track '\(id)' not created")
+          }
+          publishedTracks.append(
+            pub.addDataTrack(name: name, source: emitter))
         }
       }
 
@@ -180,6 +186,7 @@ import MoQKit
   private enum TrackDescriptor {
     case camera(name: String, source: String, config: VideoEncoderConfig)
     case microphone(name: String, config: AudioEncoderConfig)
+    case data(name: String, id: String)
   }
 
   private static func parseTracks(_ json: String) -> [TrackDescriptor] {
@@ -192,9 +199,10 @@ import MoQKit
     for entry in arr {
       guard
         let type = entry["type"] as? String,
-        let name = entry["name"] as? String,
-        let enc = entry["encoder"] as? [String: Any]
+        let name = entry["name"] as? String
       else { continue }
+      // Data tracks carry no encoder; media tracks require one.
+      let enc = (entry["encoder"] as? [String: Any]) ?? [:]
       switch type {
       case "camera":
         let codec = (enc["codec"] as? String).flatMap(VideoCodec.init(rawValue:)) ?? .h264
@@ -214,6 +222,9 @@ import MoQKit
         out.append(.microphone(
           name: name,
           config: AudioEncoderConfig(codec: codec, sampleRate: sampleRate)))
+      case "data":
+        let id = (entry["id"] as? String) ?? ""
+        out.append(.data(name: name, id: id))
       default: continue
       }
     }

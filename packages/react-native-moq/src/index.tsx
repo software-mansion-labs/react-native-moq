@@ -11,6 +11,8 @@ export type {
   PublishTrack,
   PublishedTrackState,
 } from './hooks/usePublisher';
+export { useDataTrack } from './hooks/useDataTrack';
+export type { DataTrack, DataTrackOptions } from './hooks/useDataTrack';
 export { useScreenBroadcast } from './hooks/useScreenBroadcast';
 export type {
   ScreenBroadcast,

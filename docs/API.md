@@ -21,6 +21,7 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
   - [`usePublisher(session)`](#usepublishersession)
   - [`<PublisherView />`](#publisherview-)
   - [`getSupportedVideoCodecs()` / `getSupportedAudioCodecs()`](#getsupportedvideocodecs--getsupportedaudiocodecs)
+  - [`useDataTrack(options?)`](#usedatatrackoptions)
   - [Screen broadcasting](#screen-broadcasting)
   - [Publisher events](#publisher-events)
   - [Types](#types-1)
@@ -420,6 +421,8 @@ Sources live in their own hooks — `useCamera` and `useMicrophone` each own the
 
 Screen sharing is a different beast — it runs out-of-process and opens its own MoQ connection — so it has its own hook, [`useScreenBroadcast`](#screen-broadcasting), independent of `usePublisher`.
 
+To publish arbitrary data alongside (or instead of) camera/microphone media — controller input, chat, telemetry — add a [`useDataTrack`](#usedatatrackoptions) source to `publish()`. A single broadcast can mix video, audio, and data tracks, just like MoQKit's `Publisher`.
+
 ```tsx
 import { useEffect } from 'react';
 import { Button, PermissionsAndroid, Platform } from 'react-native';
@@ -571,7 +574,7 @@ Returns a `MicrophoneTrack`:
 
 Attaches a publisher to a `Session` returned by [`useSession`](#usesessionurl-setup). Mounting the hook does not start anything — calling `publish()` creates a native `Publisher` on top of the existing session, adds the tracks you pass, and starts it; calling `stop()` tears the publisher down (the session stays open). Re-renders are driven by native state events (`publisherStateChanged`, `publisherTrackStateChanged`).
 
-The session must be `connected` when `publish()` is called — otherwise the publisher transitions to `error:session is not connected` immediately. Wait for `session.state === 'connected'` (or gate the UI on it) before publishing. Each `PublishTrack` in `tracks` must come from a currently-mounted source hook (`useCamera` / `useMicrophone`); if the underlying capture is still starting, `publish()` awaits it.
+The session must be `connected` when `publish()` is called — otherwise the publisher transitions to `error:session is not connected` immediately. Wait for `session.state === 'connected'` (or gate the UI on it) before publishing. Each `PublishTrack` in `tracks` must come from a currently-mounted source hook (`useCamera` / `useMicrophone` / `useDataTrack`); if a media capture is still starting, `publish()` awaits it.
 
 ```tsx
 const session = useSession('http://relay.example.com:4443');
@@ -641,6 +644,56 @@ const initialVideoCodec = VIDEO.includes('h265') ? 'h265' : 'h264';
 ```
 
 Both depend only on hardware/OS capabilities and won't change at runtime, so it's safe to call once at module load and cache the result.
+
+---
+
+### `useDataTrack(options?)`
+
+A publishable **data track** — the data counterpart of [`useCamera`](#usecameraoptions) / [`useMicrophone`](#usemicrophoneoptions). Instead of media, it carries app-defined string payloads (controller input, chat, telemetry). Like the media source hooks, it owns its native resource for the hook's lifetime (here a MoQKit `DataTrackEmitter`, created on mount, destroyed on unmount) and is consumed by [`usePublisher`](#usepublishersession): pass it in `tracks` and it becomes a data track in the broadcast, alongside any camera/microphone tracks.
+
+This mirrors MoQKit directly — a standalone emitter handed to `Publisher.addDataTrack` — so a single broadcast can mix video, audio, and data tracks under one path.
+
+```tsx
+import { useDataTrack } from 'react-native-moq';
+
+const command = useDataTrack({ name: 'command' }); // track name subscribers read
+```
+
+Returns a `DataTrack`:
+
+| Property / Method | Type | Description |
+|---|---|---|
+| `__type` | `'data'` | Discriminator used by `usePublisher` to route to a data track |
+| `__name` | `string` | Track name in the broadcast catalog (the `name` option) |
+| `send(payload)` | `(payload: string) => void` | Send one UTF-8 string payload (e.g. JSON). No-op until the owning publisher has published and started; payloads are delivered in call order |
+
+Include it in a publish to start sending. The track sends nothing until the publisher reaches `publishing`; `send()` before then is a no-op:
+
+```tsx
+const session = useSession('http://relay.example.com:4443', (s) => s.connect());
+const camera = useCamera();
+const command = useDataTrack({ name: 'command' });
+const publisher = usePublisher(session);
+
+// One broadcast carrying both video and a data track.
+publisher.publish({ path: 'live/game-1', tracks: [camera, command] });
+
+// Push payloads once publisher.state === 'publishing'.
+command.send(JSON.stringify({ type: 'buttons', buttons: ['a', 'up'] }));
+command.send(JSON.stringify({ type: 'reset' }));
+```
+
+Subscribers read these objects from a track of the same `name` on the broadcast. For a data-only broadcast (e.g. a controller publishing to its own path), just pass a single data track: `publisher.publish({ path, tracks: [command] })`. Pair it with [`useBroadcasts(session, prefix)`](#usebroadcastssession-prefix) to discover peers and exchange data over one connection — the pattern behind chat- and cloud-gaming-style demos.
+
+**`DataTrackOptions`**
+
+```ts
+interface DataTrackOptions {
+  name?: string; // Track name subscribers read from. Default: 'data'
+}
+```
+
+> Payloads are UTF-8 strings; for binary data, encode it (e.g. base64) before `send()`.
 
 ---
 
@@ -738,10 +791,10 @@ Subscribe via `useEventListener`, `useEvent`, or `publisher.addListener` — sam
 ```ts
 interface PublishOptions {
   path: string;           // Broadcast path published to the relay
-  tracks: PublishTrack[]; // Sources from useCamera / useMicrophone
+  tracks: PublishTrack[]; // Sources from useCamera / useMicrophone / useDataTrack
 }
 
-type PublishTrack = CameraTrack | MicrophoneTrack;
+type PublishTrack = CameraTrack | MicrophoneTrack | DataTrack;
 ```
 
 #### `CameraOptions` / `MicrophoneOptions`

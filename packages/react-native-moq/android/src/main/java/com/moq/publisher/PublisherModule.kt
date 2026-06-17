@@ -8,6 +8,7 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.moq.MoQModule
 import com.moq.camera.CameraModule
 import com.moq.camera.MultiCameraModule
+import com.moq.datatrack.DataTrackModule
 import com.moq.microphone.MicrophoneModule
 import com.swmansion.moqkit.publish.PublishedTrack
 import com.swmansion.moqkit.publish.PublishedTrackState
@@ -94,6 +95,13 @@ class PublisherModule(reactContext: ReactApplicationContext) :
                 ?: error("microphone module is not available")
               publishedTracks += pub.addAudioTrack(
                 name = descriptor.name, source = mic, config = descriptor.config
+              )
+            }
+            is TrackDescriptor.Data -> {
+              val emitter = DataTrackModule.instance?.emitter(descriptor.id)
+                ?: error("data track '${descriptor.id}' not created")
+              publishedTracks += pub.addDataTrack(
+                name = descriptor.name, emitter = emitter
               )
             }
           }
@@ -225,6 +233,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
       val config: VideoEncoderConfig,
     ) : TrackDescriptor
     data class Microphone(override val name: String, val config: AudioEncoderConfig) : TrackDescriptor
+    data class Data(override val name: String, val id: String) : TrackDescriptor
   }
 
   private fun parseTracks(json: String): List<TrackDescriptor> {
@@ -264,6 +273,9 @@ class PublisherModule(reactContext: ReactApplicationContext) :
               sampleRate = enc.optInt("sampleRate", 48_000),
             )
           )
+        }
+        "data" -> {
+          out += TrackDescriptor.Data(name = name, id = entry.optString("id"))
         }
       }
     }

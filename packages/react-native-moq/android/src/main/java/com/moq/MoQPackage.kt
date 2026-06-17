@@ -10,6 +10,7 @@ import com.moq.camera.CameraModule
 import com.moq.camera.CameraPreviewViewManager
 import com.moq.camera.MultiCameraModule
 import com.moq.camera.MultiCameraPreviewViewManager
+import com.moq.datatrack.DataTrackModule
 import com.moq.microphone.MicrophoneModule
 import com.moq.player.VideoViewManager
 import com.moq.publisher.PublisherModule
@@ -20,6 +21,7 @@ class MoQPackage : BaseReactPackage() {
     return when (name) {
       MoQModule.NAME -> MoQModule(reactContext)
       PublisherModule.NAME -> PublisherModule(reactContext)
+      DataTrackModule.NAME -> DataTrackModule(reactContext)
       CameraModule.NAME -> CameraModule(reactContext)
       MultiCameraModule.NAME -> MultiCameraModule(reactContext)
       MicrophoneModule.NAME -> MicrophoneModule(reactContext)
@@ -41,6 +43,14 @@ class MoQPackage : BaseReactPackage() {
       PublisherModule.NAME to ReactModuleInfo(
         name = PublisherModule.NAME,
         className = PublisherModule.NAME,
+        canOverrideExistingModule = false,
+        needsEagerInit = false,
+        isCxxModule = false,
+        isTurboModule = true,
+      ),
+      DataTrackModule.NAME to ReactModuleInfo(
+        name = DataTrackModule.NAME,
+        className = DataTrackModule.NAME,
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,
