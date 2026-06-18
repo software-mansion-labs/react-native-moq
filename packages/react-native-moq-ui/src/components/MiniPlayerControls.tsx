@@ -197,11 +197,11 @@ function AndroidChrome({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  fill: { ...StyleSheet.absoluteFillObject },
+  fill: { ...StyleSheet.absoluteFill },
   pressed: { opacity: 0.7 },
 
   center: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
