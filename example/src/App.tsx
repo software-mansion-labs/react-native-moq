@@ -75,7 +75,9 @@ export default function App() {
           ios={iosTab(boyIcon)}
           android={androidTab(boyIcon)}
         >
-          <SafeAreaView edges={edges}>
+          <SafeAreaView
+            edges={{ top: true, bottom: true, left: true, right: true }}
+          >
             <MoQBoyScreen />
           </SafeAreaView>
         </Tabs.Screen>

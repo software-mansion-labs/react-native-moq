@@ -63,6 +63,7 @@ export function BoyScreenPanel({
 
 const styles = StyleSheet.create({
   bezel: {
+    flex: 1,
     backgroundColor: boyColors.screenBezel,
     borderRadius: 22,
     padding: 16,
@@ -79,7 +80,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
   },
   screen: {
-    aspectRatio: 1,
+    flex: 1,
+    minHeight: 150,
     borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: '#555',

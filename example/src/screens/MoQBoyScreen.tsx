@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import {
   useBroadcasts,
   useDataTrack,
@@ -10,9 +10,15 @@ import {
   type Session,
 } from 'react-native-moq';
 import { BoyConsole, type BoyConsoleProps } from '../boy/BoyConsole';
-import { CartridgeTray } from '../boy/CartridgeTray';
 import { useBoyCommands } from '../boy/useBoyCommands';
 import type { BoyGame } from '../boy/types';
+
+// Props shared by both the idle console and the live game session — everything
+// except the player/controller wiring that only exists while a game is running.
+type SharedConsoleProps = Omit<
+  BoyConsoleProps,
+  'player' | 'controlsEnabled' | 'onButton' | 'lastError'
+>;
 
 // MoQBoy — a cloud-gaming client ported from moq-kit's iOS demo
 // (MoQDemo/Features/Boy). Discovers game broadcasts under the `boy` prefix,
@@ -49,17 +55,43 @@ export function MoQBoyScreen() {
     [broadcasts]
   );
 
+  // `selectedGamePath` tracks the user's choice (drives the flip + cartridge
+  // highlight immediately); `activeGamePath` is the game actually mounted and
+  // playing — it only updates once the console settles facing front, so a
+  // VideoView never initializes behind a hidden / 3D-rotated face (the
+  // AVSampleBufferDisplayLayer freezes on a stale frame if it does).
   const [selectedGamePath, setSelectedGamePath] = useState<string | null>(null);
+  const [activeGamePath, setActiveGamePath] = useState<string | null>(null);
   const [latency, setLatency] = useState(200);
+  const [showsBack, setShowsBack] = useState(false);
+  const toggleFlip = useCallback(() => setShowsBack((b) => !b), []);
+
+  // Insert: flip to the front; the game mounts when the flip lands (below).
+  // Eject (null): drop the game immediately and stay on the back to pick again.
+  const onSelectGame = useCallback((path: string | null) => {
+    setSelectedGamePath(path);
+    if (path === null) setActiveGamePath(null);
+    else setShowsBack(false);
+  }, []);
+
+  // Flip finished facing front — now it's safe to mount the chosen game.
+  const onFlipSettled = useCallback(() => {
+    setActiveGamePath(selectedGamePath);
+  }, [selectedGamePath]);
 
   // Clear the inserted cartridge whenever the console powers down.
   useEffect(() => {
-    if (!canStop) setSelectedGamePath(null);
+    if (!canStop) {
+      setSelectedGamePath(null);
+      setActiveGamePath(null);
+      setShowsBack(false);
+    }
   }, [canStop]);
 
   const onPower = () => {
     if (canStop) {
       setSelectedGamePath(null);
+      setActiveGamePath(null);
       session.disconnect();
     } else {
       session.connect(latency);
@@ -67,8 +99,8 @@ export function MoQBoyScreen() {
   };
 
   const activeBroadcast =
-    isConnected && selectedGamePath
-      ? broadcasts.find((b) => b.path === selectedGamePath)
+    isConnected && activeGamePath
+      ? broadcasts.find((b) => b.path === activeGamePath)
       : undefined;
 
   const selectedGameName = selectedGamePath
@@ -102,20 +134,25 @@ export function MoQBoyScreen() {
     };
   }, [isConnected, isConnecting, selectedGameName]);
 
-  const common: Omit<
-    BoyConsoleProps,
-    'player' | 'controlsEnabled' | 'onButton' | 'lastError'
-  > = {
+  const common: SharedConsoleProps = {
     isConnected,
     isConnecting,
     canStop,
     onPower,
     selectedGameName,
     placeholder,
+    games,
+    selectedGamePath,
+    onSelectGame,
+    latency,
+    onLatencyChange: setLatency,
+    showsBack,
+    onToggleFlip: toggleFlip,
+    onFlipSettled,
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.container}>
       {activeBroadcast ? (
         <BoyGameSession
           key={activeBroadcast.path}
@@ -133,18 +170,7 @@ export function MoQBoyScreen() {
           lastError={null}
         />
       )}
-
-      <CartridgeTray
-        games={games}
-        selectedGamePath={selectedGamePath}
-        isConnected={isConnected}
-        onSelectGame={setSelectedGamePath}
-        latency={latency}
-        onLatencyChange={setLatency}
-      />
-
-      <View style={styles.bottomSpacer} />
-    </ScrollView>
+    </View>
   );
 }
 
@@ -160,20 +186,35 @@ function BoyGameSession({
   broadcast: BroadcastInfo;
   session: Session;
   latency: number;
-  common: Omit<
-    BoyConsoleProps,
-    'player' | 'controlsEnabled' | 'onButton' | 'lastError'
-  >;
+  common: SharedConsoleProps;
 }) {
-  const player = useVideoPlayer(broadcast, (p) => {
-    p.play();
-    // Prefer the highest-resolution rendition, like moq-kit's preferredTracks.
-    const best = [...broadcast.videoTracks].sort(
-      (a, b) =>
-        (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0)
-    )[0];
-    if (best) p.switchVideoTrack(best.name);
-  });
+  const player = useVideoPlayer(broadcast, (p) => p.play());
+
+  // Prefer the highest-resolution rendition (moq-kit's preferredTracks), but
+  // only once playback has actually started — switching synchronously with
+  // play() races the initial subscription and can freeze the stream.
+  const { addListener, switchVideoTrack } = player;
+  useEffect(() => {
+    let switched = false;
+    const sub = addListener('playingChange', ({ isPlaying }) => {
+      if (!isPlaying || switched) return;
+      switched = true;
+      const best = [...broadcast.videoTracks].sort(
+        (a, b) =>
+          (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0)
+      )[0];
+      // Skip if the relay already started us on the best rendition.
+      if (best && best.name !== broadcast.player.initialVideoTrackName) {
+        switchVideoTrack(best.name);
+      }
+    });
+    return () => sub.remove();
+  }, [
+    addListener,
+    switchVideoTrack,
+    broadcast.videoTracks,
+    broadcast.player.initialVideoTrackName,
+  ]);
 
   const publisher = usePublisher(session);
   const dataTrack = useDataTrack({ name: 'command' });
@@ -212,6 +253,5 @@ function BoyGameSession({
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 16, gap: 16 },
-  bottomSpacer: { height: 24 },
+  container: { flex: 1, padding: 16 },
 });

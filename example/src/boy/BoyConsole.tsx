@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Player } from 'react-native-moq';
 import {
   BoyActionCluster,
@@ -6,8 +7,9 @@ import {
   BoyStartSelectCluster,
 } from './ControlPad';
 import { BoyScreenPanel } from './BoyScreenPanel';
+import { BoyBackFace } from './BoyBackFace';
 import { boyColors } from './theme';
-import type { BoyControl } from './types';
+import type { BoyControl, BoyGame } from './types';
 
 export interface BoyConsoleProps {
   isConnected: boolean;
@@ -20,11 +22,23 @@ export interface BoyConsoleProps {
   selectedGameName: string | null;
   placeholder: { title: string; subtitle: string };
   lastError?: string | null;
+  // Cartridge bay (rendered on the flipped-over back face).
+  games: BoyGame[];
+  selectedGamePath: string | null;
+  onSelectGame: (path: string | null) => void;
+  latency: number;
+  onLatencyChange: (ms: number) => void;
+  // Flip state, lifted so it survives the front/back remount on game change.
+  showsBack: boolean;
+  onToggleFlip: () => void;
+  // Fired when the flip animation settles facing front — the cue to mount the
+  // selected game so its VideoView never initializes behind a rotated face.
+  onFlipSettled?: () => void;
 }
 
-// The plastic shell — power switch, dot-matrix screen, control deck, brand and
-// speaker grille. Pure presentation; all state arrives via props. Ported from
-// BoyConsoleView.frontFace in moq-kit's iOS demo.
+// The plastic shell. The console flips on its Y axis between a playable front
+// face (screen + control deck) and a cartridge-bay back face, exactly like
+// BoyConsoleView in moq-kit's iOS demo. Pure presentation; all state via props.
 export function BoyConsole({
   isConnected,
   isConnecting,
@@ -36,50 +50,140 @@ export function BoyConsole({
   selectedGameName,
   placeholder,
   lastError,
+  games,
+  selectedGamePath,
+  onSelectGame,
+  latency,
+  onLatencyChange,
+  showsBack,
+  onToggleFlip,
+  onFlipSettled,
 }: BoyConsoleProps) {
+  // A 0→1 driver: 0 shows the front face, 1 the back. Initialized to the
+  // current side so a remount (front↔game) lands without a spurious spin.
+  const flip = useRef(new Animated.Value(showsBack ? 1 : 0)).current;
+
+  // Keep the latest callback without re-running the animation effect.
+  const onFlipSettledRef = useRef(onFlipSettled);
+  onFlipSettledRef.current = onFlipSettled;
+
+  useEffect(() => {
+    Animated.spring(flip, {
+      toValue: showsBack ? 1 : 0,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 12,
+    }).start(({ finished }) => {
+      // Only when the flip actually completed facing front (not interrupted
+      // by another toggle) is it safe to mount the game's video.
+      if (finished && !showsBack) onFlipSettledRef.current?.();
+    });
+  }, [showsBack, flip]);
+
+  const frontRotate = flip.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+  const backRotate = flip.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['180deg', '360deg'],
+  });
+  // Hard cut each face at the halfway point so the away-facing side never shows
+  // through (the back face is absolute and sits on top in z-order). Belt and
+  // braces with backfaceVisibility, which is unreliable on Android.
+  const frontOpacity = flip.interpolate({
+    inputRange: [0, 0.5, 0.5, 1],
+    outputRange: [1, 1, 0, 0],
+  });
+  const backOpacity = flip.interpolate({
+    inputRange: [0, 0.5, 0.5, 1],
+    outputRange: [0, 0, 1, 1],
+  });
+
   return (
     <View style={styles.outer}>
       <View style={styles.topBar}>
         <PowerSwitch isOn={canStop} isBusy={isConnecting} onPress={onPower} />
+        <Pressable style={styles.flipButton} onPress={onToggleFlip}>
+          <Text style={styles.flipIcon}>⟲</Text>
+          <Text style={styles.flipLabel}>{showsBack ? 'FRONT' : 'BACK'}</Text>
+        </Pressable>
       </View>
 
-      <View style={styles.shell}>
-        <BoyScreenPanel
-          player={player}
-          isConnected={isConnected}
-          isConnecting={isConnecting}
-          selectedGameName={selectedGameName}
-          placeholder={placeholder}
-          lastError={lastError}
-        />
+      <View style={styles.flipArea}>
+        <Animated.View
+          style={[
+            styles.face,
+            {
+              opacity: frontOpacity,
+              transform: [{ perspective: 1200 }, { rotateY: frontRotate }],
+            },
+          ]}
+          pointerEvents={showsBack ? 'none' : 'auto'}
+        >
+          <View style={styles.shell}>
+            <BoyScreenPanel
+              player={player}
+              isConnected={isConnected}
+              isConnecting={isConnecting}
+              selectedGameName={selectedGameName}
+              placeholder={placeholder}
+              lastError={lastError}
+            />
 
-        <View style={styles.deck}>
-          <View style={styles.deckRow}>
-            <BoyDirectionPad
-              enabled={controlsEnabled}
-              onPressChange={onButton}
-            />
-            <BoyActionCluster
-              enabled={controlsEnabled}
-              onPressChange={onButton}
-            />
-          </View>
-          <View style={styles.startSelectWrap}>
-            <BoyStartSelectCluster
-              enabled={controlsEnabled}
-              onPressChange={onButton}
-            />
-          </View>
-        </View>
+            <View style={styles.deck}>
+              <View style={styles.deckRow}>
+                <BoyDirectionPad
+                  enabled={controlsEnabled}
+                  onPressChange={onButton}
+                />
+                <BoyActionCluster
+                  enabled={controlsEnabled}
+                  onPressChange={onButton}
+                />
+              </View>
+              <View style={styles.startSelectWrap}>
+                <BoyStartSelectCluster
+                  enabled={controlsEnabled}
+                  onPressChange={onButton}
+                />
+              </View>
+            </View>
 
-        <View style={styles.brandRow}>
-          <Text style={styles.brand}>BOY</Text>
-          <View style={styles.grille}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <View key={i} style={styles.grilleBar} />
-            ))}
+            <View style={styles.brandRow}>
+              <Text style={styles.brand}>BOY</Text>
+              <View style={styles.grille}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <View key={i} style={styles.grilleBar} />
+                ))}
+              </View>
+            </View>
           </View>
-        </View>
+        </Animated.View>
+
+        <Animated.View
+          style={[
+            styles.face,
+            styles.faceAbsolute,
+            {
+              opacity: backOpacity,
+              transform: [{ perspective: 1200 }, { rotateY: backRotate }],
+            },
+          ]}
+          pointerEvents={showsBack ? 'auto' : 'none'}
+        >
+          <View style={styles.shell}>
+            <BoyBackFace
+              games={games}
+              selectedGamePath={selectedGamePath}
+              selectedGameName={selectedGameName}
+              isConnected={isConnected}
+              onSelectGame={onSelectGame}
+              latency={latency}
+              onLatencyChange={onLatencyChange}
+            />
+          </View>
+        </Animated.View>
       </View>
     </View>
   );
@@ -111,8 +215,31 @@ function PowerSwitch({
 }
 
 const styles = StyleSheet.create({
-  outer: { gap: 16 },
-  topBar: { flexDirection: 'row', alignItems: 'center' },
+  outer: { flex: 1, gap: 16 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  flipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: boyColors.flipButton,
+    borderRadius: 999,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  flipIcon: { color: '#fff', fontSize: 22, fontWeight: '900', lineHeight: 24 },
+  flipLabel: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  flipArea: { flex: 1 },
+  face: { flex: 1, backfaceVisibility: 'hidden' },
+  faceAbsolute: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   power: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -143,10 +270,11 @@ const styles = StyleSheet.create({
   powerKnobOn: { alignSelf: 'flex-end', backgroundColor: boyColors.batteryOn },
   powerKnobBusy: { backgroundColor: boyColors.shellEdge },
   shell: {
+    flex: 1,
     backgroundColor: boyColors.shellTop,
     borderRadius: 34,
     padding: 22,
-    gap: 26,
+    gap: 22,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.12)',
   },
