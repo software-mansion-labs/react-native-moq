@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-screens/experimental';
 import MaterialIcons from '@react-native-vector-icons/material-icons';
 import { SubscribeScreen } from './screens/SubscribeScreen';
 import { PublishScreen } from './screens/PublishScreen';
+import { MoQBoyScreen } from './screens/MoQBoyScreen';
 
 const edges =
   Platform.OS === 'android'
@@ -14,6 +15,7 @@ const edges =
 
 const subscribeIcon = MaterialIcons.getImageSourceSync('live-tv', 24);
 const publishIcon = MaterialIcons.getImageSourceSync('videocam', 24);
+const boyIcon = MaterialIcons.getImageSourceSync('videogame-asset', 24);
 
 function iosTab(image: any) {
   return {
@@ -64,6 +66,17 @@ export default function App() {
         >
           <SafeAreaView edges={edges}>
             <PublishScreen url={url} setUrl={setUrl} />
+          </SafeAreaView>
+        </Tabs.Screen>
+        <Tabs.Screen
+          screenKey="boy"
+          title="Boy"
+          activityState={0}
+          ios={iosTab(boyIcon)}
+          android={androidTab(boyIcon)}
+        >
+          <SafeAreaView edges={edges}>
+            <MoQBoyScreen />
           </SafeAreaView>
         </Tabs.Screen>
       </Tabs.Host>

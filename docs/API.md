@@ -683,7 +683,7 @@ command.send(JSON.stringify({ type: 'buttons', buttons: ['a', 'up'] }));
 command.send(JSON.stringify({ type: 'reset' }));
 ```
 
-Subscribers read these objects from a track of the same `name` on the broadcast. For a data-only broadcast (e.g. a controller publishing to its own path), just pass a single data track: `publisher.publish({ path, tracks: [command] })`. Pair it with [`useBroadcasts(session, prefix)`](#usebroadcastssession-prefix) to discover peers and exchange data over one connection — the pattern behind chat- and cloud-gaming-style demos.
+Subscribers read these objects from a track of the same `name` on the broadcast. For a data-only broadcast (e.g. a controller publishing to its own path), just pass a single data track: `publisher.publish({ path, tracks: [command] })`. Pair it with [`useBroadcasts(session, prefix)`](#usebroadcastssession-prefix) to discover peers and exchange data over one connection — the pattern behind chat- and cloud-gaming-style demos. The MoQBoy tab in the example app ([`example/src/screens/MoQBoyScreen.tsx`](../example/src/screens/MoQBoyScreen.tsx)) is a worked cloud-gaming controller built on exactly this hook.
 
 **`DataTrackOptions`**
 

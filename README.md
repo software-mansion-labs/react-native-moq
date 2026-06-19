@@ -149,7 +149,7 @@ The full API reference — every hook, component, type, and the `react-native-mo
 
 ## Example app
 
-The [`example/`](example/) directory contains a full demo app that exercises both playback and publishing. To run it:
+The [`example/`](example/) directory contains a full demo app with three tabs: **Subscribe** (discover and play broadcasts), **Publish** (camera/mic/screen broadcasting), and **MoQBoy** (a cloud-gaming controller built on data tracks). To run it:
 
 ```sh
 yarn
