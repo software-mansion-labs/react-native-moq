@@ -49,6 +49,11 @@ class PublisherModule(reactContext: ReactApplicationContext) :
 
   private val publishers = ConcurrentHashMap<String, PublisherContext>()
 
+  // In-flight stop jobs, keyed by session. A new publish() joins any pending
+  // teardown so publish()/start() never runs concurrently with the previous
+  // publisher's stop()/unpublish() on the same Session (which can drop it).
+  private val teardowns = ConcurrentHashMap<String, Job>()
+
   companion object {
     const val NAME = NativeMoQPublisherSpec.NAME
   }
@@ -59,15 +64,30 @@ class PublisherModule(reactContext: ReactApplicationContext) :
   // MARK: - Publish
 
   override fun publish(sessionId: String, path: String, tracksJson: String) {
-    if (publishers.containsKey(sessionId)) return
-    val s = MoQModule.connectedSession(sessionId) ?: run {
-      emitState(sessionId, "error:session is not connected")
-      return
-    }
-
     val tracks = parseTracks(tracksJson)
 
     moduleScope.launch {
+      // Replacing a publisher on this session (e.g. switching games): tear the
+      // old one down and WAIT before starting the new one, so publish()/start()
+      // never runs concurrently with the previous publisher's stop()/unpublish()
+      // on the same Session — that race could drop the whole session, which is
+      // what made cartridge swaps sometimes kill the console.
+      publishers.remove(sessionId)?.let { existing ->
+        existing.jobs.forEach { it.cancel() }
+        existing.jobs.clear()
+        val session = MoQModule.connectedSession(sessionId)
+        try {
+          if (session != null) session.unpublish(existing.path)
+          else existing.publisher.stop()
+        } catch (_: Exception) {}
+      }
+      teardowns.remove(sessionId)?.join()
+
+      val s = MoQModule.connectedSession(sessionId) ?: run {
+        emitState(sessionId, "error:session is not connected")
+        return@launch
+      }
+
       try {
         val pub = Publisher()
         val ctx = PublisherContext(sessionId, path, pub)
@@ -120,7 +140,9 @@ class PublisherModule(reactContext: ReactApplicationContext) :
   }
 
   override fun stop(sessionId: String) {
-    moduleScope.launch { stopInternal(sessionId) }
+    // Remember the teardown so a follow-up publish() on this session can join it
+    // instead of racing it.
+    teardowns[sessionId] = moduleScope.launch { stopInternal(sessionId) }
   }
 
   private suspend fun stopInternal(sessionId: String) {

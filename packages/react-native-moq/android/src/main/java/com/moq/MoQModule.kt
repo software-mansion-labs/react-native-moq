@@ -125,7 +125,17 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun connect(sessionId: String, url: String, targetLatencyMs: Double) {
     val latencyMs = targetLatencyMs.toInt()
-    if (contexts.containsKey(sessionId)) return
+    contexts[sessionId]?.let { existing ->
+      when (existing.state) {
+        // The session terminated on its own (network drop, relay reset, a
+        // publish that errored the connection). Its context lingers dead, so
+        // without this a second connect() would no-op and the user could never
+        // power the session back on. Tear it down and reconnect fresh.
+        Session.State.Closed, is Session.State.Error -> disconnect(sessionId)
+        // idle / connecting / connected — already live, leave it.
+        else -> return
+      }
+    }
     moduleScope.launch {
       val s = Session(url = url, parentScope = moduleScope)
       val ctx = SessionContext(id = sessionId, session = s)

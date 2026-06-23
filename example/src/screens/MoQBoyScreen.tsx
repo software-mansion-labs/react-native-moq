@@ -26,6 +26,9 @@ type SharedConsoleProps = Omit<
 // `command` data track to `viewer/boy/<game>/<viewerId>` carrying button input.
 const SUBSCRIBE_PREFIX = 'boy';
 const VIEWER_PREFIX = 'viewer/boy';
+// Delay before publishing the controller after a game mounts, so the publish
+// doesn't burst on the connection alongside the new subscription (see below).
+const PUBLISH_DELAY_MS = 500;
 // Dedicated Boy relay, hardcoded like MoQDemo's MoQDemoRelayURLs.boyDemoURL.
 const BOY_RELAY_URL = 'https://cdn.moq.dev/demo';
 
@@ -219,14 +222,33 @@ function BoyGameSession({
   const publisher = usePublisher(session);
   const dataTrack = useDataTrack({ name: 'command' });
 
-  // Publish the controller as a single-data-track broadcast to a per-viewer
-  // path. Stops when the cartridge is ejected or the console powers off.
+  // Publish the controller (single data track) to a per-viewer path, a short
+  // beat after the player starts subscribing — NOT in the same instant. Bursting
+  // subscribe + publish + the previous game's teardown on one connection is what
+  // made the relay close the whole transport (session "powers off"). We delay
+  // rather than gate on `player.isPlaying` because these game streams have large
+  // timestamp discontinuities and frames flagged `playable=false`, so the player
+  // may never report a stable playing state — gating on it left the controller
+  // unpublished and the buttons permanently disabled. The timer is cancelled on
+  // unmount, so rapidly tabbing through cartridges publishes only the one you
+  // settle on.
+  //
+  // Depend on the stable publish/stop callbacks, NOT the `publisher` object:
+  // usePublisher returns a fresh memoized object on every state change, so
+  // keying the teardown on `publisher` would re-run its cleanup — calling
+  // stop() — each time the state changed, killing the publish right after it
+  // started (controls flickering off).
+  const { publish: publishController, stop: stopController } = publisher;
   useEffect(() => {
     const viewerPath = `${VIEWER_PREFIX}/${lastComponent(broadcast.path)}/${makeViewerId()}`;
-    publisher.publish({ path: viewerPath, tracks: [dataTrack] });
-    return () => publisher.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [broadcast.path]);
+    const timer = setTimeout(() => {
+      publishController({ path: viewerPath, tracks: [dataTrack] });
+    }, PUBLISH_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      stopController();
+    };
+  }, [broadcast.path, publishController, stopController, dataTrack]);
 
   // Apply the screen's latency control to the live player.
   const { updateTargetLatency, stop: stopPlayer } = player;
@@ -238,7 +260,13 @@ function BoyGameSession({
   // native subscription (mirrors moq-kit's BroadcastEntry.stop()).
   useEffect(() => stopPlayer, [stopPlayer]);
 
-  const controlsEnabled = publisher.state === 'publishing';
+  // Controls stay live the whole time a cartridge is inserted, rather than
+  // gating on the publisher reaching 'publishing'. These game streams never
+  // report a stable playing state, and the controller publishes on a short
+  // delay anyway (above) — but dataTrack.send() is a safe no-op until it's live,
+  // so at worst a press in the first ~0.5s is dropped. Simpler than tracking
+  // publisher state, with no user-visible "buttons disabled" flicker.
+  const controlsEnabled = true;
   const { setButton } = useBoyCommands(dataTrack, controlsEnabled);
 
   return (

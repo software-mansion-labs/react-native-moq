@@ -181,7 +181,25 @@ private let audioKeySuffix = "_audio"
 
   @MainActor
   private func _connect(sessionId: String, url: String, targetLatencyMs: UInt64) {
-    guard contexts[sessionId] == nil else { return }
+    if let existing = contexts[sessionId] {
+      switch existing.state {
+      case .error, .closed:
+        // The relay/session terminated on its own (network drop, relay reset,
+        // a publish that errored the connection). The context lingers in a dead
+        // state, so without this a second connect() would no-op and the user
+        // could never power the session back on. Drop it and fall through to a
+        // fresh connect. A user-initiated disconnect removes the context
+        // itself, so we only reach here for self-terminated sessions.
+        existing.stateTask?.cancel()
+        for sub in existing.subscriptions.values { _ = sub.cancel() }
+        let dead = existing.session
+        contexts.removeValue(forKey: sessionId)
+        Task.detached { await dead.close() }
+      default:
+        // idle (a disconnect tearing down) / connecting / connected — leave it.
+        return
+      }
+    }
 
     let s = Session(url: url)
     let ctx = SessionContext(id: sessionId, session: s)
@@ -192,6 +210,7 @@ private let audioKeySuffix = "_audio"
       for await state in s.state {
         guard let ctx = self.contexts[sessionId] else { break }
         ctx.state = state
+        NSLog("[MoQBoy-debug] session %@ state -> %@", sessionId, state.stringValue)
         self.onEvent?(
           "sessionStateChanged",
           ["sessionId": sessionId, "state": state.stringValue])

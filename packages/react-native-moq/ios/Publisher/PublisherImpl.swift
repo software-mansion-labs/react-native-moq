@@ -15,18 +15,26 @@ import MoQKit
   // references them and lets the underlying impls handle refcounting.
   private final class PublisherContext {
     let sessionId: String
+    let path: String
     let publisher: MoQKit.Publisher
     var stateTask: Task<Void, Never>?
     var eventsTask: Task<Void, Never>?
     var trackStateTasks: [Task<Void, Never>] = []
 
-    init(sessionId: String, publisher: MoQKit.Publisher) {
+    init(sessionId: String, path: String, publisher: MoQKit.Publisher) {
       self.sessionId = sessionId
+      self.path = path
       self.publisher = publisher
     }
   }
 
   private var publishers: [String: PublisherContext] = [:]
+
+  // In-flight publisher.stop() tasks, keyed by session. A new _publish() awaits
+  // any pending teardown so Session.publish()/start() never runs concurrently
+  // with the previous publisher's stop() on the same Session (which can corrupt
+  // and drop the whole session).
+  private var teardowns: [String: Task<Void, Never>] = [:]
 
   // MARK: - Objc bridge
 
@@ -47,7 +55,22 @@ import MoQKit
 
   @MainActor
   private func _publish(sessionId: String, path: String, tracks: [TrackDescriptor]) async {
-    guard publishers[sessionId] == nil else { return }
+    // Replacing a publisher on this session (e.g. switching games): tear the
+    // old one down and WAIT for it before starting the new one. Starting a
+    // fresh publish concurrently with the previous publisher's stop() on the
+    // same Session can corrupt the connection and drop the whole session —
+    // which is what made cartridge swaps sometimes kill the console.
+    if let existing = publishers.removeValue(forKey: sessionId) {
+      existing.stateTask?.cancel()
+      existing.eventsTask?.cancel()
+      existing.trackStateTasks.forEach { $0.cancel() }
+      await teardownPublisher(existing)
+    }
+    // Also wait out a stop() already in flight from a prior _stop() call.
+    await teardowns.removeValue(forKey: sessionId)?.value
+
+    NSLog("[MoQBoy-debug] publisher publish begin session=%@ path=%@", sessionId, path)
+
     guard let s = MoQImpl.shared.currentSession(forSessionId: sessionId) else {
       emitPublisherState(sessionId: sessionId, state: "error:session is not connected")
       return
@@ -55,7 +78,7 @@ import MoQKit
 
     do {
       let pub = try MoQKit.Publisher()
-      let ctx = PublisherContext(sessionId: sessionId, publisher: pub)
+      let ctx = PublisherContext(sessionId: sessionId, path: path, publisher: pub)
       publishers[sessionId] = ctx
 
       var publishedTracks: [PublishedTrack] = []
@@ -90,11 +113,18 @@ import MoQKit
       try await s.publish(path: path, publisher: pub)
       try await pub.start()
 
+      NSLog("[MoQBoy-debug] publisher publish ok session=%@ path=%@", sessionId, path)
       observePublisher(ctx, tracks: publishedTracks)
     } catch {
+      NSLog(
+        "[MoQBoy-debug] publisher publish ERROR session=%@ path=%@ error=%@",
+        sessionId, path, String(describing: error))
       publishers.removeValue(forKey: sessionId)
       emitPublisherState(sessionId: sessionId, state: "error:\(error.localizedDescription)")
-      await _stop(sessionId: sessionId)
+      // Clean up any partial registration on the session (publish() may have
+      // registered the path before start() threw). No-op if it never got that
+      // far; also stops the publisher.
+      await s.unpublish(path: path)
     }
   }
 
@@ -155,14 +185,30 @@ import MoQKit
 
     emitPublisherState(sessionId: sessionId, state: "idle")
 
-    // Tear down the publisher off the main thread — pub.stop() may block on
-    // encoder flush. The Session is owned by MoQImpl and stays alive across
-    // publish cycles, so we don't close it here. The camera/mic captures are
-    // owned by their respective impls and stay alive as long as a hook is
-    // mounted, so we don't stop them either.
-    let pub = ctx.publisher
-    Task.detached {
-      pub.stop()
+    // Remember the teardown so a follow-up _publish() on this session waits for
+    // it instead of racing it.
+    teardowns[sessionId] = Task { @MainActor in await self.teardownPublisher(ctx) }
+  }
+
+  // Tear a publisher down by unpublishing through the Session (not just
+  // pub.stop()). The Session keeps a registration per published path; stopping
+  // the publisher alone leaves that registration behind, and stale viewer-path
+  // registrations pile up across cartridge changes until the relay drops the
+  // whole session (which powered the console off). unpublish() also stops the
+  // publisher internally. Mirrors MoQKit's demo + the Android module. The
+  // Session itself is owned by MoQImpl and stays alive across publish cycles.
+  @MainActor
+  private func teardownPublisher(_ ctx: PublisherContext) async {
+    if let s = MoQImpl.shared.currentSession(forSessionId: ctx.sessionId) {
+      NSLog("[MoQBoy-debug] publisher unpublish session=%@ path=%@", ctx.sessionId, ctx.path)
+      // unpublish(path:) removes the path from the session's activePublishers
+      // registry and stops the publisher. Session is an actor, so the call hops
+      // off the main actor (hence await); it's non-throwing. Calling pub.stop()
+      // alone (the old behavior) left the registration behind.
+      await s.unpublish(path: ctx.path)
+    } else {
+      NSLog("[MoQBoy-debug] publisher stop (no session) session=%@ path=%@", ctx.sessionId, ctx.path)
+      ctx.publisher.stop()
     }
   }
 
