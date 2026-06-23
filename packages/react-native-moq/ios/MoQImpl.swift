@@ -54,6 +54,11 @@ private let audioKeySuffix = "_audio"
     var prefixForPath: [String: String] = [:]
     var playerRefs: [String: PlayerRef] = [:]
     var catalogs: [String: Catalog] = [:]
+    // Live broadcasts kept per path so raw-track subscriptions (audio chunks,
+    // data tracks) can call `subscribeTrack` after a broadcast appears.
+    var broadcasts: [String: Broadcast] = [:]
+    // Raw-track sinks keyed by "path|track", ref-counted across JS subscribers.
+    var trackSinks: [String: TrackSink] = [:]
 
     init(id: String, session: Session) {
       self.id = id
@@ -145,6 +150,26 @@ private let audioKeySuffix = "_audio"
     }
   }
 
+  @objc(subscribeTrackObjectsWithSessionId:broadcastPath:trackName:)
+  public func subscribeTrackObjects(
+    sessionId: String, broadcastPath: String, trackName: String
+  ) {
+    Task { @MainActor in
+      self._subscribeTrackObjects(
+        sessionId: sessionId, broadcastPath: broadcastPath, trackName: trackName)
+    }
+  }
+
+  @objc(unsubscribeTrackObjectsWithSessionId:broadcastPath:trackName:)
+  public func unsubscribeTrackObjects(
+    sessionId: String, broadcastPath: String, trackName: String
+  ) {
+    Task { @MainActor in
+      self._unsubscribeTrackObjects(
+        sessionId: sessionId, broadcastPath: broadcastPath, trackName: trackName)
+    }
+  }
+
   // MARK: - JSI: called from MoQ.mm C++ getPlayer override
 
   @objc(playerRefForSessionId:broadcastPath:)
@@ -199,9 +224,10 @@ private let audioKeySuffix = "_audio"
       let ps = MoQPrefixSubscription(
         prefix: prefix,
         subscription: sub,
-        onBroadcastAvailable: { [weak self] prefix, catalog in
+        onBroadcastAvailable: { [weak self] prefix, broadcast, catalog in
           await self?._handleBroadcastAvailable(
-            sessionId: sessionId, prefix: prefix, catalog: catalog)
+            sessionId: sessionId, prefix: prefix, broadcast: broadcast,
+            catalog: catalog)
         },
         onBroadcastUnavailable: { [weak self] prefix, path in
           await self?._handleBroadcastUnavailable(
@@ -226,6 +252,8 @@ private let audioKeySuffix = "_audio"
     for path in paths where ctx.prefixForPath[path] == prefix {
       ctx.prefixForPath.removeValue(forKey: path)
       ctx.catalogs.removeValue(forKey: path)
+      ctx.broadcasts.removeValue(forKey: path)
+      _removeTrackSinks(ctx, path: path)
       await _removePlayer(sessionId: sessionId, path: path, cancelCatalogTask: false)
       await _removePlayer(
         sessionId: sessionId, path: path + audioKeySuffix,
@@ -258,6 +286,8 @@ private let audioKeySuffix = "_audio"
       temp.prefixForPath = ctx.prefixForPath
       temp.playerRefs = ctx.playerRefs
       temp.catalogs = ctx.catalogs
+      temp.broadcasts = ctx.broadcasts
+      temp.trackSinks = ctx.trackSinks
       self.contexts[sessionId] = temp
       await self._unsubscribeAll(sessionId: sessionId)
       self.contexts.removeValue(forKey: sessionId)
@@ -269,13 +299,14 @@ private let audioKeySuffix = "_audio"
 
   @MainActor
   private func _handleBroadcastAvailable(
-    sessionId: String, prefix: String, catalog: Catalog
+    sessionId: String, prefix: String, broadcast: Broadcast, catalog: Catalog
   ) async {
     guard let ctx = contexts[sessionId] else { return }
     let path = catalog.path
 
     ctx.catalogs[path] = catalog
     ctx.prefixForPath[path] = prefix
+    ctx.broadcasts[path] = broadcast
 
     let hadPlayer = ctx.playerRefs[path] != nil
     await _removePlayer(
@@ -357,6 +388,8 @@ private let audioKeySuffix = "_audio"
       notifyVideoViews: false, cancelCatalogTask: false)
     ctx.catalogs.removeValue(forKey: path)
     ctx.prefixForPath.removeValue(forKey: path)
+    ctx.broadcasts.removeValue(forKey: path)
+    _removeTrackSinks(ctx, path: path)
     onEvent?(
       "broadcastUnavailable",
       ["sessionId": sessionId, "prefix": prefix, "path": path])
@@ -416,6 +449,103 @@ private let audioKeySuffix = "_audio"
     }
     NotificationCenter.default.post(
       name: MoQImpl.playerChangedNotification, object: nil, userInfo: userInfo)
+  }
+
+  // MARK: - Private: raw track objects (audio chunks / data)
+
+  private func trackSinkKey(path: String, trackName: String) -> String {
+    "\(path)|\(trackName)"
+  }
+
+  @MainActor
+  private func _subscribeTrackObjects(
+    sessionId: String, broadcastPath: String, trackName: String
+  ) {
+    guard let ctx = contexts[sessionId] else { return }
+    let key = trackSinkKey(path: broadcastPath, trackName: trackName)
+
+    // Already streaming this track — share the one subscription.
+    if let sink = ctx.trackSinks[key] {
+      sink.refCount += 1
+      return
+    }
+
+    // The JS layer only subscribes for a broadcast it already saw become
+    // available, so the broadcast should be present; if not, no-op.
+    guard let broadcast = ctx.broadcasts[broadcastPath],
+      let subscription = try? broadcast.subscribeTrack(name: trackName)
+    else { return }
+
+    let sink = TrackSink(subscription: subscription)
+    ctx.trackSinks[key] = sink
+    sink.start { [weak self] object in
+      self?.onEvent?(
+        "trackObject",
+        [
+          "sessionId": sessionId,
+          "broadcastPath": broadcastPath,
+          "trackName": trackName,
+          "data": object.payload.base64EncodedString(),
+          "groupSequence": Double(object.groupSequence),
+          "objectIndex": Double(object.objectIndex),
+        ])
+    }
+  }
+
+  @MainActor
+  private func _unsubscribeTrackObjects(
+    sessionId: String, broadcastPath: String, trackName: String
+  ) {
+    guard let ctx = contexts[sessionId] else { return }
+    let key = trackSinkKey(path: broadcastPath, trackName: trackName)
+    guard let sink = ctx.trackSinks[key] else { return }
+    sink.refCount -= 1
+    if sink.refCount <= 0 {
+      ctx.trackSinks.removeValue(forKey: key)
+      sink.close()
+    }
+  }
+
+  @MainActor
+  private func _removeTrackSinks(_ ctx: SessionContext, path: String) {
+    let prefix = "\(path)|"
+    for (key, sink) in ctx.trackSinks where key.hasPrefix(prefix) {
+      ctx.trackSinks.removeValue(forKey: key)
+      sink.close()
+    }
+  }
+}
+
+// MARK: - TrackSink
+
+/// Owns a single moq-kit `TrackSubscription` plus the task draining its object
+/// stream, ref-counted across JS subscribers to the same (path, track).
+@MainActor
+final class TrackSink {
+  private let subscription: TrackSubscription
+  private var task: Task<Void, Never>?
+  var refCount = 1
+
+  init(subscription: TrackSubscription) {
+    self.subscription = subscription
+  }
+
+  func start(emit: @escaping (TrackObject) -> Void) {
+    task = Task { [subscription] in
+      do {
+        for try await object in subscription.objects {
+          emit(object)
+        }
+      } catch {
+        // Stream ended or errored — nothing to do; close() handles teardown.
+      }
+    }
+  }
+
+  func close() {
+    task?.cancel()
+    task = nil
+    subscription.close()
   }
 }
 

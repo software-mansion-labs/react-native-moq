@@ -27,6 +27,45 @@ export interface AudioTrackInfo {
 
 export const AUDIO_PLAYER_KEY_SUFFIX = '_audio';
 
+export interface AudioChunk {
+  /**
+   * Encoded audio bytes for one MoQ object — i.e. one Opus/AAC frame exactly as
+   * it was published. Not decoded PCM; decode downstream (e.g. with
+   * react-native-audio-api) before playback or ML inference.
+   */
+  data: ArrayBuffer;
+  /** Name of the audio track this chunk came from. */
+  trackName: string;
+  /** Codec advertised in the broadcast catalog, e.g. 'opus' | 'aac'. */
+  codec: string;
+  /** Source sample rate from the catalog (e.g. 48000), or 0 if unknown. */
+  sampleRate: number;
+  /** Channel count from the catalog, when advertised. */
+  channelCount?: number;
+  /** MoQ group sequence — lets consumers detect gaps / ordering. */
+  groupSequence: number;
+  /** Object index within the group. */
+  objectIndex: number;
+}
+
+/**
+ * Handle to a running audio-chunk subscription. Returned by both
+ * `subscribeAudioChunks` (imperative) and `useAudioChunks` (hook). `stop()`
+ * releases the underlying native track subscription, which stops pulling that
+ * track over the network — so stop whenever you aren't consuming.
+ */
+export interface ChunkSubscription {
+  readonly sessionId: string;
+  readonly broadcastPath: string;
+  readonly trackName: string;
+  /** Whether the subscription is currently receiving chunks. */
+  readonly isActive: boolean;
+  /** (Re)start receiving. Idempotent. */
+  start(): void;
+  /** Stop receiving and release the native track subscription. Idempotent. */
+  stop(): void;
+}
+
 // Opaque handle returned in broadcastAvailable events.
 // On iOS the native field is a JSI HostObject with direct methods;
 // on Android it falls back to bridge calls keyed by (sessionId, broadcastPath).

@@ -46,6 +46,7 @@ RCT_EXPORT_MODULE()
     @"broadcastUnavailable",
     @"playerEvent",
     @"playbackStatsUpdated",
+    @"trackObject",
   ];
 }
 
@@ -105,6 +106,14 @@ RCT_EXPORT_MODULE()
 
 - (void)createAudioOnlyPlayer:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath {
   [[MoQImpl shared] createAudioOnlyPlayerWithSessionId:sessionId broadcastPath:broadcastPath];
+}
+
+- (void)subscribeTrackObjects:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath trackName:(NSString *)trackName {
+  [[MoQImpl shared] subscribeTrackObjectsWithSessionId:sessionId broadcastPath:broadcastPath trackName:trackName];
+}
+
+- (void)unsubscribeTrackObjects:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath trackName:(NSString *)trackName {
+  [[MoQImpl shared] unsubscribeTrackObjectsWithSessionId:sessionId broadcastPath:broadcastPath trackName:trackName];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:

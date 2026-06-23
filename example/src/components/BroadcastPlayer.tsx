@@ -17,6 +17,7 @@ import {
   VolumeSlider,
 } from 'react-native-moq-ui';
 import type { AddEntry } from './EventLog';
+import { AudioChunksMeter } from './AudioChunksMeter';
 import { RenditionPicker } from './RenditionPicker';
 import { StatsPanel } from './StatsPanel';
 
@@ -229,6 +230,8 @@ function AudioSection({
         <SpeakerGlyph size={16} color="#374151" volume={player.volume} />
         <VolumeSlider player={player} width={200} theme="light" />
       </View>
+
+      <AudioChunksMeter broadcast={broadcast} />
 
       {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
     </>

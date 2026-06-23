@@ -2,19 +2,23 @@ package com.moq
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.moq.player.PlayerHandle
 import com.swmansion.moqkit.Session
+import com.swmansion.moqkit.subscribe.Broadcast
 import com.swmansion.moqkit.subscribe.Catalog
 import com.swmansion.moqkit.subscribe.PlaybackStats
 import com.swmansion.moqkit.subscribe.Player
 import com.swmansion.moqkit.subscribe.StallStats
+import com.swmansion.moqkit.subscribe.TrackSubscription
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,6 +42,11 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val subscriptions = ConcurrentHashMap<String, MoQPrefixSubscription>()
     val prefixForPath = ConcurrentHashMap<String, String>()
     val catalogs = ConcurrentHashMap<String, Catalog>()
+    // Live broadcasts per path so raw-track subscriptions (audio chunks, data
+    // tracks) can call `subscribeTrack` after a broadcast appears.
+    val broadcasts = ConcurrentHashMap<String, Broadcast>()
+    // Raw-track sinks keyed by "path|track", ref-counted across JS subscribers.
+    val trackSinks = ConcurrentHashMap<String, TrackSink>()
   }
 
   private val contexts = ConcurrentHashMap<String, SessionContext>()
@@ -182,8 +191,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         prefix = prefix,
         subscription = sub,
         scope = moduleScope,
-        onBroadcastAvailable = { p, catalog ->
-          handleBroadcastAvailable(sessionId, p, catalog, latencyMs)
+        onBroadcastAvailable = { p, broadcast, catalog ->
+          handleBroadcastAvailable(sessionId, p, broadcast, catalog, latencyMs)
         },
         onBroadcastUnavailable = { p, path ->
           handleBroadcastUnavailable(sessionId, p, path)
@@ -206,6 +215,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       if (ctx.prefixForPath[path] == prefix) {
         ctx.prefixForPath.remove(path)
         ctx.catalogs.remove(path)
+        ctx.broadcasts.remove(path)
+        removeTrackSinks(ctx, path)
         removePlayer(sessionId, path, notify = false)
         removePlayer(sessionId, path + AUDIO_KEY_SUFFIX, notify = false)
       }
@@ -221,6 +232,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         if (ctx.prefixForPath[path] == prefix) {
           ctx.prefixForPath.remove(path)
           ctx.catalogs.remove(path)
+          ctx.broadcasts.remove(path)
+          removeTrackSinks(ctx, path)
           removePlayer(ctx.id, path, notify = false)
           removePlayer(ctx.id, path + AUDIO_KEY_SUFFIX, notify = false)
         }
@@ -284,6 +297,73 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     handle.startObservingEvents()
   }
 
+  override fun subscribeTrackObjects(
+    sessionId: String, broadcastPath: String, trackName: String
+  ) {
+    val ctx = contexts[sessionId] ?: return
+    val key = "$broadcastPath|$trackName"
+
+    // Already streaming this track — share the one subscription.
+    ctx.trackSinks[key]?.let {
+      it.refCount.incrementAndGet()
+      return
+    }
+
+    // The JS layer only subscribes for a broadcast it already saw become
+    // available, so the broadcast should be present; if not, no-op.
+    val broadcast = ctx.broadcasts[broadcastPath] ?: return
+    val subscription = try {
+      broadcast.subscribeTrack(trackName)
+    } catch (_: Exception) {
+      return
+    }
+
+    val sink = TrackSink(subscription)
+    val prev = ctx.trackSinks.putIfAbsent(key, sink)
+    if (prev != null) {
+      // Lost a race with another subscribe — reuse the existing sink.
+      prev.refCount.incrementAndGet()
+      subscription.close()
+      return
+    }
+
+    sink.job = moduleScope.launch {
+      try {
+        subscription.objects.collect { obj ->
+          val map = Arguments.createMap()
+          map.putString("sessionId", sessionId)
+          map.putString("broadcastPath", broadcastPath)
+          map.putString("trackName", trackName)
+          map.putString("data", Base64.encodeToString(obj.payload, Base64.NO_WRAP))
+          map.putDouble("groupSequence", obj.groupSequence.toDouble())
+          map.putDouble("objectIndex", obj.objectIndex.toDouble())
+          emitEvent("trackObject", map)
+        }
+      } catch (_: Exception) {
+        // Stream ended or errored — close() handles teardown.
+      }
+    }
+  }
+
+  override fun unsubscribeTrackObjects(
+    sessionId: String, broadcastPath: String, trackName: String
+  ) {
+    val ctx = contexts[sessionId] ?: return
+    val key = "$broadcastPath|$trackName"
+    val sink = ctx.trackSinks[key] ?: return
+    if (sink.refCount.decrementAndGet() <= 0) {
+      ctx.trackSinks.remove(key)
+      sink.close()
+    }
+  }
+
+  private fun removeTrackSinks(ctx: SessionContext, path: String) {
+    val prefix = "$path|"
+    for (key in ctx.trackSinks.keys.filter { it.startsWith(prefix) }) {
+      ctx.trackSinks.remove(key)?.close()
+    }
+  }
+
   override fun invalidate() {
     super.invalidate()
     for (id in contexts.keys.toList()) disconnect(id)
@@ -293,13 +373,15 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   // MARK: - Broadcast events
 
   private fun handleBroadcastAvailable(
-    sessionId: String, prefix: String, catalog: Catalog, targetLatencyMs: Int
+    sessionId: String, prefix: String, broadcast: Broadcast, catalog: Catalog,
+    targetLatencyMs: Int
   ) {
     val ctx = contexts[sessionId] ?: return
     val path = catalog.path
 
     ctx.catalogs[path] = catalog
     ctx.prefixForPath[path] = prefix
+    ctx.broadcasts[path] = broadcast
 
     val hadPlayer = playerHandle(sessionId, path) != null
     removePlayer(sessionId, path, notify = false)
@@ -380,6 +462,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     removePlayer(sessionId, path + AUDIO_KEY_SUFFIX, notify = false)
     ctx.catalogs.remove(path)
     ctx.prefixForPath.remove(path)
+    ctx.broadcasts.remove(path)
+    removeTrackSinks(ctx, path)
     val map = Arguments.createMap()
     map.putString("sessionId", sessionId)
     map.putString("prefix", prefix)
@@ -407,6 +491,19 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     reactApplicationContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit(name, params)
+  }
+
+  // Owns a single moq-kit TrackSubscription plus the coroutine draining its
+  // object flow, ref-counted across JS subscribers to the same (path, track).
+  private class TrackSink(private val subscription: TrackSubscription) {
+    var job: Job? = null
+    val refCount = AtomicInteger(1)
+
+    fun close() {
+      job?.cancel()
+      job = null
+      subscription.close()
+    }
   }
 }
 

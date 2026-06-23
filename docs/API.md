@@ -9,6 +9,8 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
   - [`useBroadcasts(session, prefix?)`](#usebroadcastssession-prefix)
   - [`useVideoPlayer(broadcast, setup?)`](#usevideoplayerbroadcast-setup)
   - [`useAudioPlayer(broadcast, setup?)`](#useaudioplayerbroadcast-setup)
+  - [`useAudioChunks(broadcast, onChunk, options?)`](#useaudiochunksbroadcast-onchunk-options)
+  - [`subscribeAudioChunks(broadcast, trackName, onChunk, options?)`](#subscribeaudiochunksbroadcast-trackname-onchunk-options)
   - [`useEvent(source, eventName, initialValue?)`](#useeventsource-eventname-initialvalue)
   - [`useEventListener(source, eventName, listener)`](#useeventlistenersource-eventname-listener)
   - [`player.addListener` / `session.addListener`](#playeraddlistenereventname-listener--sessionaddlistenereventname-listener)
@@ -183,6 +185,80 @@ Returns an `AudioPlayer` object — same shape as `Player` minus the video-only 
 The same `PlayerEvents` apply (`playingChange`, `trackStopped`, `trackSwitched`, `statsUpdate`); `trackSwitched` only fires with `trackKind: 'audio'`. The audio-only stream uses a separate native player from the video+audio one, so both can run alongside each other for the same broadcast.
 
 Passing an `AudioPlayer` to `<VideoView>` (or `<VideoPlayerView>`) is a type error — the audio-only mode has no video output by design.
+
+---
+
+### `useAudioChunks(broadcast, onChunk, options?)`
+
+Receives a broadcast's audio as a stream of **encoded chunks** — each callback gets one MoQ object (one Opus/AAC frame, exactly as published) as an `ArrayBuffer`. Use this to route audio into another pipeline such as [react-native-audio-api](https://docs.swmansion.com/react-native-audio-api/) or [react-native-executorch](https://docs.swmansion.com/react-native-executorch/) instead of (or alongside) the built-in `useAudioPlayer`.
+
+```tsx
+import { useAudioChunks } from 'react-native-moq';
+
+const audio = useAudioChunks(broadcast, (chunk) => {
+  // chunk.data is encoded (chunk.codec — 'opus' | 'aac'); decode before use.
+  decoder.push(chunk.data);
+});
+
+return <Button title="Stop" onPress={audio.stop} />;
+```
+
+> **These chunks are encoded, not PCM.** `data` holds raw Opus/AAC bytes. Decode them downstream (e.g. with react-native-audio-api) before playback or feeding an ML model — executorch speech-to-text expects mono Float32 PCM at 16 kHz, and `AudioContext.decodeAudioData` handles AAC but not Opus or un-containerized streaming frames. A native decoded-PCM path may be added later.
+
+`onChunk` is kept in a ref, so changing it between renders does not re-create the subscription. The subscription stops automatically on unmount.
+
+**Options:**
+
+| Option | Type | Description |
+|---|---|---|
+| `trackName` | `string` | Audio track to listen to. Defaults to the broadcast's first audio track |
+| `autoStart` | `boolean` | Start receiving on mount. Defaults to `true`; pass `false` to defer until `.start()` |
+
+Returns a [`ChunkSubscription`](#chunksubscription):
+
+| Property / Method | Type | Description |
+|---|---|---|
+| `sessionId` | `string` | The session this subscription belongs to |
+| `broadcastPath` | `string` | The broadcast path being consumed |
+| `trackName` | `string` | The audio track being consumed |
+| `isActive` | `boolean` | Whether chunks are currently being received |
+| `start()` | `() => void` | (Re)start receiving. Idempotent |
+| `stop()` | `() => void` | Stop receiving and release the native track subscription. Idempotent |
+
+`stop()` closes the underlying moq-kit track subscription, which **stops pulling that track over the network** — call it whenever you aren't consuming. For a *dynamic* set of tracks or broadcasts, use [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options) inside your own effect rather than calling this hook in a loop.
+
+---
+
+### `subscribeAudioChunks(broadcast, trackName, onChunk, options?)`
+
+The framework-agnostic core that `useAudioChunks` wraps — works with or without React. Each call subscribes to one `(broadcast, trackName)` and returns an independent [`ChunkSubscription`](#chunksubscription). For multiple audio tracks (within one broadcast or across several), call it once per track; each handle starts/stops on its own.
+
+```ts
+import { subscribeAudioChunks } from 'react-native-moq';
+
+// single track
+const sub = subscribeAudioChunks(broadcast, 'audio', onChunk);
+sub.stop();
+
+// multiple tracks across multiple broadcasts
+const subs = broadcasts.map((b) =>
+  subscribeAudioChunks(b, b.audioTracks[0].name, (c) => route(b.path, c))
+);
+// teardown: subs.forEach((s) => s.stop());
+```
+
+Subscriptions to the same `(session, path, track)` share one native track subscription under the hood (ref-counted), so it is safe to subscribe more than once.
+
+**Options:** `{ autoStart?: boolean }` — start immediately (default `true`).
+
+In React, use this inside an effect for dynamic track sets — it sidesteps the rules-of-hooks constraint of calling `useAudioChunks` in a loop:
+
+```tsx
+useEffect(() => {
+  const subs = trackNames.map((t) => subscribeAudioChunks(broadcast, t, onChunk));
+  return () => subs.forEach((s) => s.stop());
+}, [broadcast, trackNames]);
+```
 
 ---
 
@@ -384,6 +460,35 @@ interface AudioTrackInfo {
   sampleRate: number;
   channelCount?: number;
   bitrate?: number;
+}
+```
+
+#### `AudioChunk`
+
+One encoded audio object delivered by [`useAudioChunks`](#useaudiochunksbroadcast-onchunk-options) / [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options).
+
+```ts
+interface AudioChunk {
+  data: ArrayBuffer; // encoded Opus/AAC bytes for one MoQ object (not PCM)
+  trackName: string;
+  codec: string; // 'opus' | 'aac', from the catalog
+  sampleRate: number; // source sample rate, or 0 if unknown
+  channelCount?: number;
+  groupSequence: number; // MoQ group sequence — detect gaps/ordering
+  objectIndex: number; // object index within the group
+}
+```
+
+#### `ChunkSubscription`
+
+```ts
+interface ChunkSubscription {
+  readonly sessionId: string;
+  readonly broadcastPath: string;
+  readonly trackName: string;
+  readonly isActive: boolean;
+  start(): void;
+  stop(): void;
 }
 ```
 

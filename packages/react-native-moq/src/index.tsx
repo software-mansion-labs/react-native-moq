@@ -49,14 +49,20 @@ export { BroadcastPickerView } from './views/BroadcastPickerView';
 export type { BroadcastPickerViewProps } from './views/BroadcastPickerView';
 export { useVideoPlayer } from './hooks/useVideoPlayer';
 export { useAudioPlayer } from './hooks/useAudioPlayer';
+export { useAudioChunks } from './hooks/useAudioChunks';
+export type { UseAudioChunksOptions } from './hooks/useAudioChunks';
+export { subscribeAudioChunks } from './audioChunks';
+export type { SubscribeAudioChunksOptions } from './audioChunks';
 export { useEvent, useEventListener } from './hooks/useEvent';
 export { EventEmitter } from './EventEmitter';
 export type { EventSubscription } from './EventEmitter';
 export { PlayerHandle } from './types';
 export type {
+  AudioChunk,
   AudioPlayer,
   AudioTrackInfo,
   BroadcastInfo,
+  ChunkSubscription,
   PlaybackStats,
   Player,
   PlayerEvents,

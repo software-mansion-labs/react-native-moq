@@ -13,13 +13,14 @@ final class MoQPrefixSubscription {
   private var broadcastsTask: Task<Void, Never>?
   private var catalogTasks: [String: Task<Void, Never>] = [:]
 
-  private let onBroadcastAvailable: (_ prefix: String, _ catalog: Catalog) async -> Void
+  private let onBroadcastAvailable:
+    (_ prefix: String, _ broadcast: Broadcast, _ catalog: Catalog) async -> Void
   private let onBroadcastUnavailable: (_ prefix: String, _ path: String) async -> Void
 
   init(
     prefix: String,
     subscription: BroadcastSubscription,
-    onBroadcastAvailable: @escaping (String, Catalog) async -> Void,
+    onBroadcastAvailable: @escaping (String, Broadcast, Catalog) async -> Void,
     onBroadcastUnavailable: @escaping (String, String) async -> Void
   ) {
     self.prefix = prefix
@@ -42,7 +43,7 @@ final class MoQPrefixSubscription {
         self.catalogTasks[path]?.cancel()
         self.catalogTasks[path] = Task { @MainActor [weak self] in
           for await catalog in broadcast.catalogs() {
-            await self?.onBroadcastAvailable(prefix, catalog)
+            await self?.onBroadcastAvailable(prefix, broadcast, catalog)
           }
           await self?.onBroadcastUnavailable(prefix, path)
           self?.catalogTasks.removeValue(forKey: path)

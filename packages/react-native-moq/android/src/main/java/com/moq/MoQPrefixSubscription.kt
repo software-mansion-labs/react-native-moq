@@ -1,5 +1,6 @@
 package com.moq
 
+import com.swmansion.moqkit.subscribe.Broadcast
 import com.swmansion.moqkit.subscribe.BroadcastSubscription
 import com.swmansion.moqkit.subscribe.Catalog
 import java.util.concurrent.ConcurrentHashMap
@@ -18,7 +19,8 @@ class MoQPrefixSubscription(
   val prefix: String,
   private val subscription: BroadcastSubscription,
   private val scope: CoroutineScope,
-  private val onBroadcastAvailable: suspend (prefix: String, catalog: Catalog) -> Unit,
+  private val onBroadcastAvailable:
+    suspend (prefix: String, broadcast: Broadcast, catalog: Catalog) -> Unit,
   private val onBroadcastUnavailable: suspend (prefix: String, path: String) -> Unit,
 ) {
   private var broadcastsJob: Job? = null
@@ -40,7 +42,7 @@ class MoQPrefixSubscription(
           try {
             broadcast.use { b ->
               b.catalogs().collect { catalog ->
-                onBroadcastAvailable(prefix, catalog)
+                onBroadcastAvailable(prefix, b, catalog)
               }
             }
             // Natural end of the catalog flow — broadcast unavailable.

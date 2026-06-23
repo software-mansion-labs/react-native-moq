@@ -43,6 +43,22 @@ export interface Spec extends TurboModule {
 
   // Audio-only player (keyed as broadcastPath + "_audio" in native, scoped by session)
   createAudioOnlyPlayer(sessionId: string, broadcastPath: string): void;
+
+  // Raw track-object streaming. The native side keeps one moq-kit
+  // TrackSubscription per (sessionId, broadcastPath, trackName) and ref-counts
+  // these calls, so two JS subscribers to the same track share one underlying
+  // subscription. Each received object is forwarded as a `trackObject` event
+  // with a base64 `data` payload plus `groupSequence` / `objectIndex`.
+  subscribeTrackObjects(
+    sessionId: string,
+    broadcastPath: string,
+    trackName: string
+  ): void;
+  unsubscribeTrackObjects(
+    sessionId: string,
+    broadcastPath: string,
+    trackName: string
+  ): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('MoQ');
