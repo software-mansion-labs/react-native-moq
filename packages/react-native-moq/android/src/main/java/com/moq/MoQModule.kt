@@ -253,7 +253,16 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   }
 
   override fun play(sessionId: String, broadcastPath: String) {
-    playerHandle(sessionId, broadcastPath)?.play()
+    val handle = playerHandle(sessionId, broadcastPath) ?: return
+    handle.play()
+    // `play()` builds moq-kit's playback pipeline; a VideoView surface that
+    // arrived while it was still being built (or on a different thread —
+    // `Player.playbackPipeline` isn't volatile) is dropped, so the video track
+    // never starts even though audio plays. Re-deliver the surface now that the
+    // pipeline exists. Posting to the main thread provides the happens-before
+    // barrier so the surface push observes the freshly-built pipeline. (The
+    // player-recreation path in handleBroadcastAvailable already does this.)
+    mainHandler.post { notifyPlayerChanged(sessionId, broadcastPath) }
   }
 
   override fun pause(sessionId: String, broadcastPath: String) {
