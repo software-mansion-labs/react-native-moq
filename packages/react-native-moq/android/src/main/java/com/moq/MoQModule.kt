@@ -279,6 +279,11 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun switchVideoTrack(sessionId: String, broadcastPath: String, trackName: String) {
     playerHandle(sessionId, broadcastPath)?.switchVideoTrack(trackName)
+    // `switchTrack()` rebuilds moq-kit's video pipeline for the new rendition;
+    // re-deliver the surface afterwards so the freshly-built pipeline sees it
+    // (same non-volatile `Player.playbackPipeline` race the `play()` path guards
+    // against). Posting to the main thread provides the happens-before barrier.
+    mainHandler.post { notifyPlayerChanged(sessionId, broadcastPath) }
   }
 
   override fun switchAudioTrack(sessionId: String, broadcastPath: String, trackName: String) {
