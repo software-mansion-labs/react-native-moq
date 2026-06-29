@@ -58,11 +58,11 @@ private let audioKeySuffix = "_audio"
     // data tracks) can call `subscribeTrack` after a broadcast appears.
     var broadcasts: [String: Broadcast] = [:]
     // Raw-track sinks keyed by "path|track", ref-counted across JS subscribers.
-    var trackSinks: [String: TrackSink] = [:]
+    var trackSinks: [String: StreamSink] = [:]
     // Decoded-PCM sinks keyed by "path|track|sampleFormat", ref-counted across
     // JS subscribers. Separate from trackSinks so encoded and decoded streams of
     // the same track can coexist (moq-kit shares the compressed subscription).
-    var audioDataSinks: [String: AudioDataSink] = [:]
+    var audioDataSinks: [String: StreamSink] = [:]
 
     init(id: String, session: Session) {
       self.id = id
@@ -521,20 +521,22 @@ private let audioKeySuffix = "_audio"
       let subscription = try? broadcast.subscribeTrack(name: trackName)
     else { return }
 
-    let sink = TrackSink(subscription: subscription)
-    ctx.trackSinks[key] = sink
-    sink.start { [weak self] object in
-      self?.onEvent?(
-        "trackObject",
-        [
-          "sessionId": sessionId,
-          "broadcastPath": broadcastPath,
-          "trackName": trackName,
-          "data": object.payload.base64EncodedString(),
-          "groupSequence": Double(object.groupSequence),
-          "objectIndex": Double(object.objectIndex),
-        ])
-    }
+    ctx.trackSinks[key] = StreamSink(
+      drain: { [weak self] in
+        for try await object in subscription.objects {
+          self?.onEvent?(
+            "trackObject",
+            [
+              "sessionId": sessionId,
+              "broadcastPath": broadcastPath,
+              "trackName": trackName,
+              "data": object.payload.base64EncodedString(),
+              "groupSequence": Double(object.groupSequence),
+              "objectIndex": Double(object.objectIndex),
+            ])
+        }
+      },
+      closeResource: { subscription.close() })
   }
 
   @MainActor
@@ -542,26 +544,15 @@ private let audioKeySuffix = "_audio"
     sessionId: String, broadcastPath: String, trackName: String
   ) {
     guard let ctx = contexts[sessionId] else { return }
-    let key = trackSinkKey(path: broadcastPath, trackName: trackName)
-    guard let sink = ctx.trackSinks[key] else { return }
-    sink.refCount -= 1
-    if sink.refCount <= 0 {
-      ctx.trackSinks.removeValue(forKey: key)
-      sink.close()
-    }
+    releaseSink(
+      &ctx.trackSinks, key: trackSinkKey(path: broadcastPath, trackName: trackName))
   }
 
   @MainActor
   private func _removeTrackSinks(_ ctx: SessionContext, path: String) {
     let prefix = "\(path)|"
-    for (key, sink) in ctx.trackSinks where key.hasPrefix(prefix) {
-      ctx.trackSinks.removeValue(forKey: key)
-      sink.close()
-    }
-    for (key, sink) in ctx.audioDataSinks where key.hasPrefix(prefix) {
-      ctx.audioDataSinks.removeValue(forKey: key)
-      sink.close()
-    }
+    closeSinks(&ctx.trackSinks, withPathPrefix: prefix)
+    closeSinks(&ctx.audioDataSinks, withPathPrefix: prefix)
   }
 
   // MARK: - Private: decoded PCM audio (AudioDataStream)
@@ -596,23 +587,25 @@ private let audioKeySuffix = "_audio"
         catalog: catalog, trackName: trackName, format: format)
     else { return }
 
-    let sink = AudioDataSink(stream: stream)
-    ctx.audioDataSinks[key] = sink
-    sink.start { [weak self] data in
-      self?.onEvent?(
-        "audioData",
-        [
-          "sessionId": sessionId,
-          "broadcastPath": broadcastPath,
-          "trackName": trackName,
-          "sampleFormat": sampleFormat,
-          "data": data.bytes.base64EncodedString(),
-          "frameCount": Double(data.frameCount),
-          "sampleRate": data.sampleRate,
-          "channelCount": Double(data.channelCount),
-          "timestampUs": Double(data.timestampUs),
-        ])
-    }
+    ctx.audioDataSinks[key] = StreamSink(
+      drain: { [weak self] in
+        for try await data in stream.audio {
+          self?.onEvent?(
+            "audioData",
+            [
+              "sessionId": sessionId,
+              "broadcastPath": broadcastPath,
+              "trackName": trackName,
+              "sampleFormat": sampleFormat,
+              "data": data.bytes.base64EncodedString(),
+              "frameCount": Double(data.frameCount),
+              "sampleRate": data.sampleRate,
+              "channelCount": Double(data.channelCount),
+              "timestampUs": Double(data.timestampUs),
+            ])
+        }
+      },
+      closeResource: { stream.close() })
   }
 
   @MainActor
@@ -620,81 +613,60 @@ private let audioKeySuffix = "_audio"
     sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
   ) {
     guard let ctx = contexts[sessionId] else { return }
-    let key = audioDataSinkKey(
-      path: broadcastPath, trackName: trackName, sampleFormat: sampleFormat)
-    guard let sink = ctx.audioDataSinks[key] else { return }
+    releaseSink(
+      &ctx.audioDataSinks,
+      key: audioDataSinkKey(
+        path: broadcastPath, trackName: trackName, sampleFormat: sampleFormat))
+  }
+
+  // Drop one JS subscriber's hold on a sink; tear it down once the last leaves.
+  @MainActor
+  private func releaseSink(_ sinks: inout [String: StreamSink], key: String) {
+    guard let sink = sinks[key] else { return }
     sink.refCount -= 1
     if sink.refCount <= 0 {
-      ctx.audioDataSinks.removeValue(forKey: key)
+      sinks.removeValue(forKey: key)
+      sink.close()
+    }
+  }
+
+  // Close every sink whose key belongs to `prefix` (a "path|" string), used when
+  // a broadcast goes away.
+  @MainActor
+  private func closeSinks(_ sinks: inout [String: StreamSink], withPathPrefix prefix: String) {
+    for (key, sink) in sinks where key.hasPrefix(prefix) {
+      sinks.removeValue(forKey: key)
       sink.close()
     }
   }
 }
 
-// MARK: - TrackSink
+// MARK: - StreamSink
 
-/// Owns a single moq-kit `TrackSubscription` plus the task draining its object
-/// stream, ref-counted across JS subscribers to the same (path, track).
+/// Owns one moq-kit subscription/stream plus the task draining it, ref-counted
+/// across JS subscribers to the same key. Backs both raw track objects (audio
+/// chunks / data) and decoded-PCM audio — they differ only in the async sequence
+/// drained and the event emitted, which the caller supplies via `drain`.
 @MainActor
-final class TrackSink {
-  private let subscription: TrackSubscription
+final class StreamSink {
   private var task: Task<Void, Never>?
+  private let closeResource: () -> Void
   var refCount = 1
 
-  init(subscription: TrackSubscription) {
-    self.subscription = subscription
-  }
-
-  func start(emit: @escaping (TrackObject) -> Void) {
-    task = Task { [subscription] in
-      do {
-        for try await object in subscription.objects {
-          emit(object)
-        }
-      } catch {
-        // Stream ended or errored — nothing to do; close() handles teardown.
-      }
+  /// `drain` runs the async read loop, emitting each element; `closeResource`
+  /// tears down the underlying subscription/stream. Loop errors are swallowed —
+  /// the stream simply ended, and close() handles teardown.
+  init(drain: @escaping () async throws -> Void, closeResource: @escaping () -> Void) {
+    self.closeResource = closeResource
+    task = Task {
+      do { try await drain() } catch {}
     }
   }
 
   func close() {
     task?.cancel()
     task = nil
-    subscription.close()
-  }
-}
-
-// MARK: - AudioDataSink
-
-/// Owns a single moq-kit `AudioDataStream` plus the task draining its decoded
-/// PCM stream, ref-counted across JS subscribers to the same (path, track,
-/// sampleFormat).
-@MainActor
-final class AudioDataSink {
-  private let stream: AudioDataStream
-  private var task: Task<Void, Never>?
-  var refCount = 1
-
-  init(stream: AudioDataStream) {
-    self.stream = stream
-  }
-
-  func start(emit: @escaping (AudioData) -> Void) {
-    task = Task { [stream] in
-      do {
-        for try await data in stream.audio {
-          emit(data)
-        }
-      } catch {
-        // Stream ended or errored — nothing to do; close() handles teardown.
-      }
-    }
-  }
-
-  func close() {
-    task?.cancel()
-    task = nil
-    stream.close()
+    closeResource()
   }
 }
 
