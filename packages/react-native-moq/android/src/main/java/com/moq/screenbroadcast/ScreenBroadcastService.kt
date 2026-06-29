@@ -10,6 +10,8 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.moq.capture.audioCodecFromJs
+import com.moq.capture.videoCodecFromJs
 import com.swmansion.moqkit.Session
 import com.swmansion.moqkit.publish.Publisher
 import com.swmansion.moqkit.publish.PublisherEvent
@@ -295,16 +297,8 @@ class ScreenBroadcastService : Service() {
     val obj = try { JSONObject(json) } catch (_: Exception) { JSONObject() }
     val defaultVideo = if (VideoEncoderConfig.supportedCodecs().contains(VideoCodec.H265))
       VideoCodec.H265 else VideoCodec.H264
-    val videoCodec = when (obj.optString("videoCodec")) {
-      "h264" -> VideoCodec.H264
-      "h265" -> VideoCodec.H265
-      else -> defaultVideo
-    }
-    val audioCodec = when (obj.optString("audioCodec")) {
-      "aac" -> AudioCodec.AAC
-      "opus" -> AudioCodec.OPUS
-      else -> AudioCodec.OPUS
-    }
+    val videoCodec = videoCodecFromJs(obj.optString("videoCodec"), defaultVideo)
+    val audioCodec = audioCodecFromJs(obj.optString("audioCodec"), AudioCodec.OPUS)
     return ScreenOpts(
       path = obj.optString("path"),
       mic = obj.optBoolean("mic", true),

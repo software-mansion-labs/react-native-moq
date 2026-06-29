@@ -7,11 +7,9 @@ import android.media.projection.MediaProjectionManager
 import android.os.Build
 import com.facebook.react.bridge.ActivityEventListener
 import com.moq.NativeMoQScreenBroadcastSpec
-import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.WritableMap
-import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.moq.emitStateEvent
 
 // Out-of-process screen broadcasting on Android. configureScreenBroadcast
 // caches the relay URL + options; startScreenBroadcast launches the system
@@ -31,9 +29,7 @@ class ScreenBroadcastModule(reactContext: ReactApplicationContext) :
   private val requestCode = 0xC051
 
   private val stateListener: (String) -> Unit = { state ->
-    val map = Arguments.createMap()
-    map.putString("state", state)
-    emit("screenBroadcastStateChanged", map)
+    reactApplicationContext.emitStateEvent("screenBroadcastStateChanged", state)
   }
 
   companion object {
@@ -136,10 +132,4 @@ class ScreenBroadcastModule(reactContext: ReactApplicationContext) :
   }
 
   override fun onNewIntent(intent: Intent) {}
-
-  private fun emit(name: String, params: WritableMap) {
-    reactApplicationContext
-      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-      .emit(name, params)
-  }
 }

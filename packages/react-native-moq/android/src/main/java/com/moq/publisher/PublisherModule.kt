@@ -3,12 +3,13 @@ package com.moq.publisher
 import com.facebook.react.bridge.Arguments
 import com.moq.NativeMoQPublisherSpec
 import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.WritableMap
-import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.moq.MoQModule
 import com.moq.camera.CameraModule
 import com.moq.camera.MultiCameraModule
+import com.moq.capture.audioCodecFromJs
+import com.moq.capture.videoCodecFromJs
 import com.moq.datatrack.DataTrackModule
+import com.moq.emitDeviceEvent
 import com.moq.microphone.MicrophoneModule
 import com.swmansion.moqkit.publish.PublishedTrack
 import com.swmansion.moqkit.publish.PublishedTrackState
@@ -200,7 +201,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
       map.putString("name", name)
       map.putString("state", state)
       if (event is PublisherEvent.TrackError) map.putString("error", event.message)
-      emit("publisherTrackStateChanged", map)
+      reactApplicationContext.emitDeviceEvent("publisherTrackStateChanged", map)
     }.launchIn(moduleScope)
 
     for (track in tracks) {
@@ -210,7 +211,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
         map.putString("sessionId", sessionId)
         map.putString("name", trackName)
         map.putString("state", trackStateString(st))
-        emit("publisherTrackStateChanged", map)
+        reactApplicationContext.emitDeviceEvent("publisherTrackStateChanged", map)
       }.launchIn(moduleScope)
     }
   }
@@ -221,13 +222,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
     val map = Arguments.createMap()
     map.putString("sessionId", sessionId)
     map.putString("state", state)
-    emit("publisherStateChanged", map)
-  }
-
-  private fun emit(name: String, params: WritableMap) {
-    reactApplicationContext
-      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-      .emit(name, params)
+    reactApplicationContext.emitDeviceEvent("publisherStateChanged", map)
   }
 
   private fun trackStateString(state: PublishedTrackState): String =
@@ -268,10 +263,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
       val enc = entry.optJSONObject("encoder") ?: JSONObject()
       when (type) {
         "camera" -> {
-          val codec = when (enc.optString("codec")) {
-            "h265" -> VideoCodec.H265
-            else -> VideoCodec.H264
-          }
+          val codec = videoCodecFromJs(enc.optString("codec"), VideoCodec.H264)
           out += TrackDescriptor.Camera(
             name = name,
             source = entry.optString("source", "single"),
@@ -284,10 +276,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
           )
         }
         "microphone" -> {
-          val codec = when (enc.optString("codec")) {
-            "aac" -> AudioCodec.AAC
-            else -> AudioCodec.OPUS
-          }
+          val codec = audioCodecFromJs(enc.optString("codec"), AudioCodec.OPUS)
           out += TrackDescriptor.Microphone(
             name = name,
             config = AudioEncoderConfig(

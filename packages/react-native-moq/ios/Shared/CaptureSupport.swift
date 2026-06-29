@@ -1,0 +1,135 @@
+import Foundation
+import MoQKit
+
+// Generic refcounted capture lifecycle shared by CameraImpl, MicrophoneImpl and
+// MultiCameraImpl. Each owns its capture as a device singleton: multiple
+// consumers (hooks, publishers, preview views) call start/stop independently and
+// the hardware only stops once the refcount drops to zero. This factors out the
+// start-Task bookkeeping, the "last consumer stopped while we were still
+// starting" rollback, and the state-event emission, so each impl only has to say
+// how to build and stop its specific capture.
+//
+// Used exclusively from the main actor (every caller hops on via
+// `Task { @MainActor in … }`); the per-method @MainActor annotations keep the
+// post-`await` mutations on the main actor, exactly as the hand-written impls
+// did. The hooks are @MainActor closures (and therefore Sendable, so they can be
+// captured by the start Task).
+final class RefcountedCapture<C> {
+  private var capture: C?
+  private var refCount = 0
+  private var startTask: Task<C, Error>?
+
+  private let emit: @MainActor (String) -> Void
+  private let stopCapture: @MainActor (C) -> Void
+  // Runs right after "starting" is emitted (Microphone uses it to switch the
+  // audio session to playAndRecord).
+  private let onStarting: @MainActor () -> Void
+  // Runs when a capture becomes active.
+  private let onActive: @MainActor () -> Void
+  // Runs whenever we settle back to no running capture at refcount zero (idle,
+  // explicit stop, or a start that failed with no remaining consumers). Camera /
+  // MultiCamera repost their session-changed notification here; Microphone
+  // restores the playback audio session.
+  private let onInactive: @MainActor () -> Void
+
+  init(
+    emit: @escaping @MainActor (String) -> Void,
+    stopCapture: @escaping @MainActor (C) -> Void,
+    onStarting: @escaping @MainActor () -> Void = {},
+    onActive: @escaping @MainActor () -> Void = {},
+    onInactive: @escaping @MainActor () -> Void = {}
+  ) {
+    self.emit = emit
+    self.stopCapture = stopCapture
+    self.onStarting = onStarting
+    self.onActive = onActive
+    self.onInactive = onInactive
+  }
+
+  @MainActor func current() -> C? { capture }
+
+  // Awaits any in-flight start so publish() can grab the capture right after a
+  // hook calls startCapture. Throws if no consumer has asked for it at all.
+  @MainActor func waitForCapture(_ notStartedMessage: String) async throws -> C {
+    if let c = capture { return c }
+    if let task = startTask { return try await task.value }
+    throw MoQCaptureError.notStarted(notStartedMessage)
+  }
+
+  // `preflight` may abort the start with an error message before any work runs
+  // (MultiCamera uses it to reject unsupported devices). `make` builds and starts
+  // the underlying capture.
+  @MainActor func start(
+    preflight: @MainActor () -> String? = { nil },
+    make: @escaping @MainActor () async throws -> C
+  ) async {
+    refCount += 1
+    if capture != nil || startTask != nil { return }
+
+    if let message = preflight() {
+      if refCount > 0 { refCount -= 1 }
+      emit("error:\(message)")
+      return
+    }
+
+    emit("starting")
+    onStarting()
+
+    let task = Task { @MainActor in try await make() }
+    startTask = task
+
+    do {
+      let c = try await task.value
+      startTask = nil
+      // The last consumer may have called stop() while we were starting; honor
+      // that by not retaining the capture.
+      if refCount == 0 {
+        stopCapture(c)
+        onInactive()
+        emit("idle")
+        return
+      }
+      capture = c
+      onActive()
+      emit("active")
+    } catch {
+      startTask = nil
+      // Roll back the refcount this start owned so a later retry isn't skewed.
+      if refCount > 0 { refCount -= 1 }
+      if refCount == 0 { onInactive() }
+      emit("error:\(error.localizedDescription)")
+    }
+  }
+
+  @MainActor func stop() {
+    if refCount > 0 { refCount -= 1 }
+    guard refCount == 0 else { return }
+    if let c = capture { stopCapture(c) }
+    capture = nil
+    onInactive()
+    emit("idle")
+  }
+}
+
+// Single source of truth for the codec→JS-string mapping the capture impls
+// expose to JS. Returns nil for codecs JS doesn't know about so callers can
+// `compactMap` them away.
+extension VideoCodec {
+  var jsString: String? {
+    switch self {
+    case .h264: return "h264"
+    case .h265: return "h265"
+    @unknown default: return nil
+    }
+  }
+}
+
+extension MoQKit.AudioCodec {
+  var jsString: String? {
+    switch self {
+    case .opus: return "opus"
+    case .aac: return "aac"
+    @unknown default: return nil
+    }
+  }
+}
