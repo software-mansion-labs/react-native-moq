@@ -11,6 +11,17 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, '16.0'
 prepare_react_native_project!
 
+# Workaround for react-native-audio-api not working as dynamic framework
+pre_install do |installer|
+  installer.pod_targets.each do |pod|
+    if pod.name == 'RNAudioAPI'
+      def pod.build_type
+        Pod::BuildType.static_framework
+      end
+    end
+  end
+end
+
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green

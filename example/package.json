@@ -16,6 +16,7 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-native": "0.86.0",
+    "react-native-audio-api": "^0.12.2",
     "react-native-moq": "workspace:^",
     "react-native-moq-ui": "workspace:^",
     "react-native-safe-area-context": "^5.8.0",

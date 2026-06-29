@@ -7,6 +7,7 @@ import MaterialIcons from '@react-native-vector-icons/material-icons';
 import { SubscribeScreen } from './screens/SubscribeScreen';
 import { PublishScreen } from './screens/PublishScreen';
 import { MoQBoyScreen } from './screens/MoQBoyScreen';
+import { AudioChunksScreen } from './screens/AudioChunksScreen';
 
 const edges =
   Platform.OS === 'android'
@@ -16,6 +17,7 @@ const edges =
 const subscribeIcon = MaterialIcons.getImageSourceSync('live-tv', 24);
 const publishIcon = MaterialIcons.getImageSourceSync('videocam', 24);
 const boyIcon = MaterialIcons.getImageSourceSync('videogame-asset', 24);
+const audioIcon = MaterialIcons.getImageSourceSync('graphic-eq', 24);
 
 function iosTab(image: any) {
   return {
@@ -66,6 +68,17 @@ export default function App() {
         >
           <SafeAreaView edges={edges}>
             <PublishScreen url={url} setUrl={setUrl} />
+          </SafeAreaView>
+        </Tabs.Screen>
+        <Tabs.Screen
+          screenKey="audio"
+          title="Audio"
+          activityState={0}
+          ios={iosTab(audioIcon)}
+          android={androidTab(audioIcon)}
+        >
+          <SafeAreaView edges={edges}>
+            <AudioChunksScreen url={url} setUrl={setUrl} />
           </SafeAreaView>
         </Tabs.Screen>
         <Tabs.Screen
