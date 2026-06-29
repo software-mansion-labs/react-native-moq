@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import NativeMoQScreenBroadcast from '../native/NativeMoQScreenBroadcast';
 import type { VideoCodec } from './useCamera';
 import type { AudioCodec } from './useMicrophone';
+import { useNativeState } from './useNativeState';
 import type { Session } from '../types';
 
 const screenEmitter = new NativeEventEmitter(NativeMoQScreenBroadcast);
@@ -68,8 +69,11 @@ export function useScreenBroadcast(
   } = options;
   const url = session.url;
 
-  const [state, setState] = useState<ScreenBroadcastState>('idle');
-  const [lastError, setLastError] = useState<string | null>(null);
+  const { state, lastError } = useNativeState<ScreenBroadcastState>(
+    screenEmitter,
+    'screenBroadcastStateChanged',
+    ['broadcasting', 'connecting']
+  );
 
   useEffect(() => {
     NativeMoQScreenBroadcast.configureScreenBroadcast(
@@ -101,25 +105,8 @@ export function useScreenBroadcast(
     audioSampleRate,
   ]);
 
-  useEffect(() => {
-    const sub = screenEmitter.addListener(
-      'screenBroadcastStateChanged',
-      (event) => {
-        const { state: rawState } = event as { state: string };
-        const next = rawState as ScreenBroadcastState;
-        setState(next);
-        if (next.startsWith('error:')) {
-          setLastError(next.slice('error:'.length));
-        } else if (next === 'broadcasting' || next === 'connecting') {
-          setLastError(null);
-        }
-      }
-    );
-    return () => {
-      sub.remove();
-      NativeMoQScreenBroadcast.stopScreenBroadcast();
-    };
-  }, []);
+  // Stop the device-singleton broadcast when the last hook instance unmounts.
+  useEffect(() => () => NativeMoQScreenBroadcast.stopScreenBroadcast(), []);
 
   const start = useCallback(
     () => NativeMoQScreenBroadcast.startScreenBroadcast(),

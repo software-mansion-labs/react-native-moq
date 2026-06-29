@@ -1,18 +1,13 @@
 import {
   forwardRef,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import {
-  Animated,
-  Easing,
   Modal,
-  Pressable,
   StatusBar,
   StyleSheet,
   useWindowDimensions,
@@ -27,6 +22,8 @@ import { FullscreenContext } from './contexts/FullscreenContext';
 import { FullscreenControls } from './components/FullscreenControls';
 import { MiniPlayerContext } from './contexts/MiniPlayerContext';
 import { MiniPlayerControls } from './components/MiniPlayerControls';
+import { ControlsLayer } from './components/ControlsLayer';
+import { useAutoHideControls } from './useAutoHideControls';
 import { VideoView, type Player } from 'react-native-moq';
 
 export interface VideoPlayerViewProps extends ViewProps {
@@ -74,11 +71,6 @@ export interface VideoPlayerViewRef {
   enterFullscreen(): void;
   exitFullscreen(): void;
 }
-
-// Auto-hide timing for fullscreen controls. ~3.5s matches the AVPlayer
-// default; the fade itself is short so it doesn't feel sluggish.
-const CONTROLS_AUTO_HIDE_MS = 3500;
-const CONTROLS_FADE_MS = 220;
 
 // Fullscreen is implemented as an RN <Modal> rather than reparenting the
 // native view. The native view (AVSampleBufferDisplayLayer / SurfaceView) is
@@ -243,57 +235,9 @@ function FullscreenStage({
    *  container level (not clipped to the letterbox). */
   overlay: ReactNode;
 }) {
-  const [visible, setVisible] = useState(true);
-  const opacity = useRef(new Animated.Value(1)).current;
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearHideTimer = useCallback(() => {
-    if (hideTimer.current) {
-      clearTimeout(hideTimer.current);
-      hideTimer.current = null;
-    }
-  }, []);
-
-  const startHideTimer = useCallback(() => {
-    clearHideTimer();
-    hideTimer.current = setTimeout(() => {
-      setVisible(false);
-    }, CONTROLS_AUTO_HIDE_MS);
-  }, [clearHideTimer]);
-
-  const show = useCallback(() => {
-    setVisible(true);
-    startHideTimer();
-  }, [startHideTimer]);
-
-  // Start the auto-hide countdown when controls are present. If the user
-  // opts out of controls entirely we skip the timer altogether (no fade,
-  // no Pressable, nothing to dismiss).
-  useEffect(() => {
-    if (controls == null) return;
-    startHideTimer();
-    return clearHideTimer;
-  }, [controls, startHideTimer, clearHideTimer]);
-
-  useEffect(() => {
-    Animated.timing(opacity, {
-      toValue: visible ? 1 : 0,
-      duration: CONTROLS_FADE_MS,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
-  }, [visible, opacity]);
-
-  const onBackgroundPress = useCallback(() => {
-    if (visible) {
-      // Tapping the video while controls are visible hides them right away,
-      // matching the AVPlayer / PlayerView behavior.
-      clearHideTimer();
-      setVisible(false);
-    } else {
-      show();
-    }
-  }, [visible, show, clearHideTimer]);
+  const { visible, show, opacity, onBackgroundPress } = useAutoHideControls(
+    controls != null
+  );
 
   const api = useMemo(
     () => ({ visible, show, exit: onExit, player }),
@@ -306,21 +250,13 @@ function FullscreenStage({
         <View style={fitBox}>{video}</View>
 
         {controls != null && (
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={onBackgroundPress}
-            // Avoid the click sound on each tap-to-toggle on Android.
-            android_disableSound
+          <ControlsLayer
+            visible={visible}
+            opacity={opacity}
+            onBackgroundPress={onBackgroundPress}
           >
-            <Animated.View
-              style={[StyleSheet.absoluteFill, { opacity }]}
-              // When hidden the layer must let taps fall through to the
-              // Pressable so the next tap brings controls back.
-              pointerEvents={visible ? 'box-none' : 'none'}
-            >
-              {controls}
-            </Animated.View>
-          </Pressable>
+            {controls}
+          </ControlsLayer>
         )}
 
         {/* User-provided overlay sits above the controls layer, with its
@@ -361,52 +297,9 @@ function MiniStage({
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null
   );
-  const [visible, setVisible] = useState(true);
-  const opacity = useRef(new Animated.Value(1)).current;
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearHideTimer = useCallback(() => {
-    if (hideTimer.current) {
-      clearTimeout(hideTimer.current);
-      hideTimer.current = null;
-    }
-  }, []);
-
-  const startHideTimer = useCallback(() => {
-    clearHideTimer();
-    hideTimer.current = setTimeout(() => {
-      setVisible(false);
-    }, CONTROLS_AUTO_HIDE_MS);
-  }, [clearHideTimer]);
-
-  const show = useCallback(() => {
-    setVisible(true);
-    startHideTimer();
-  }, [startHideTimer]);
-
-  useEffect(() => {
-    if (controls == null) return;
-    startHideTimer();
-    return clearHideTimer;
-  }, [controls, startHideTimer, clearHideTimer]);
-
-  useEffect(() => {
-    Animated.timing(opacity, {
-      toValue: visible ? 1 : 0,
-      duration: CONTROLS_FADE_MS,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
-  }, [visible, opacity]);
-
-  const onBackgroundPress = useCallback(() => {
-    if (visible) {
-      clearHideTimer();
-      setVisible(false);
-    } else {
-      show();
-    }
-  }, [visible, show, clearHideTimer]);
+  const { visible, show, opacity, onBackgroundPress } = useAutoHideControls(
+    controls != null
+  );
 
   const api = useMemo(
     () => ({ visible, show, enterFullscreen: onEnterFullscreen, player }),
@@ -448,18 +341,13 @@ function MiniStage({
         {fitBox != null && <View style={fitBox}>{video}</View>}
       </View>
       {controls != null && (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={onBackgroundPress}
-          android_disableSound
+        <ControlsLayer
+          visible={visible}
+          opacity={opacity}
+          onBackgroundPress={onBackgroundPress}
         >
-          <Animated.View
-            style={[StyleSheet.absoluteFill, { opacity }]}
-            pointerEvents={visible ? 'box-none' : 'none'}
-          >
-            {controls}
-          </Animated.View>
-        </Pressable>
+          {controls}
+        </ControlsLayer>
       )}
       {/* Overlay sits above the controls layer, with its own pointerEvents
           handling. Useful for e.g. a rendition picker anchored to a side. */}

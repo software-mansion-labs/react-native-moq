@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import NativeMoQMultiCamera from '../native/NativeMoQMultiCamera';
 import type { CameraCaptureState, CameraTrack, VideoCodec } from './useCamera';
+import { useNativeState } from './useNativeState';
 
 const multiCameraEmitter = new NativeEventEmitter(NativeMoQMultiCamera);
 
@@ -65,8 +66,11 @@ export function useMultiCamera(
   const enabled = options.enabled ?? true;
 
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
-  const [state, setState] = useState<MultiCameraState>('idle');
-  const [lastError, setLastError] = useState<string | null>(null);
+  const { state, lastError } = useNativeState<MultiCameraState>(
+    multiCameraEmitter,
+    'multiCameraStateChanged',
+    ['active', 'starting']
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -90,23 +94,6 @@ export function useMultiCamera(
     // requires remounting (or re-enabling) the hook, matching useCamera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
-
-  useEffect(() => {
-    const sub = multiCameraEmitter.addListener(
-      'multiCameraStateChanged',
-      (event) => {
-        const e = event as { state: string };
-        const next = e.state as MultiCameraState;
-        setState(next);
-        if (next.startsWith('error:')) {
-          setLastError(next.slice('error:'.length));
-        } else if (next === 'active' || next === 'starting') {
-          setLastError(null);
-        }
-      }
-    );
-    return () => sub.remove();
-  }, []);
 
   return useMemo<MultiCameraTrack>(() => {
     const encoder = { codec, width, height, framerate };

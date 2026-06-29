@@ -12,6 +12,7 @@ import {
 import { BoyConsole, type BoyConsoleProps } from '../boy/BoyConsole';
 import { useBoyCommands } from '../boy/useBoyCommands';
 import type { BoyControl, BoyGame } from '../boy/types';
+import { sortVideoTracksByResolution } from '../videoTracks';
 
 // Props shared by both the idle console and the live game session — everything
 // except the player/controller wiring that only exists while a game is running.
@@ -199,10 +200,7 @@ function BoyGameSession({
     const sub = addListener('playingChange', ({ isPlaying }) => {
       if (!isPlaying || switched) return;
       switched = true;
-      const best = [...broadcast.videoTracks].sort(
-        (a, b) =>
-          (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0)
-      )[0];
+      const best = sortVideoTracksByResolution(broadcast.videoTracks)[0];
       // Skip if the relay already started us on the best rendition.
       if (best && best.name !== broadcast.player.initialVideoTrackName) {
         switchVideoTrack(best.name);

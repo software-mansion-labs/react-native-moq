@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import NativeMoQCamera from '../native/NativeMoQCamera';
+import { useNativeState } from './useNativeState';
 
 const cameraEmitter = new NativeEventEmitter(NativeMoQCamera);
 
@@ -73,10 +74,13 @@ export function useCamera(options: CameraOptions = {}): CameraTrack {
   const framerate = options.framerate ?? 30;
   const enabled = options.enabled ?? true;
 
-  const [state, setState] = useState<CameraCaptureState>('idle');
-  const [lastError, setLastError] = useState<string | null>(null);
   const [position, setPositionState] =
     useState<CameraPosition>(initialPosition);
+  const { state, lastError } = useNativeState<CameraCaptureState>(
+    cameraEmitter,
+    'cameraStateChanged',
+    ['active', 'starting']
+  );
 
   // Read the latest position inside the mount effect without re-running it —
   // the effect intentionally fires once per hook instance to bump the native
@@ -89,20 +93,6 @@ export function useCamera(options: CameraOptions = {}): CameraTrack {
     NativeMoQCamera.startCapture(positionRef.current);
     return () => NativeMoQCamera.stopCapture();
   }, [enabled]);
-
-  useEffect(() => {
-    const sub = cameraEmitter.addListener('cameraStateChanged', (event) => {
-      const e = event as { state: string };
-      const next = e.state as CameraCaptureState;
-      setState(next);
-      if (next.startsWith('error:')) {
-        setLastError(next.slice('error:'.length));
-      } else if (next === 'active' || next === 'starting') {
-        setLastError(null);
-      }
-    });
-    return () => sub.remove();
-  }, []);
 
   const setPosition = useCallback((next: CameraPosition) => {
     if (next === positionRef.current) return;

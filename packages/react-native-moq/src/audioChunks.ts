@@ -78,6 +78,43 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 /* eslint-enable no-bitwise */
 
+// Shared lifecycle skeleton for both the encoded and PCM subscriptions. `open`
+// wires up the native subscription + emitter listener and returns its teardown;
+// this just guards start/stop so they're idempotent and tracks `isActive`.
+function buildSubscription(
+  sessionId: string,
+  path: string,
+  trackName: string,
+  open: () => () => void,
+  autoStart: boolean
+): ChunkSubscription {
+  let active = false;
+  let close: (() => void) | null = null;
+
+  const subscription: ChunkSubscription = {
+    sessionId,
+    broadcastPath: path,
+    trackName,
+    get isActive() {
+      return active;
+    },
+    start() {
+      if (active) return;
+      active = true;
+      close = open();
+    },
+    stop() {
+      if (!active) return;
+      active = false;
+      close?.();
+      close = null;
+    },
+  };
+
+  if (autoStart) subscription.start();
+  return subscription;
+}
+
 export interface SubscribeAudioChunksOptions {
   /** Start receiving immediately. Defaults to true. */
   autoStart?: boolean;
@@ -120,20 +157,12 @@ export function subscribeAudioChunks(
   const sampleRate = info?.sampleRate ?? 0;
   const channelCount = info?.channelCount;
 
-  let active = false;
-  let listener: { remove: () => void } | null = null;
-
-  const subscription: ChunkSubscription = {
+  return buildSubscription(
     sessionId,
-    broadcastPath: path,
+    path,
     trackName,
-    get isActive() {
-      return active;
-    },
-    start() {
-      if (active) return;
-      active = true;
-      listener = emitter.addListener('trackObject', (raw) => {
+    () => {
+      const listener = emitter.addListener('trackObject', (raw) => {
         const event = raw as TrackObjectEvent;
         if (
           event.sessionId !== sessionId ||
@@ -154,18 +183,13 @@ export function subscribeAudioChunks(
         });
       });
       NativeMoQ.subscribeTrackObjects(sessionId, path, trackName);
+      return () => {
+        listener.remove();
+        NativeMoQ.unsubscribeTrackObjects(sessionId, path, trackName);
+      };
     },
-    stop() {
-      if (!active) return;
-      active = false;
-      listener?.remove();
-      listener = null;
-      NativeMoQ.unsubscribeTrackObjects(sessionId, path, trackName);
-    },
-  };
-
-  if (options.autoStart !== false) subscription.start();
-  return subscription;
+    options.autoStart !== false
+  );
 }
 
 /**
@@ -193,20 +217,12 @@ function subscribePcmChunks(
   const info = broadcast.audioTracks.find((t) => t.name === trackName);
   const codec = info?.codec ?? '';
 
-  let active = false;
-  let listener: { remove: () => void } | null = null;
-
-  const subscription: ChunkSubscription = {
+  return buildSubscription(
     sessionId,
-    broadcastPath: path,
+    path,
     trackName,
-    get isActive() {
-      return active;
-    },
-    start() {
-      if (active) return;
-      active = true;
-      listener = emitter.addListener('audioData', (raw) => {
+    () => {
+      const listener = emitter.addListener('audioData', (raw) => {
         const event = raw as AudioDataEvent;
         if (
           event.sessionId !== sessionId ||
@@ -229,16 +245,16 @@ function subscribePcmChunks(
         });
       });
       NativeMoQ.subscribeAudioData(sessionId, path, trackName, sampleFormat);
+      return () => {
+        listener.remove();
+        NativeMoQ.unsubscribeAudioData(
+          sessionId,
+          path,
+          trackName,
+          sampleFormat
+        );
+      };
     },
-    stop() {
-      if (!active) return;
-      active = false;
-      listener?.remove();
-      listener = null;
-      NativeMoQ.unsubscribeAudioData(sessionId, path, trackName, sampleFormat);
-    },
-  };
-
-  if (options.autoStart !== false) subscription.start();
-  return subscription;
+    options.autoStart !== false
+  );
 }

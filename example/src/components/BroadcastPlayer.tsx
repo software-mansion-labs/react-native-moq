@@ -5,18 +5,15 @@ import type {
 } from 'react-native-moq';
 import { useEffect, useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
-import {
-  useAudioPlayer,
-  useEvent,
-  useEventListener,
-  useVideoPlayer,
-} from 'react-native-moq';
+import { useAudioPlayer, useVideoPlayer } from 'react-native-moq';
 import {
   SpeakerGlyph,
   VideoPlayerView,
   VolumeSlider,
 } from 'react-native-moq-ui';
 import type { AddEntry } from './EventLog';
+import { usePlayerEventLog } from './usePlayerEventLog';
+import { sortVideoTracksByResolution } from '../videoTracks';
 import { AudioChunksMeter } from './AudioChunksMeter';
 import { RenditionPicker } from './RenditionPicker';
 import { StatsPanel } from './StatsPanel';
@@ -82,10 +79,7 @@ function VideoSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const sortedVideoTracks = [...broadcast.videoTracks].sort((a, b) => {
-    const px = (t: typeof a) => (t.width ?? 0) * (t.height ?? 0);
-    return px(b) - px(a);
-  });
+  const sortedVideoTracks = sortVideoTracksByResolution(broadcast.videoTracks);
 
   // Aspect ratio of the active video track (or the largest one we know of).
   // Passed to VideoPlayerView so the fullscreen modal letterboxes correctly on
@@ -99,34 +93,7 @@ function VideoSection({
       ? activeTrack.width / activeTrack.height
       : undefined;
 
-  const playingChangeEvent = useEvent(player, 'playingChange');
-  useEffect(() => {
-    if (playingChangeEvent !== undefined) {
-      addEntry(
-        'playingChange',
-        `video isPlaying=${playingChangeEvent.isPlaying}`,
-        broadcast.path
-      );
-    }
-  }, [playingChangeEvent, addEntry, broadcast.path]);
-
-  useEventListener(player, 'trackStopped', () => {
-    addEntry('trackStopped', 'video', broadcast.path);
-  });
-
-  useEffect(() => {
-    const sub = player.addListener(
-      'trackSwitched',
-      ({ trackKind, trackName }) => {
-        addEntry(
-          'trackSwitched',
-          `${trackKind} → ${trackName}`,
-          broadcast.path
-        );
-      }
-    );
-    return () => sub.remove();
-  }, [player, addEntry, broadcast.path]);
+  usePlayerEventLog(player, 'video', addEntry, broadcast.path);
 
   return (
     <>
@@ -172,34 +139,7 @@ function AudioSection({
     p.play();
   });
 
-  const playingChangeEvent = useEvent(player, 'playingChange');
-  useEffect(() => {
-    if (playingChangeEvent !== undefined) {
-      addEntry(
-        'playingChange',
-        `audio isPlaying=${playingChangeEvent.isPlaying}`,
-        broadcast.path
-      );
-    }
-  }, [playingChangeEvent, addEntry, broadcast.path]);
-
-  useEventListener(player, 'trackStopped', () => {
-    addEntry('trackStopped', 'audio', broadcast.path);
-  });
-
-  useEffect(() => {
-    const sub = player.addListener(
-      'trackSwitched',
-      ({ trackKind, trackName }) => {
-        addEntry(
-          'trackSwitched',
-          `${trackKind} → ${trackName}`,
-          broadcast.path
-        );
-      }
-    );
-    return () => sub.remove();
-  }, [player, addEntry, broadcast.path]);
+  usePlayerEventLog(player, 'audio', addEntry, broadcast.path);
 
   return (
     <>

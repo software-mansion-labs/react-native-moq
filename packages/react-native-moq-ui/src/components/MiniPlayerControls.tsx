@@ -1,7 +1,8 @@
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { MaterialIcons } from '@react-native-vector-icons/material-icons/static';
-import { useEvent, type Player } from 'react-native-moq';
+import { type Player } from 'react-native-moq';
 import { useMiniPlayerControls } from '../contexts/MiniPlayerContext';
+import { usePlayPause } from '../usePlayPause';
 import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
 
 // Default inline chrome for VideoPlayerView. Mirrors the platform split used
@@ -16,20 +17,8 @@ import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
 // this component only renders the chrome itself.
 export function MiniPlayerControls() {
   const { player, enterFullscreen, show } = useMiniPlayerControls();
-  // Reactively follows isPlaying. Seeded with the current value to avoid a
-  // one-frame mismatch before the first event lands — same trick as in
-  // FullscreenControls.
-  const playingEvent = useEvent(player, 'playingChange', {
-    isPlaying: player.isPlaying,
-  });
-  const isPlaying = playingEvent.isPlaying;
+  const { isPlaying, onTogglePlay } = usePlayPause(player, show);
 
-  // Any control press counts as activity so the auto-hide timer restarts.
-  const onTogglePlay = () => {
-    show();
-    if (isPlaying) player.pause();
-    else player.play();
-  };
   const onEnterFullscreen = () => {
     show();
     enterFullscreen();

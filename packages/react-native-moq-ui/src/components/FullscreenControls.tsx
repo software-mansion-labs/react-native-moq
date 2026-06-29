@@ -1,8 +1,9 @@
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@react-native-vector-icons/material-icons/static';
-import { useEvent, type Player } from 'react-native-moq';
+import { type Player } from 'react-native-moq';
 import { useFullscreenControls } from '../contexts/FullscreenContext';
+import { usePlayPause } from '../usePlayPause';
 import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
 
 // Default fullscreen chrome. Mirrors the platform conventions: a close
@@ -18,21 +19,8 @@ export function FullscreenControls() {
   // landscape too (where insets show up on left/right). We respect all four
   // edges so the layout stays correct in any orientation.
   const insets = useSafeAreaInsets();
-  // Reactively follows isPlaying. The Player keeps its own isPlaying flag in
-  // sync via this event, so seeding with the current value avoids a brief
-  // mismatch on mount before the first event lands.
-  const playingEvent = useEvent(player, 'playingChange', {
-    isPlaying: player.isPlaying,
-  });
-  const isPlaying = playingEvent.isPlaying;
+  const { isPlaying, onTogglePlay } = usePlayPause(player, show);
 
-  // Any control press should count as activity, so the auto-hide timer
-  // restarts (and we don't immediately fade out underneath the user's finger).
-  const onTogglePlay = () => {
-    show();
-    if (isPlaying) player.pause();
-    else player.play();
-  };
   const onExit = () => {
     show();
     exit();

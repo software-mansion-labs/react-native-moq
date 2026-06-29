@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { NativeEventEmitter } from 'react-native';
 import NativeMoQMicrophone from '../native/NativeMoQMicrophone';
+import { useNativeState } from './useNativeState';
 
 const micEmitter = new NativeEventEmitter(NativeMoQMicrophone);
 
@@ -45,8 +46,11 @@ export function useMicrophone(
   const codec = options.audioCodec ?? 'opus';
   const sampleRate = options.audioSampleRate ?? 48000;
 
-  const [state, setState] = useState<MicrophoneCaptureState>('idle');
-  const [lastError, setLastError] = useState<string | null>(null);
+  const { state, lastError } = useNativeState<MicrophoneCaptureState>(
+    micEmitter,
+    'micStateChanged',
+    ['active', 'starting']
+  );
 
   useEffect(() => {
     NativeMoQMicrophone.startCapture(sampleRate);
@@ -55,20 +59,6 @@ export function useMicrophone(
     // on the native capture, so re-running the effect would just churn the
     // refcount. Document this in the public API instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const sub = micEmitter.addListener('micStateChanged', (event) => {
-      const e = event as { state: string };
-      const next = e.state as MicrophoneCaptureState;
-      setState(next);
-      if (next.startsWith('error:')) {
-        setLastError(next.slice('error:'.length));
-      } else if (next === 'active' || next === 'starting') {
-        setLastError(null);
-      }
-    });
-    return () => sub.remove();
   }, []);
 
   return useMemo<MicrophoneTrack>(
