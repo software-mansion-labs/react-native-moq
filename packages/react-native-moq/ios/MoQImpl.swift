@@ -59,6 +59,10 @@ private let audioKeySuffix = "_audio"
     var broadcasts: [String: Broadcast] = [:]
     // Raw-track sinks keyed by "path|track", ref-counted across JS subscribers.
     var trackSinks: [String: TrackSink] = [:]
+    // Decoded-PCM sinks keyed by "path|track|sampleFormat", ref-counted across
+    // JS subscribers. Separate from trackSinks so encoded and decoded streams of
+    // the same track can coexist (moq-kit shares the compressed subscription).
+    var audioDataSinks: [String: AudioDataSink] = [:]
 
     init(id: String, session: Session) {
       self.id = id
@@ -167,6 +171,28 @@ private let audioKeySuffix = "_audio"
     Task { @MainActor in
       self._unsubscribeTrackObjects(
         sessionId: sessionId, broadcastPath: broadcastPath, trackName: trackName)
+    }
+  }
+
+  @objc(subscribeAudioDataWithSessionId:broadcastPath:trackName:sampleFormat:)
+  public func subscribeAudioData(
+    sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
+  ) {
+    Task { @MainActor in
+      self._subscribeAudioData(
+        sessionId: sessionId, broadcastPath: broadcastPath,
+        trackName: trackName, sampleFormat: sampleFormat)
+    }
+  }
+
+  @objc(unsubscribeAudioDataWithSessionId:broadcastPath:trackName:sampleFormat:)
+  public func unsubscribeAudioData(
+    sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
+  ) {
+    Task { @MainActor in
+      self._unsubscribeAudioData(
+        sessionId: sessionId, broadcastPath: broadcastPath,
+        trackName: trackName, sampleFormat: sampleFormat)
     }
   }
 
@@ -532,6 +558,76 @@ private let audioKeySuffix = "_audio"
       ctx.trackSinks.removeValue(forKey: key)
       sink.close()
     }
+    for (key, sink) in ctx.audioDataSinks where key.hasPrefix(prefix) {
+      ctx.audioDataSinks.removeValue(forKey: key)
+      sink.close()
+    }
+  }
+
+  // MARK: - Private: decoded PCM audio (AudioDataStream)
+
+  private func audioDataSinkKey(
+    path: String, trackName: String, sampleFormat: String
+  ) -> String {
+    "\(path)|\(trackName)|\(sampleFormat)"
+  }
+
+  @MainActor
+  private func _subscribeAudioData(
+    sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
+  ) {
+    guard let ctx = contexts[sessionId] else { return }
+    let key = audioDataSinkKey(
+      path: broadcastPath, trackName: trackName, sampleFormat: sampleFormat)
+
+    // Already decoding this (track, format) — share the one stream.
+    if let sink = ctx.audioDataSinks[key] {
+      sink.refCount += 1
+      return
+    }
+
+    // Decoded audio rides the catalog's shared media subscription, so we resolve
+    // the track against the catalog the broadcast advertised.
+    guard let catalog = ctx.catalogs[broadcastPath] else { return }
+    let format = AudioDataFormat(
+      sampleFormat: sampleFormat == "i16" ? .int16 : .float32)
+    guard
+      let stream = try? AudioDataStream(
+        catalog: catalog, trackName: trackName, format: format)
+    else { return }
+
+    let sink = AudioDataSink(stream: stream)
+    ctx.audioDataSinks[key] = sink
+    sink.start { [weak self] data in
+      self?.onEvent?(
+        "audioData",
+        [
+          "sessionId": sessionId,
+          "broadcastPath": broadcastPath,
+          "trackName": trackName,
+          "sampleFormat": sampleFormat,
+          "data": data.bytes.base64EncodedString(),
+          "frameCount": Double(data.frameCount),
+          "sampleRate": data.sampleRate,
+          "channelCount": Double(data.channelCount),
+          "timestampUs": Double(data.timestampUs),
+        ])
+    }
+  }
+
+  @MainActor
+  private func _unsubscribeAudioData(
+    sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
+  ) {
+    guard let ctx = contexts[sessionId] else { return }
+    let key = audioDataSinkKey(
+      path: broadcastPath, trackName: trackName, sampleFormat: sampleFormat)
+    guard let sink = ctx.audioDataSinks[key] else { return }
+    sink.refCount -= 1
+    if sink.refCount <= 0 {
+      ctx.audioDataSinks.removeValue(forKey: key)
+      sink.close()
+    }
   }
 }
 
@@ -565,6 +661,40 @@ final class TrackSink {
     task?.cancel()
     task = nil
     subscription.close()
+  }
+}
+
+// MARK: - AudioDataSink
+
+/// Owns a single moq-kit `AudioDataStream` plus the task draining its decoded
+/// PCM stream, ref-counted across JS subscribers to the same (path, track,
+/// sampleFormat).
+@MainActor
+final class AudioDataSink {
+  private let stream: AudioDataStream
+  private var task: Task<Void, Never>?
+  var refCount = 1
+
+  init(stream: AudioDataStream) {
+    self.stream = stream
+  }
+
+  func start(emit: @escaping (AudioData) -> Void) {
+    task = Task { [stream] in
+      do {
+        for try await data in stream.audio {
+          emit(data)
+        }
+      } catch {
+        // Stream ended or errored — nothing to do; close() handles teardown.
+      }
+    }
+  }
+
+  func close() {
+    task?.cancel()
+    task = nil
+    stream.close()
   }
 }
 

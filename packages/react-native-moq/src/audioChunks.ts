@@ -1,6 +1,11 @@
-import { NativeEventEmitter } from 'react-native';
+import { NativeEventEmitter, Platform } from 'react-native';
 import NativeMoQ from './native/NativeMoQ';
-import type { AudioChunk, BroadcastInfo, ChunkSubscription } from './types';
+import type {
+  AudioChunk,
+  AudioChunkFormat,
+  BroadcastInfo,
+  ChunkSubscription,
+} from './types';
 
 // One shared emitter for the MoQ module — mirrors useBroadcasts. The native
 // side fans every received track object out as a `trackObject` event; each
@@ -15,6 +20,28 @@ interface TrackObjectEvent {
   groupSequence: number;
   objectIndex: number;
 }
+
+interface AudioDataEvent {
+  sessionId: string;
+  broadcastPath: string;
+  trackName: string;
+  sampleFormat: string; // 'f32' | 'i16'
+  data: string; // base64 interleaved PCM
+  frameCount: number;
+  sampleRate: number;
+  channelCount: number;
+  timestampUs: number;
+}
+
+// `pcm-f32` / `pcm-i16` map to the moq-kit AudioDataStream sample formats the
+// native layer understands; `encoded` uses the raw-object path instead.
+const PCM_SAMPLE_FORMAT: Record<
+  Exclude<AudioChunkFormat, 'encoded'>,
+  'f32' | 'i16'
+> = {
+  'pcm-f32': 'f32',
+  'pcm-i16': 'i16',
+};
 
 const BASE64_CHARS =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -54,16 +81,25 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 export interface SubscribeAudioChunksOptions {
   /** Start receiving immediately. Defaults to true. */
   autoStart?: boolean;
+  /**
+   * How to deliver audio. Defaults to `'encoded'` (one Opus/AAC object per
+   * chunk, cross-platform). The `'pcm-f32'` / `'pcm-i16'` formats deliver
+   * decoded interleaved PCM via moq-kit's decoder — **iOS only** for now;
+   * requesting them on Android throws.
+   */
+  format?: AudioChunkFormat;
 }
 
 /**
- * Subscribe to a broadcast's audio track and receive each encoded chunk
- * (one Opus/AAC object) as an `ArrayBuffer`. Framework-agnostic — works with or
- * without React. For multiple tracks or broadcasts, call it once per
- * `(broadcast, trackName)`; each call returns its own independent handle.
+ * Subscribe to a broadcast's audio track and receive each chunk as an
+ * `ArrayBuffer`. Framework-agnostic — works with or without React. For multiple
+ * tracks or broadcasts, call it once per `(broadcast, trackName)`; each call
+ * returns its own independent handle.
  *
- * The returned chunks are *encoded* audio, not PCM. Decode them downstream
- * (e.g. react-native-audio-api) before playback or feeding executorch.
+ * By default chunks are *encoded* audio (one Opus/AAC object) — decode them
+ * downstream (e.g. react-native-audio-api) before playback or feeding
+ * executorch. Pass `format: 'pcm-f32'` or `'pcm-i16'` to instead receive decoded
+ * interleaved PCM (iOS only).
  */
 export function subscribeAudioChunks(
   broadcast: BroadcastInfo,
@@ -71,6 +107,11 @@ export function subscribeAudioChunks(
   onChunk: (chunk: AudioChunk) => void,
   options: SubscribeAudioChunksOptions = {}
 ): ChunkSubscription {
+  const format = options.format ?? 'encoded';
+  if (format !== 'encoded') {
+    return subscribePcmChunks(broadcast, trackName, onChunk, format, options);
+  }
+
   const { sessionId, path } = broadcast;
   // Enrich every chunk with codec/sampleRate from the catalog so consumers
   // don't have to look the track up themselves. Stable for a given path+track.
@@ -103,6 +144,7 @@ export function subscribeAudioChunks(
         }
         onChunk({
           data: base64ToArrayBuffer(event.data),
+          format: 'encoded',
           trackName,
           codec,
           sampleRate,
@@ -119,6 +161,81 @@ export function subscribeAudioChunks(
       listener?.remove();
       listener = null;
       NativeMoQ.unsubscribeTrackObjects(sessionId, path, trackName);
+    },
+  };
+
+  if (options.autoStart !== false) subscription.start();
+  return subscription;
+}
+
+/**
+ * Decoded-PCM variant of `subscribeAudioChunks`, backed by moq-kit's
+ * `AudioDataStream`. Mirrors the encoded path but listens on the `audioData`
+ * event and carries the decoder's PCM metadata (frameCount / timestampUs /
+ * decoded sampleRate). iOS only — throws on Android.
+ */
+function subscribePcmChunks(
+  broadcast: BroadcastInfo,
+  trackName: string,
+  onChunk: (chunk: AudioChunk) => void,
+  format: Exclude<AudioChunkFormat, 'encoded'>,
+  options: SubscribeAudioChunksOptions
+): ChunkSubscription {
+  if (Platform.OS !== 'ios') {
+    throw new Error(
+      `Decoded audio chunks (format: '${format}') are only supported on iOS; ` +
+        `use the default 'encoded' format on ${Platform.OS}.`
+    );
+  }
+
+  const { sessionId, path } = broadcast;
+  const sampleFormat = PCM_SAMPLE_FORMAT[format];
+  const info = broadcast.audioTracks.find((t) => t.name === trackName);
+  const codec = info?.codec ?? '';
+
+  let active = false;
+  let listener: { remove: () => void } | null = null;
+
+  const subscription: ChunkSubscription = {
+    sessionId,
+    broadcastPath: path,
+    trackName,
+    get isActive() {
+      return active;
+    },
+    start() {
+      if (active) return;
+      active = true;
+      listener = emitter.addListener('audioData', (raw) => {
+        const event = raw as AudioDataEvent;
+        if (
+          event.sessionId !== sessionId ||
+          event.broadcastPath !== path ||
+          event.trackName !== trackName ||
+          event.sampleFormat !== sampleFormat
+        ) {
+          return;
+        }
+        onChunk({
+          data: base64ToArrayBuffer(event.data),
+          format,
+          trackName,
+          codec,
+          // Decoded rate/channels come from the decoder, not the catalog.
+          sampleRate: event.sampleRate,
+          channelCount: event.channelCount,
+          frameCount: event.frameCount,
+          timestampUs: event.timestampUs,
+        });
+      });
+      NativeMoQ.subscribeAudioData(sessionId, path, trackName, sampleFormat);
+    },
+    stop() {
+      if (!active) return;
+      active = false;
+      listener?.remove();
+      listener = null;
+      NativeMoQ.unsubscribeAudioData(sessionId, path, trackName, sampleFormat);
     },
   };
 

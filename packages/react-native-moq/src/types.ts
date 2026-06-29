@@ -27,25 +27,57 @@ export interface AudioTrackInfo {
 
 export const AUDIO_PLAYER_KEY_SUFFIX = '_audio';
 
+/**
+ * How `useAudioChunks` / `subscribeAudioChunks` delivers audio:
+ * - `'encoded'` — one Opus/AAC object exactly as published (cross-platform).
+ * - `'pcm-f32'` — decoded interleaved 32-bit float PCM (iOS only for now).
+ * - `'pcm-i16'` — decoded interleaved signed 16-bit PCM (iOS only for now).
+ *
+ * The PCM formats are produced by moq-kit's decoder; they are unavailable on
+ * Android and requesting one there throws.
+ */
+export type AudioChunkFormat = 'encoded' | 'pcm-f32' | 'pcm-i16';
+
 export interface AudioChunk {
   /**
-   * Encoded audio bytes for one MoQ object — i.e. one Opus/AAC frame exactly as
-   * it was published. Not decoded PCM; decode downstream (e.g. with
-   * react-native-audio-api) before playback or ML inference.
+   * The audio bytes for one chunk. For `format: 'encoded'` this is one Opus/AAC
+   * object exactly as published — decode downstream (e.g. react-native-audio-api)
+   * before playback or ML inference. For the `pcm-*` formats this is already
+   * decoded, interleaved PCM (Float32 or Int16) ready to feed to playback or an
+   * ML model.
    */
   data: ArrayBuffer;
+  /** Delivery format of `data` — encoded object vs decoded PCM. */
+  format: AudioChunkFormat;
   /** Name of the audio track this chunk came from. */
   trackName: string;
   /** Codec advertised in the broadcast catalog, e.g. 'opus' | 'aac'. */
   codec: string;
-  /** Source sample rate from the catalog (e.g. 48000), or 0 if unknown. */
+  /**
+   * Sample rate of `data` in Hz. For `'encoded'` this is the catalog's source
+   * rate (0 if unknown); for the `pcm-*` formats it is the decoded PCM rate.
+   */
   sampleRate: number;
-  /** Channel count from the catalog, when advertised. */
+  /** Channel count of `data`, when known. */
   channelCount?: number;
-  /** MoQ group sequence — lets consumers detect gaps / ordering. */
-  groupSequence: number;
-  /** Object index within the group. */
-  objectIndex: number;
+  /**
+   * Number of PCM frames in `data`. Only set for the `pcm-*` formats — undefined
+   * for `'encoded'` chunks.
+   */
+  frameCount?: number;
+  /**
+   * Presentation timestamp in microseconds, relative to the stream origin. Only
+   * set for the `pcm-*` formats — undefined for `'encoded'` chunks.
+   */
+  timestampUs?: number;
+  /**
+   * MoQ group sequence — lets consumers detect gaps / ordering. Only set for
+   * `'encoded'` chunks; undefined for the `pcm-*` formats (the decoder emits
+   * timestamped PCM rather than raw objects).
+   */
+  groupSequence?: number;
+  /** Object index within the group. Only set for `'encoded'` chunks. */
+  objectIndex?: number;
 }
 
 /**

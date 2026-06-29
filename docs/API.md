@@ -190,22 +190,29 @@ Passing an `AudioPlayer` to `<VideoView>` (or `<VideoPlayerView>`) is a type err
 
 ### `useAudioChunks(broadcast, onChunk, options?)`
 
-Receives a broadcast's audio as a stream of **encoded chunks** — each callback gets one MoQ object (one Opus/AAC frame, exactly as published) as an `ArrayBuffer`. Use this to route audio into another pipeline such as [react-native-audio-api](https://docs.swmansion.com/react-native-audio-api/) or [react-native-executorch](https://docs.swmansion.com/react-native-executorch/) instead of (or alongside) the built-in `useAudioPlayer`.
+Receives a broadcast's audio as a stream of chunks — each callback gets one chunk's bytes as an `ArrayBuffer`. By default chunks are **encoded** (one MoQ object, i.e. one Opus/AAC frame exactly as published); pass `format: 'pcm-f32'` or `'pcm-i16'` to instead receive **decoded interleaved PCM** (iOS only). Use this to route audio into another pipeline such as [react-native-audio-api](https://docs.swmansion.com/react-native-audio-api/) or [react-native-executorch](https://docs.swmansion.com/react-native-executorch/) instead of (or alongside) the built-in `useAudioPlayer`.
 
 ```tsx
 import { useAudioChunks } from 'react-native-moq';
 
+// Encoded (default, cross-platform) — decode chunk.data before use.
 const audio = useAudioChunks(broadcast, (chunk) => {
-  // chunk.data is encoded (chunk.codec — 'opus' | 'aac'); decode before use.
-  decoder.push(chunk.data);
+  decoder.push(chunk.data); // chunk.codec — 'opus' | 'aac'
 });
+
+// Decoded PCM (iOS) — chunk.data is ready-to-use Float32 PCM.
+const pcm = useAudioChunks(
+  broadcast,
+  (chunk) => mlModel.feed(chunk.data), // chunk.frameCount @ chunk.sampleRate
+  { format: 'pcm-f32' }
+);
 
 return <Button title="Stop" onPress={audio.stop} />;
 ```
 
-> **These chunks are encoded, not PCM.** `data` holds raw Opus/AAC bytes. Decode them downstream (e.g. with react-native-audio-api) before playback or feeding an ML model — executorch speech-to-text expects mono Float32 PCM at 16 kHz, and `AudioContext.decodeAudioData` handles AAC but not Opus or un-containerized streaming frames. A native decoded-PCM path may be added later.
+> **Encoded vs. PCM.** With the default `format: 'encoded'`, `data` holds raw Opus/AAC bytes — decode them downstream (e.g. with react-native-audio-api) before playback or feeding an ML model, since executorch speech-to-text expects mono Float32 PCM at 16 kHz and `AudioContext.decodeAudioData` handles AAC but not Opus or un-containerized streaming frames. With `format: 'pcm-f32'` / `'pcm-i16'`, moq-kit decodes for you and `data` is interleaved PCM (with `frameCount` / `timestampUs` and the decoded `sampleRate` / `channelCount`). **The PCM formats are iOS-only for now — requesting one on Android throws.**
 
-`onChunk` is kept in a ref, so changing it between renders does not re-create the subscription. The subscription stops automatically on unmount.
+`onChunk` is kept in a ref, so changing it between renders does not re-create the subscription. The subscription stops automatically on unmount. Changing `format` re-creates the subscription.
 
 **Options:**
 
@@ -213,6 +220,7 @@ return <Button title="Stop" onPress={audio.stop} />;
 |---|---|---|
 | `trackName` | `string` | Audio track to listen to. Defaults to the broadcast's first audio track |
 | `autoStart` | `boolean` | Start receiving on mount. Defaults to `true`; pass `false` to defer until `.start()` |
+| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | How to deliver audio. Defaults to `'encoded'` (cross-platform). The `pcm-*` formats deliver decoded interleaved PCM — **iOS only**, throws on Android |
 
 Returns a [`ChunkSubscription`](#chunksubscription):
 
@@ -249,7 +257,17 @@ const subs = broadcasts.map((b) =>
 
 Subscriptions to the same `(session, path, track)` share one native track subscription under the hood (ref-counted), so it is safe to subscribe more than once.
 
-**Options:** `{ autoStart?: boolean }` — start immediately (default `true`).
+**Options:**
+
+| Option | Type | Description |
+|---|---|---|
+| `autoStart` | `boolean` | Start immediately. Defaults to `true` |
+| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | How to deliver audio. Defaults to `'encoded'`. The `pcm-*` formats deliver decoded interleaved PCM — **iOS only**, throws on Android |
+
+```ts
+// decoded PCM (iOS) — framework-agnostic
+const pcm = subscribeAudioChunks(broadcast, 'audio', onChunk, { format: 'pcm-i16' });
+```
 
 In React, use this inside an effect for dynamic track sets — it sidesteps the rules-of-hooks constraint of calling `useAudioChunks` in a loop:
 
@@ -465,17 +483,22 @@ interface AudioTrackInfo {
 
 #### `AudioChunk`
 
-One encoded audio object delivered by [`useAudioChunks`](#useaudiochunksbroadcast-onchunk-options) / [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options).
+One audio chunk delivered by [`useAudioChunks`](#useaudiochunksbroadcast-onchunk-options) / [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options). Which fields are populated depends on `format`: `groupSequence` / `objectIndex` are set for `'encoded'` chunks; `frameCount` / `timestampUs` are set for the `pcm-*` formats.
 
 ```ts
+type AudioChunkFormat = 'encoded' | 'pcm-f32' | 'pcm-i16';
+
 interface AudioChunk {
-  data: ArrayBuffer; // encoded Opus/AAC bytes for one MoQ object (not PCM)
+  data: ArrayBuffer; // 'encoded': one Opus/AAC object; 'pcm-*': interleaved PCM
+  format: AudioChunkFormat;
   trackName: string;
   codec: string; // 'opus' | 'aac', from the catalog
-  sampleRate: number; // source sample rate, or 0 if unknown
+  sampleRate: number; // 'encoded': catalog source rate (0 if unknown); 'pcm-*': decoded rate
   channelCount?: number;
-  groupSequence: number; // MoQ group sequence — detect gaps/ordering
-  objectIndex: number; // object index within the group
+  frameCount?: number; // PCM frames in `data` — pcm-* only
+  timestampUs?: number; // presentation timestamp (µs) — pcm-* only
+  groupSequence?: number; // MoQ group sequence (detect gaps/ordering) — encoded only
+  objectIndex?: number; // object index within the group — encoded only
 }
 ```
 

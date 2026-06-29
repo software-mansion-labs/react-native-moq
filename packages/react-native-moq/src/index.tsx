@@ -59,6 +59,7 @@ export type { EventSubscription } from './EventEmitter';
 export { PlayerHandle } from './types';
 export type {
   AudioChunk,
+  AudioChunkFormat,
   AudioPlayer,
   AudioTrackInfo,
   BroadcastInfo,

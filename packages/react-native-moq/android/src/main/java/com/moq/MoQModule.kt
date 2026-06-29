@@ -388,6 +388,26 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
   }
 
+  // Decoded-PCM audio (moq-kit AudioDataStream) is iOS-only for now; moq-kit has
+  // no Android decoded-audio API yet. Throw so JS callers get a clear signal
+  // rather than a silent stream that never delivers. The JS layer also guards on
+  // Platform.OS, so this is a backstop.
+  override fun subscribeAudioData(
+    sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
+  ) {
+    throw UnsupportedOperationException(
+      "Decoded audio chunks (PCM) are not supported on Android yet; use the " +
+        "default encoded format instead."
+    )
+  }
+
+  override fun unsubscribeAudioData(
+    sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
+  ) {
+    // No-op: subscribeAudioData never succeeds on Android, so there is nothing
+    // to tear down.
+  }
+
   override fun invalidate() {
     super.invalidate()
     for (id in contexts.keys.toList()) disconnect(id)

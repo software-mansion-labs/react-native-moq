@@ -47,6 +47,7 @@ RCT_EXPORT_MODULE()
     @"playerEvent",
     @"playbackStatsUpdated",
     @"trackObject",
+    @"audioData",
   ];
 }
 
@@ -114,6 +115,14 @@ RCT_EXPORT_MODULE()
 
 - (void)unsubscribeTrackObjects:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath trackName:(NSString *)trackName {
   [[MoQImpl shared] unsubscribeTrackObjectsWithSessionId:sessionId broadcastPath:broadcastPath trackName:trackName];
+}
+
+- (void)subscribeAudioData:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath trackName:(NSString *)trackName sampleFormat:(NSString *)sampleFormat {
+  [[MoQImpl shared] subscribeAudioDataWithSessionId:sessionId broadcastPath:broadcastPath trackName:trackName sampleFormat:sampleFormat];
+}
+
+- (void)unsubscribeAudioData:(NSString *)sessionId broadcastPath:(NSString *)broadcastPath trackName:(NSString *)trackName sampleFormat:(NSString *)sampleFormat {
+  [[MoQImpl shared] unsubscribeAudioDataWithSessionId:sessionId broadcastPath:broadcastPath trackName:trackName sampleFormat:sampleFormat];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
