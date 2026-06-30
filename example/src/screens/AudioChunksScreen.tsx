@@ -18,6 +18,7 @@ import {
 } from 'react-native-moq';
 import { StateIndicator } from '../components/StateIndicator';
 import { WaveformMeter } from '../components/WaveformMeter';
+import { TranscriptionPanel } from '../components/TranscriptionPanel';
 import { useAudioApiPlayback } from '../hooks/useAudioApiPlayback';
 
 // Decoded PCM is iOS-only for now, so that's where the playback + meter demo
@@ -159,7 +160,42 @@ const EMPTY_STATS: ChunkStats = {
   kbps: 0,
 };
 
+type DemoMode = 'playback' | 'transcribe';
+
+// On iOS the decoded-PCM chunks drive two demos — play them back / meter them,
+// or run them through on-device Whisper. Android only has encoded chunks today,
+// so it goes straight to the playback/inspector panel.
 function AudioChunksDemo({ broadcast }: { broadcast: BroadcastInfo }) {
+  const [mode, setMode] = useState<DemoMode>('playback');
+
+  if (!SUPPORTS_PCM) {
+    return <PlaybackPanel broadcast={broadcast} />;
+  }
+
+  return (
+    <View style={styles.modeWrap}>
+      <View style={styles.formatRow}>
+        <FormatTab
+          label="Playback"
+          active={mode === 'playback'}
+          onPress={() => setMode('playback')}
+        />
+        <FormatTab
+          label="Transcribe"
+          active={mode === 'transcribe'}
+          onPress={() => setMode('transcribe')}
+        />
+      </View>
+      {mode === 'playback' ? (
+        <PlaybackPanel broadcast={broadcast} />
+      ) : (
+        <TranscriptionPanel broadcast={broadcast} />
+      )}
+    </View>
+  );
+}
+
+function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
   const [format, setFormat] = useState<AudioChunkFormat>(
     SUPPORTS_PCM ? 'pcm-f32' : 'encoded'
   );
@@ -353,6 +389,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   demoPath: { flex: 1, fontSize: 13, fontWeight: '600', color: '#374151' },
+  modeWrap: { gap: 12 },
   demo: {
     gap: 12,
     borderWidth: 1,

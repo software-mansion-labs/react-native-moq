@@ -11,12 +11,16 @@
     "web": "vite"
   },
   "dependencies": {
+    "@dr.pogodin/react-native-fs": "^2.39.1",
+    "@kesha-antonov/react-native-background-downloader": "^4.5.6",
     "@react-native-vector-icons/get-image": "^13.0.0",
     "@react-native-vector-icons/material-icons": "^13.1.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-native": "0.86.0",
     "react-native-audio-api": "^0.12.2",
+    "react-native-executorch": "^0.9.2",
+    "react-native-executorch-bare-resource-fetcher": "^0.9.1",
     "react-native-moq": "workspace:^",
     "react-native-moq-ui": "workspace:^",
     "react-native-safe-area-context": "^5.8.0",

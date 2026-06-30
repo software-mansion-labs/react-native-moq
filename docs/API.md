@@ -190,7 +190,7 @@ Passing an `AudioPlayer` to `<VideoView>` (or `<VideoPlayerView>`) is a type err
 
 ### `useAudioChunks(broadcast, onChunk, options?)`
 
-Receives a broadcast's audio as a stream of chunks — each callback gets one chunk's bytes as an `ArrayBuffer`. By default chunks are **encoded** (one MoQ object, i.e. one Opus/AAC frame exactly as published); pass `format: 'pcm-f32'` or `'pcm-i16'` to instead receive **decoded interleaved PCM** (iOS only). Use this to route audio into another pipeline such as [react-native-audio-api](https://docs.swmansion.com/react-native-audio-api/) or [react-native-executorch](https://docs.swmansion.com/react-native-executorch/) instead of (or alongside) the built-in `useAudioPlayer`.
+Receives a broadcast's audio as a stream of chunks — each callback gets one chunk's bytes as an `ArrayBuffer`. By default chunks are **encoded** (one MoQ object, i.e. one Opus/AAC frame exactly as published); pass `format: 'pcm-f32'` or `'pcm-i16'` to instead receive **decoded interleaved PCM** (iOS only). Use this to route audio into another pipeline such as [react-native-audio-api](https://docs.swmansion.com/react-native-audio-api/) or [react-native-executorch](https://docs.swmansion.com/react-native-executorch/) instead of (or alongside) the built-in `useAudioPlayer`. The example app's **Audio** tab is a worked integration of both — decoded-PCM playback and on-device Whisper transcription.
 
 ```tsx
 import { useAudioChunks } from 'react-native-moq';

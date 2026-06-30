@@ -8,13 +8,18 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-platform :ios, '16.0'
+platform :ios, '17.0'
 prepare_react_native_project!
 
-# Workaround for react-native-audio-api not working as dynamic framework
+# These pods ship prebuilt *static* archives that must be force-loaded into the
+# final binary. Under `use_frameworks! :dynamic` they instead build as dynamic
+# frameworks that don't self-contain those symbols (undefined-symbol link
+# errors). Building just these pods as static frameworks links the archives into
+# the app target — where the paths resolve — and fixes both.
+STATIC_FRAMEWORK_PODS = ['RNAudioAPI', 'react-native-executorch']
 pre_install do |installer|
   installer.pod_targets.each do |pod|
-    if pod.name == 'RNAudioAPI'
+    if STATIC_FRAMEWORK_PODS.include?(pod.name)
       def pod.build_type
         Pod::BuildType.static_framework
       end
@@ -44,5 +49,18 @@ target 'MoQExample' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # @dr.pogodin/react-native-fs uses UTType but its podspec doesn't link
+    # UniformTypeIdentifiers, so as a dynamic framework it fails with undefined
+    # _UTType* symbols. Link the framework onto its target.
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'ReactNativeFs'
+      target.build_configurations.each do |config|
+        flags = Array(config.build_settings['OTHER_LDFLAGS'] || '$(inherited)')
+        unless flags.include?('UniformTypeIdentifiers')
+          config.build_settings['OTHER_LDFLAGS'] = flags + ['-framework', 'UniformTypeIdentifiers']
+        end
+      end
+    end
   end
 end

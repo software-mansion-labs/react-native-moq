@@ -142,14 +142,14 @@ The host app is responsible for camera/microphone runtime permissions. Screen sh
 
 The full API reference — every hook, component, type, and the `react-native-moq-ui` package — lives in [**docs/API.md**](docs/API.md):
 
-- [Playback API](docs/API.md#playback-api) — `useSession`, `useBroadcasts`, `useVideoPlayer`, `useAudioPlayer`, events, `<VideoView>`, types
+- [Playback API](docs/API.md#playback-api) — `useSession`, `useBroadcasts`, `useVideoPlayer`, `useAudioPlayer`, `useAudioChunks`, events, `<VideoView>`, types
 - [Publishing](docs/API.md#publishing) — `useCamera`, `useMultiCamera`, `useMicrophone`, `usePublisher`, `<PublisherView>`, `useDataTrack`, screen broadcasting
 - [Advanced usage](docs/API.md#advanced-usage) — rendition switching, custom target latency, live stats
 - [Default UI components](docs/API.md#default-ui-components-react-native-moq-ui) — `<VideoPlayerView>`, fullscreen, controls, `<VolumeSlider>`
 
 ## Example app
 
-The [`example/`](example/) directory contains a full demo app with three tabs: **Subscribe** (discover and play broadcasts), **Publish** (camera/mic/screen broadcasting), and **MoQBoy** (a cloud-gaming controller built on data tracks). To run it:
+The [`example/`](example/) directory contains a full demo app with four tabs: **Subscribe** (discover and play broadcasts), **Publish** (camera/mic/screen broadcasting), **Audio** (consume a broadcast's audio as raw chunks via [`useAudioChunks`](docs/API.md#useaudiochunksbroadcast-onchunk-options) — decoded-PCM playback through [react-native-audio-api](https://github.com/software-mansion/react-native-audio-api) and on-device Whisper transcription through [react-native-executorch](https://github.com/software-mansion/react-native-executorch)), and **MoQBoy** (a cloud-gaming controller built on data tracks). To run it:
 
 ```sh
 yarn

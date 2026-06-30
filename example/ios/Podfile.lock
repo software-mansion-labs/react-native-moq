@@ -3,6 +3,9 @@ PODS:
   - hermes-engine (250829098.0.14):
     - hermes-engine/Pre-built (= 250829098.0.14)
   - hermes-engine/Pre-built (250829098.0.14)
+  - MMKV (2.4.0):
+    - MMKVCore (~> 2.4.0)
+  - MMKVCore (2.4.0)
   - MoQ (0.0.1):
     - hermes-engine
     - RCTRequired
@@ -25,6 +28,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - opencv-rne (4.11.0)
   - RCTDeprecation (0.86.0)
   - RCTRequired (0.86.0)
   - RCTSwiftUI (0.86.0)
@@ -1448,6 +1452,52 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - react-native-background-downloader (4.5.6):
+    - hermes-engine
+    - MMKV (>= 1.2.0)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - react-native-executorch (0.9.2):
+    - hermes-engine
+    - opencv-rne (~> 4.11.0)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - react-native-safe-area-context (5.8.0):
     - hermes-engine
     - RCTRequired
@@ -1937,6 +1987,28 @@ PODS:
     - React-utils (= 0.86.0)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.86.0)
+  - ReactNativeFs (2.39.1):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - RNAudioAPI (0.12.2):
     - hermes-engine
     - RCTRequired
@@ -2142,6 +2214,8 @@ DEPENDENCIES:
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - React-mutationobservernativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver`)
+  - "react-native-background-downloader (from `../node_modules/@kesha-antonov/react-native-background-downloader`)"
+  - react-native-executorch (from `../node_modules/react-native-executorch`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - "react-native-vector-icons (from `../node_modules/@react-native-vector-icons/get-image`)"
   - "react-native-vector-icons-material-icons (from `../node_modules/@react-native-vector-icons/material-icons`)"
@@ -2180,9 +2254,16 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
+  - "ReactNativeFs (from `../node_modules/@dr.pogodin/react-native-fs`)"
   - RNAudioAPI (from `../node_modules/react-native-audio-api`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
+
+SPEC REPOS:
+  trunk:
+    - MMKV
+    - MMKVCore
+    - opencv-rne
 
 EXTERNAL SOURCES:
   FBLazyVector:
@@ -2266,6 +2347,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
   React-mutationobservernativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver"
+  react-native-background-downloader:
+    :path: "../node_modules/@kesha-antonov/react-native-background-downloader"
+  react-native-executorch:
+    :path: "../node_modules/react-native-executorch"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
   react-native-vector-icons:
@@ -2342,6 +2427,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   ReactNativeDependencies:
     :podspec: "../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
+  ReactNativeFs:
+    :path: "../node_modules/@dr.pogodin/react-native-fs"
   RNAudioAPI:
     :path: "../node_modules/react-native-audio-api"
   RNScreens:
@@ -2352,7 +2439,10 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   FBLazyVector: b3e7ad108f0d882e30445c5527d774e3fd432f3d
   hermes-engine: 645eb2a3d39178606068f895b3dcdbf48012f8f9
+  MMKV: 86859fdfa2b0b21db1fd6e48788474a6416a2c77
+  MMKVCore: 3d16ce9f7d411e135020915fde98a056859a1efa
   MoQ: f2634cb440517f95c23e6a5bba4a3c76a2d2c540
+  opencv-rne: 2305807573b6e29c8c87e3416ab096d09047a7a0
   RCTDeprecation: 2a74a2c57675e64419bd89078efde81f7c1de90b
   RCTRequired: 30451112e6fef4e6f31b4e7eee0845156e35e4b0
   RCTSwiftUI: 5aaf0b07e747ba749dc6acc94d8bd41eea4b570f
@@ -2390,6 +2480,8 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 1a42eda3f9d415ba9f7dcd7f1fe19d4f27925751
   React-microtasksnativemodule: 354ab193a7ed66e42869c8a0c2c0d844e8e22f67
   React-mutationobservernativemodule: f53ad06cbe4b44d2a33df6aa3f01ca8e9b57e83b
+  react-native-background-downloader: d1bcea281c64e129d113b61a9405fab1c7f26b23
+  react-native-executorch: 8799e1e4ef6b2d3724bf9721b6fb568be6addce1
   react-native-safe-area-context: 0bbcdfba5c4a1b3203276f1ed9128e3239fdf199
   react-native-vector-icons: e24e0f4b93baa44023da7d685260d150d6356e43
   react-native-vector-icons-material-icons: bc2d8d3847160ef62b3f66c671bcdcd50d362474
@@ -2428,10 +2520,11 @@ SPEC CHECKSUMS:
   ReactCodegen: cd296de5e1c422deebafff34134d1721b5c29704
   ReactCommon: d5c1bb4427bf51c443de5926aac332c89ddd9363
   ReactNativeDependencies: fa0a54b3f5319ae0e3b9aff32bfee7a424b88e66
+  ReactNativeFs: 6bc0e1a4be3632505ad398421722dfd02e365682
   RNAudioAPI: 2df605d06a3f0d57ad3d203e7c471632f092beb1
   RNScreens: 8d318eb8905fa1d3439a1ce5d567f82ae8245657
   Yoga: c30c859b7e9b75e547b600b486fe33165f60de00
 
-PODFILE CHECKSUM: 511bb510b5c747d760a11f0aa01f876d261ba02e
+PODFILE CHECKSUM: e552078ee688a924b5f1dee401240ee863df99b1
 
 COCOAPODS: 1.16.2

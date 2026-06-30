@@ -2795,6 +2795,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@dr.pogodin/react-native-fs@npm:^2.39.1":
+  version: 2.39.1
+  resolution: "@dr.pogodin/react-native-fs@npm:2.39.1"
+  dependencies:
+    buffer: "npm:^6.0.3"
+    http-status-codes: "npm:^2.3.0"
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+  checksum: 10c0/a01786864a3a6bdd0b44eafc464486b5250dfba7534242c9fa1ffd9e785c26a9119085dcfe31995ed7f7a64aa48b2f5fabb5078efc252c39e00f264867f8d504
+  languageName: node
+  linkType: hard
+
 "@emnapi/core@npm:1.10.0":
   version: 1.10.0
   resolution: "@emnapi/core@npm:1.10.0"
@@ -2985,6 +2998,13 @@ __metadata:
   dependencies:
     "@hapi/hoek": "npm:^9.0.0"
   checksum: 10c0/b16b06d9357947149e032bdf10151eb71aea8057c79c4046bf32393cb89d0d0f7ca501c40c0f7534a5ceca078de0700d2257ac855c15e59fe4e00bba2f25c86f
+  languageName: node
+  linkType: hard
+
+"@huggingface/jinja@npm:^0.5.0":
+  version: 0.5.9
+  resolution: "@huggingface/jinja@npm:0.5.9"
+  checksum: 10c0/dab021c4c94ac931983682a66de2558b4ee6ffded45495bed403b3909b934f2a09129cd4274a6f75622d89ea9af8e95fd5957ecee6445c6e2bf983181df09aa5
   languageName: node
   linkType: hard
 
@@ -3658,6 +3678,15 @@ __metadata:
     "@jridgewell/resolve-uri": "npm:^3.1.0"
     "@jridgewell/sourcemap-codec": "npm:^1.4.14"
   checksum: 10c0/4b30ec8cd56c5fd9a661f088230af01e0c1a3888d11ffb6b47639700f71225be21d1f7e168048d6d4f9449207b978a235c07c8f15c07705685d16dc06280e9d9
+  languageName: node
+  linkType: hard
+
+"@kesha-antonov/react-native-background-downloader@npm:^4.5.6":
+  version: 4.5.6
+  resolution: "@kesha-antonov/react-native-background-downloader@npm:4.5.6"
+  peerDependencies:
+    react-native: ">=0.57.0"
+  checksum: 10c0/4c2bbd0c7814ccab79f1a198a63a79fe3124b23be2e871e6061f906c094ac01535e26dffb924d438e7e28f2c16bfacd023c7f8359f472c6363d3da7f1d1f9369
   languageName: node
   linkType: hard
 
@@ -5847,6 +5876,16 @@ __metadata:
     base64-js: "npm:^1.3.1"
     ieee754: "npm:^1.1.13"
   checksum: 10c0/27cac81cff434ed2876058d72e7c4789d11ff1120ef32c9de48f59eab58179b66710c488987d295ae89a228f835fc66d088652dffeb8e3ba8659f80eb091d55e
+  languageName: node
+  linkType: hard
+
+"buffer@npm:^6.0.3":
+  version: 6.0.3
+  resolution: "buffer@npm:6.0.3"
+  dependencies:
+    base64-js: "npm:^1.3.1"
+    ieee754: "npm:^1.2.1"
+  checksum: 10c0/2a905fbbcde73cc5d8bd18d1caa23715d5f83a5935867c2329f0ac06104204ba7947be098fe1317fbd8830e26090ff8e764f08cd14fefc977bb248c3487bcbd0
   languageName: node
   linkType: hard
 
@@ -8356,6 +8395,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"http-status-codes@npm:^2.3.0":
+  version: 2.3.0
+  resolution: "http-status-codes@npm:2.3.0"
+  checksum: 10c0/c2412188929e8eed6623eef468c62d0c3c082919c03e9b74fd79cfd060d11783dba44603e38a3cee52d26563fe32005913eaf6120aa8ba907da1238f3eaad5fe
+  languageName: node
+  linkType: hard
+
 "https-proxy-agent@npm:8.0.0":
   version: 8.0.0
   resolution: "https-proxy-agent@npm:8.0.0"
@@ -8399,7 +8445,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ieee754@npm:^1.1.13":
+"ieee754@npm:^1.1.13, ieee754@npm:^1.2.1":
   version: 1.2.1
   resolution: "ieee754@npm:1.2.1"
   checksum: 10c0/b0782ef5e0935b9f12883a2e2aa37baa75da6e66ce6515c168697b42160807d9330de9a32ec1ed73149aea02e0d822e572bca6f1e22bdcbd2149e13b050b17bb
@@ -9674,6 +9720,22 @@ __metadata:
     graceful-fs:
       optional: true
   checksum: 10c0/7f4f43b08d1869ded8a6822213d13ae3b99d651151d77efd1557ced0889c466296a7d9684e397bd126acf5eb2cfcb605808c3e681d0fdccd2fe5a04b47e76c0d
+  languageName: node
+  linkType: hard
+
+"jsonrepair@npm:^3.12.0":
+  version: 3.14.1
+  resolution: "jsonrepair@npm:3.14.1"
+  bin:
+    jsonrepair: bin/cli.js
+  checksum: 10c0/ff737affa6c8bb578ab064a3c00a2d4d13ca06d282322cba871fedf2317782ed5d4b9b6198ab73e8a715e1f70d0ade138d30ada4832b81b809f2c1559a02786f
+  languageName: node
+  linkType: hard
+
+"jsonschema@npm:^1.5.0":
+  version: 1.5.0
+  resolution: "jsonschema@npm:1.5.0"
+  checksum: 10c0/c24ddb8d741f02efc0da3ad9b597a275f6b595062903d3edbfaa535c3f9c4c98613df68da5cb6635ed9aeab30d658986fea61d7662fc5b2b92840d5a1e21235e
   languageName: node
   linkType: hard
 
@@ -11792,6 +11854,33 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-native-executorch-bare-resource-fetcher@npm:^0.9.1":
+  version: 0.9.1
+  resolution: "react-native-executorch-bare-resource-fetcher@npm:0.9.1"
+  peerDependencies:
+    "@dr.pogodin/react-native-fs": ^2.0.0
+    "@kesha-antonov/react-native-background-downloader": ^4.0.0
+    react-native: "*"
+    react-native-executorch: "*"
+  checksum: 10c0/aa17d7d6b49b6bff77790130d24e7f174b38a4c09a14ef9a75c162b27ea088909a7b86798844cd171ec56571c33ac8a946ae278897e3c7f6735a6ac8d0a7b671
+  languageName: node
+  linkType: hard
+
+"react-native-executorch@npm:^0.9.2":
+  version: 0.9.2
+  resolution: "react-native-executorch@npm:0.9.2"
+  dependencies:
+    "@huggingface/jinja": "npm:^0.5.0"
+    jsonrepair: "npm:^3.12.0"
+    jsonschema: "npm:^1.5.0"
+    zod: "npm:^4.3.6"
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+  checksum: 10c0/c5f13a120b0542634ae634fc70704305493e2070daad9ec224d05e7e25c5b587a7aaa617a56302ce722113259a9ea4dc745ef5572e7aa90248abdb3cd241aba2
+  languageName: node
+  linkType: hard
+
 "react-native-monorepo-config@npm:^0.4.0":
   version: 0.4.0
   resolution: "react-native-monorepo-config@npm:0.4.0"
@@ -11809,6 +11898,8 @@ __metadata:
     "@babel/core": "npm:^8.0.1"
     "@babel/preset-env": "npm:^8.0.1"
     "@babel/runtime": "npm:^8.0.0"
+    "@dr.pogodin/react-native-fs": "npm:^2.39.1"
+    "@kesha-antonov/react-native-background-downloader": "npm:^4.5.6"
     "@react-native-community/cli": "npm:20.1.3"
     "@react-native-community/cli-platform-android": "npm:20.1.3"
     "@react-native-community/cli-platform-ios": "npm:20.1.3"
@@ -11824,6 +11915,8 @@ __metadata:
     react-native: "npm:0.86.0"
     react-native-audio-api: "npm:^0.12.2"
     react-native-builder-bob: "npm:^0.43.0"
+    react-native-executorch: "npm:^0.9.2"
+    react-native-executorch-bare-resource-fetcher: "npm:^0.9.1"
     react-native-monorepo-config: "npm:^0.4.0"
     react-native-moq: "workspace:^"
     react-native-moq-ui: "workspace:^"
@@ -14132,5 +14225,12 @@ __metadata:
   version: 4.3.6
   resolution: "zod@npm:4.3.6"
   checksum: 10c0/860d25a81ab41d33aa25f8d0d07b091a04acb426e605f396227a796e9e800c44723ed96d0f53a512b57be3d1520f45bf69c0cb3b378a232a00787a2609625307
+  languageName: node
+  linkType: hard
+
+"zod@npm:^4.3.6":
+  version: 4.4.3
+  resolution: "zod@npm:4.4.3"
+  checksum: 10c0/7ea31b558e88f9faf44f31dd185e2e1cbf51fed3081787fb96cc2534749b50c0acfc6da7f0922a7353ed092dd358c7d50c28ea96c94d04af64191bd33152eca3
   languageName: node
   linkType: hard

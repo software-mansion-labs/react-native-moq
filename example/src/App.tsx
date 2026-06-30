@@ -1,3 +1,4 @@
+import './executorchSetup';
 import { useRef, useState } from 'react';
 import { Platform, type NativeSyntheticEvent } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
