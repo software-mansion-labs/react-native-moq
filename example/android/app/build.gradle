@@ -105,6 +105,16 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+
+    packagingOptions {
+        // react-native-executorch and react-native-audio-api each bundle their
+        // own copy of libc++_shared.so; without this the merge fails with
+        // "More than one file was found with OS independent path". They're
+        // ABI-compatible builds of the same STL, so keeping the first is safe.
+        jniLibs {
+            pickFirsts += ["**/libc++_shared.so"]
+        }
+    }
 }
 
 dependencies {

@@ -6,10 +6,10 @@ Four tabs:
 
 - **Subscribe** — discover broadcasts on a relay and play them (video or audio-only).
 - **Publish** — broadcast the camera, microphone, or screen.
-- **Audio** — consume a broadcast's audio as raw chunks with `useAudioChunks`: play decoded PCM through [react-native-audio-api](https://github.com/software-mansion/react-native-audio-api) and run on-device Whisper transcription through [react-native-executorch](https://github.com/software-mansion/react-native-executorch). Decoded-PCM playback and transcription are **iOS-only** today (Android gets the encoded-chunk inspector).
+- **Audio** — consume a broadcast's audio as raw chunks with `useAudioChunks`: play decoded PCM through [react-native-audio-api](https://github.com/software-mansion/react-native-audio-api) and run on-device Whisper transcription through [react-native-executorch](https://github.com/software-mansion/react-native-executorch). Decoded-PCM playback and transcription both run on **iOS and Android**.
 - **MoQBoy** — a cloud-gaming controller built on data tracks.
 
-> The **Audio** tab pulls in extra native modules (react-native-audio-api, react-native-executorch + its bare resource fetcher, react-native-fs, background-downloader). They're already in `package.json` — just `yarn` then `pod install`. executorch requires **iOS 17+**, so the example's deployment target is 17, and a few of these libs need the `pre_install`/`post_install` tweaks in [`ios/Podfile`](ios/Podfile) to build under `use_frameworks!`. The first time you open the transcription demo it downloads the Whisper model (~tens of MB).
+> The **Audio** tab pulls in extra native modules (react-native-audio-api, react-native-executorch + its bare resource fetcher, react-native-fs, background-downloader). They're already in `package.json` — just `yarn` then `pod install`. On **iOS**, executorch requires **iOS 17+** (the example's deployment target is 17) and a few of these libs need the `pre_install`/`post_install` tweaks in [`ios/Podfile`](ios/Podfile) to build under `use_frameworks!`. On **Android**, executorch only ships native libs for `arm64-v8a`/`x86_64` (so [`android/gradle.properties`](android/gradle.properties) restricts `reactNativeArchitectures` to those) and it bundles a `libc++_shared.so` that collides with react-native-audio-api's, resolved by a `pickFirst` in [`android/app/build.gradle`](android/app/build.gradle). The first time you open the transcription demo it downloads the Whisper model (~tens of MB).
 
 # Getting Started
 

@@ -190,7 +190,7 @@ Passing an `AudioPlayer` to `<VideoView>` (or `<VideoPlayerView>`) is a type err
 
 ### `useAudioChunks(broadcast, onChunk, options?)`
 
-Receives a broadcast's audio as a stream of chunks — each callback gets one chunk's bytes as an `ArrayBuffer`. By default chunks are **encoded** (one MoQ object, i.e. one Opus/AAC frame exactly as published); pass `format: 'pcm-f32'` or `'pcm-i16'` to instead receive **decoded interleaved PCM** (iOS only). Use this to route audio into another pipeline such as [react-native-audio-api](https://docs.swmansion.com/react-native-audio-api/) or [react-native-executorch](https://docs.swmansion.com/react-native-executorch/) instead of (or alongside) the built-in `useAudioPlayer`. The example app's **Audio** tab is a worked integration of both — decoded-PCM playback and on-device Whisper transcription.
+Receives a broadcast's audio as a stream of chunks — each callback gets one chunk's bytes as an `ArrayBuffer`. By default chunks are **encoded** (one MoQ object, i.e. one Opus/AAC frame exactly as published); pass `format: 'pcm-f32'` or `'pcm-i16'` to instead receive **decoded interleaved PCM**. Use this to route audio into another pipeline such as [react-native-audio-api](https://docs.swmansion.com/react-native-audio-api/) or [react-native-executorch](https://docs.swmansion.com/react-native-executorch/) instead of (or alongside) the built-in `useAudioPlayer`. The example app's **Audio** tab is a worked integration of both — decoded-PCM playback and on-device Whisper transcription.
 
 ```tsx
 import { useAudioChunks } from 'react-native-moq';
@@ -200,7 +200,7 @@ const audio = useAudioChunks(broadcast, (chunk) => {
   decoder.push(chunk.data); // chunk.codec — 'opus' | 'aac'
 });
 
-// Decoded PCM (iOS) — chunk.data is ready-to-use Float32 PCM.
+// Decoded PCM — chunk.data is ready-to-use Float32 PCM.
 const pcm = useAudioChunks(
   broadcast,
   (chunk) => mlModel.feed(chunk.data), // chunk.frameCount @ chunk.sampleRate
@@ -210,7 +210,7 @@ const pcm = useAudioChunks(
 return <Button title="Stop" onPress={audio.stop} />;
 ```
 
-> **Encoded vs. PCM.** With the default `format: 'encoded'`, `data` holds raw Opus/AAC bytes — decode them downstream (e.g. with react-native-audio-api) before playback or feeding an ML model, since executorch speech-to-text expects mono Float32 PCM at 16 kHz and `AudioContext.decodeAudioData` handles AAC but not Opus or un-containerized streaming frames. With `format: 'pcm-f32'` / `'pcm-i16'`, moq-kit decodes for you and `data` is interleaved PCM (with `frameCount` / `timestampUs` and the decoded `sampleRate` / `channelCount`). **The PCM formats are iOS-only for now — requesting one on Android throws.**
+> **Encoded vs. PCM.** With the default `format: 'encoded'`, `data` holds raw Opus/AAC bytes — decode them downstream (e.g. with react-native-audio-api) before playback or feeding an ML model, since executorch speech-to-text expects mono Float32 PCM at 16 kHz and `AudioContext.decodeAudioData` handles AAC but not Opus or un-containerized streaming frames. With `format: 'pcm-f32'` / `'pcm-i16'`, moq-kit decodes for you and `data` is interleaved PCM (with `frameCount` / `timestampUs` and the decoded `sampleRate` / `channelCount`). The PCM formats work on both iOS and Android.
 
 `onChunk` is kept in a ref, so changing it between renders does not re-create the subscription. The subscription stops automatically on unmount. Changing `format` re-creates the subscription.
 
@@ -220,7 +220,7 @@ return <Button title="Stop" onPress={audio.stop} />;
 |---|---|---|
 | `trackName` | `string` | Audio track to listen to. Defaults to the broadcast's first audio track |
 | `autoStart` | `boolean` | Start receiving on mount. Defaults to `true`; pass `false` to defer until `.start()` |
-| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | How to deliver audio. Defaults to `'encoded'` (cross-platform). The `pcm-*` formats deliver decoded interleaved PCM — **iOS only**, throws on Android |
+| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | How to deliver audio. Defaults to `'encoded'`. The `pcm-*` formats deliver decoded interleaved PCM (iOS and Android) |
 
 Returns a [`ChunkSubscription`](#chunksubscription):
 
@@ -262,7 +262,7 @@ Subscriptions to the same `(session, path, track)` share one native track subscr
 | Option | Type | Description |
 |---|---|---|
 | `autoStart` | `boolean` | Start immediately. Defaults to `true` |
-| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | How to deliver audio. Defaults to `'encoded'`. The `pcm-*` formats deliver decoded interleaved PCM — **iOS only**, throws on Android |
+| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | How to deliver audio. Defaults to `'encoded'`. The `pcm-*` formats deliver decoded interleaved PCM (iOS and Android) |
 
 ```ts
 // decoded PCM (iOS) — framework-agnostic

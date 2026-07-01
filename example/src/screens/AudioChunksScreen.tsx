@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Button,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,10 +20,6 @@ import { WaveformMeter } from '../components/WaveformMeter';
 import { TranscriptionPanel } from '../components/TranscriptionPanel';
 import { useAudioApiPlayback } from '../hooks/useAudioApiPlayback';
 
-// The on-device Whisper transcription is wired up only for iOS in this example
-// (executorch's native setup here is iOS-specific), so the Transcribe tab stays
-// iOS-only. Decoded-PCM playback runs everywhere.
-const SUPPORTS_TRANSCRIBE = Platform.OS === 'ios';
 const BAR_COUNT = 56;
 
 /**
@@ -163,15 +158,11 @@ const EMPTY_STATS: ChunkStats = {
 
 type DemoMode = 'playback' | 'transcribe';
 
-// Decoded-PCM chunks drive the playback / meter demo on every platform. On iOS
-// they can also be run through on-device Whisper, so the mode switch only shows
-// where transcription is wired up.
+// Decoded-PCM chunks drive the playback / meter demo, and can also be run
+// through on-device Whisper — the mode switch toggles between the two. Both run
+// on iOS and Android (react-native-executorch ships native libs for both).
 function AudioChunksDemo({ broadcast }: { broadcast: BroadcastInfo }) {
   const [mode, setMode] = useState<DemoMode>('playback');
-
-  if (!SUPPORTS_TRANSCRIBE) {
-    return <PlaybackPanel broadcast={broadcast} />;
-  }
 
   return (
     <View style={styles.modeWrap}>
