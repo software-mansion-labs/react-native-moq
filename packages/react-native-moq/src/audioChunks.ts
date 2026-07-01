@@ -1,4 +1,4 @@
-import { NativeEventEmitter, Platform } from 'react-native';
+import { NativeEventEmitter } from 'react-native';
 import NativeMoQ from './native/NativeMoQ';
 import type {
   AudioChunk,
@@ -120,9 +120,8 @@ export interface SubscribeAudioChunksOptions {
   autoStart?: boolean;
   /**
    * How to deliver audio. Defaults to `'encoded'` (one Opus/AAC object per
-   * chunk, cross-platform). The `'pcm-f32'` / `'pcm-i16'` formats deliver
-   * decoded interleaved PCM via moq-kit's decoder — **iOS only** for now;
-   * requesting them on Android throws.
+   * chunk). The `'pcm-f32'` / `'pcm-i16'` formats deliver decoded interleaved
+   * PCM via moq-kit's `AudioDataStream` decoder.
    */
   format?: AudioChunkFormat;
 }
@@ -136,7 +135,7 @@ export interface SubscribeAudioChunksOptions {
  * By default chunks are *encoded* audio (one Opus/AAC object) — decode them
  * downstream (e.g. react-native-audio-api) before playback or feeding
  * executorch. Pass `format: 'pcm-f32'` or `'pcm-i16'` to instead receive decoded
- * interleaved PCM (iOS only).
+ * interleaved PCM.
  */
 export function subscribeAudioChunks(
   broadcast: BroadcastInfo,
@@ -196,7 +195,7 @@ export function subscribeAudioChunks(
  * Decoded-PCM variant of `subscribeAudioChunks`, backed by moq-kit's
  * `AudioDataStream`. Mirrors the encoded path but listens on the `audioData`
  * event and carries the decoder's PCM metadata (frameCount / timestampUs /
- * decoded sampleRate). iOS only — throws on Android.
+ * decoded sampleRate).
  */
 function subscribePcmChunks(
   broadcast: BroadcastInfo,
@@ -205,13 +204,6 @@ function subscribePcmChunks(
   format: Exclude<AudioChunkFormat, 'encoded'>,
   options: SubscribeAudioChunksOptions
 ): ChunkSubscription {
-  if (Platform.OS !== 'ios') {
-    throw new Error(
-      `Decoded audio chunks (format: '${format}') are only supported on iOS; ` +
-        `use the default 'encoded' format on ${Platform.OS}.`
-    );
-  }
-
   const { sessionId, path } = broadcast;
   const sampleFormat = PCM_SAMPLE_FORMAT[format];
   const info = broadcast.audioTracks.find((t) => t.name === trackName);

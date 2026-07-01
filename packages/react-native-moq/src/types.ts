@@ -29,12 +29,11 @@ export const AUDIO_PLAYER_KEY_SUFFIX = '_audio';
 
 /**
  * How `useAudioChunks` / `subscribeAudioChunks` delivers audio:
- * - `'encoded'` — one Opus/AAC object exactly as published (cross-platform).
- * - `'pcm-f32'` — decoded interleaved 32-bit float PCM (iOS only for now).
- * - `'pcm-i16'` — decoded interleaved signed 16-bit PCM (iOS only for now).
+ * - `'encoded'` — one Opus/AAC object exactly as published.
+ * - `'pcm-f32'` — decoded interleaved 32-bit float PCM.
+ * - `'pcm-i16'` — decoded interleaved signed 16-bit PCM.
  *
- * The PCM formats are produced by moq-kit's decoder; they are unavailable on
- * Android and requesting one there throws.
+ * The PCM formats are produced by moq-kit's `AudioDataStream` decoder.
  */
 export type AudioChunkFormat = 'encoded' | 'pcm-f32' | 'pcm-i16';
 

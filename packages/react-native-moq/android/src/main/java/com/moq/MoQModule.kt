@@ -8,6 +8,9 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.moq.player.PlayerHandle
 import com.swmansion.moqkit.Session
+import com.swmansion.moqkit.subscribe.AudioDataFormat
+import com.swmansion.moqkit.subscribe.AudioDataStream
+import com.swmansion.moqkit.subscribe.AudioSampleFormat
 import com.swmansion.moqkit.subscribe.Broadcast
 import com.swmansion.moqkit.subscribe.Catalog
 import com.swmansion.moqkit.subscribe.PlaybackStats
@@ -46,6 +49,9 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val broadcasts = ConcurrentHashMap<String, Broadcast>()
     // Raw-track sinks keyed by "path|track", ref-counted across JS subscribers.
     val trackSinks = ConcurrentHashMap<String, TrackSink>()
+    // Decoded-PCM sinks keyed by "path|track|sampleFormat", ref-counted across
+    // JS subscribers. Each wraps one moq-kit AudioDataStream.
+    val audioDataSinks = ConcurrentHashMap<String, AudioDataSink>()
   }
 
   private val contexts = ConcurrentHashMap<String, SessionContext>()
@@ -380,31 +386,85 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
   }
 
+  // Close every sink (raw-track and decoded-PCM) belonging to `path`, used when a
+  // broadcast goes away or its prefix is unsubscribed.
   private fun removeTrackSinks(ctx: SessionContext, path: String) {
     val prefix = "$path|"
     for (key in ctx.trackSinks.keys.filter { it.startsWith(prefix) }) {
       ctx.trackSinks.remove(key)?.close()
     }
+    for (key in ctx.audioDataSinks.keys.filter { it.startsWith(prefix) }) {
+      ctx.audioDataSinks.remove(key)?.close()
+    }
   }
 
-  // Decoded-PCM audio (moq-kit AudioDataStream) is iOS-only for now; moq-kit has
-  // no Android decoded-audio API yet. Throw so JS callers get a clear signal
-  // rather than a silent stream that never delivers. The JS layer also guards on
-  // Platform.OS, so this is a backstop.
+  // Decoded-PCM audio via moq-kit's AudioDataStream. Mirrors the iOS
+  // AudioDataSink: one stream per (path, track, sampleFormat), ref-counted across
+  // JS subscribers, draining decoded chunks out as `audioData` events.
   override fun subscribeAudioData(
     sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
   ) {
-    throw UnsupportedOperationException(
-      "Decoded audio chunks (PCM) are not supported on Android yet; use the " +
-        "default encoded format instead."
+    val ctx = contexts[sessionId] ?: return
+    val key = "$broadcastPath|$trackName|$sampleFormat"
+
+    // Already decoding this (track, format) — share the one stream.
+    ctx.audioDataSinks[key]?.let {
+      it.refCount.incrementAndGet()
+      return
+    }
+
+    // Decoded audio rides the catalog's shared media subscription, so we resolve
+    // the track against the catalog the broadcast advertised.
+    val catalog = ctx.catalogs[broadcastPath] ?: return
+    val format = AudioDataFormat(
+      sampleFormat = if (sampleFormat == "i16") AudioSampleFormat.Int16 else AudioSampleFormat.Float32
     )
+    val stream = try {
+      AudioDataStream(catalog = catalog, trackName = trackName, format = format)
+    } catch (_: Exception) {
+      return
+    }
+
+    val sink = AudioDataSink(stream)
+    val prev = ctx.audioDataSinks.putIfAbsent(key, sink)
+    if (prev != null) {
+      // Lost a race with another subscribe — reuse the existing sink.
+      prev.refCount.incrementAndGet()
+      stream.close()
+      return
+    }
+
+    sink.job = moduleScope.launch {
+      try {
+        stream.audio.collect { data ->
+          val map = Arguments.createMap()
+          map.putString("sessionId", sessionId)
+          map.putString("broadcastPath", broadcastPath)
+          map.putString("trackName", trackName)
+          map.putString("sampleFormat", sampleFormat)
+          map.putString("data", Base64.encodeToString(data.bytes, Base64.NO_WRAP))
+          map.putDouble("frameCount", data.frameCount.toDouble())
+          map.putDouble("sampleRate", data.sampleRate.toLong().toDouble())
+          map.putDouble("channelCount", data.channelCount.toLong().toDouble())
+          map.putDouble("timestampUs", data.timestampUs.toDouble())
+          emitEvent("audioData", map)
+        }
+      } catch (_: Exception) {
+        // Stream ended or errored — close() handles teardown.
+      }
+    }
   }
 
   override fun unsubscribeAudioData(
     sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
   ) {
-    // No-op: subscribeAudioData never succeeds on Android, so there is nothing
-    // to tear down.
+    val ctx = contexts[sessionId] ?: return
+    val key = "$broadcastPath|$trackName|$sampleFormat"
+    val sink = ctx.audioDataSinks[key] ?: return
+    if (sink.refCount.decrementAndGet() <= 0) {
+      ctx.audioDataSinks.remove(key)
+      sink.close()
+    }
   }
 
   override fun invalidate() {
@@ -544,6 +604,20 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       job?.cancel()
       job = null
       subscription.close()
+    }
+  }
+
+  // Owns a single moq-kit AudioDataStream plus the coroutine draining its decoded
+  // PCM flow, ref-counted across JS subscribers to the same
+  // (path, track, sampleFormat).
+  private class AudioDataSink(private val stream: AudioDataStream) {
+    var job: Job? = null
+    val refCount = AtomicInteger(1)
+
+    fun close() {
+      job?.cancel()
+      job = null
+      stream.close()
     }
   }
 }

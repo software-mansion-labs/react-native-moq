@@ -60,12 +60,11 @@ export interface Spec extends TurboModule {
     trackName: string
   ): void;
 
-  // Decoded-PCM audio streaming (iOS only for now). The native side creates one
+  // Decoded-PCM audio streaming. The native side creates one
   // moq-kit `AudioDataStream` per (sessionId, broadcastPath, trackName,
   // sampleFormat) and ref-counts these calls. Each decoded chunk is forwarded as
   // an `audioData` event with base64 interleaved PCM plus frameCount /
   // timestampUs / sampleRate / channelCount. `sampleFormat` is 'f32' | 'i16'.
-  // Android throws — no decoded audio API exists there yet.
   subscribeAudioData(
     sessionId: string,
     broadcastPath: string,

@@ -19,8 +19,7 @@ export interface UseAudioChunksOptions {
   autoStart?: boolean;
   /**
    * How to deliver audio. Defaults to `'encoded'` (one Opus/AAC object per
-   * chunk, cross-platform). Pass `'pcm-f32'` / `'pcm-i16'` for decoded PCM
-   * (iOS only — throws on Android).
+   * chunk). Pass `'pcm-f32'` / `'pcm-i16'` for decoded PCM.
    */
   format?: AudioChunkFormat;
 }
@@ -29,7 +28,7 @@ export interface UseAudioChunksOptions {
  * Thin single-track convenience over `subscribeAudioChunks`. Receives each audio
  * chunk as an `ArrayBuffer` and tears the subscription down on unmount. Chunks
  * are encoded Opus/AAC objects by default; pass `format: 'pcm-f32' | 'pcm-i16'`
- * for decoded PCM (iOS only).
+ * for decoded PCM.
  *
  * For a dynamic set of tracks/broadcasts, call `subscribeAudioChunks` inside
  * your own effect instead — it's the same core this hook wraps, with no

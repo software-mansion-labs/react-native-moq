@@ -21,9 +21,10 @@ import { WaveformMeter } from '../components/WaveformMeter';
 import { TranscriptionPanel } from '../components/TranscriptionPanel';
 import { useAudioApiPlayback } from '../hooks/useAudioApiPlayback';
 
-// Decoded PCM is iOS-only for now, so that's where the playback + meter demo
-// lives; Android (and the toggle) falls back to inspecting encoded objects.
-const SUPPORTS_PCM = Platform.OS === 'ios';
+// The on-device Whisper transcription is wired up only for iOS in this example
+// (executorch's native setup here is iOS-specific), so the Transcribe tab stays
+// iOS-only. Decoded-PCM playback runs everywhere.
+const SUPPORTS_TRANSCRIBE = Platform.OS === 'ios';
 const BAR_COUNT = 56;
 
 /**
@@ -32,8 +33,8 @@ const BAR_COUNT = 56;
  *  - `encoded` (cross-platform): we can only *inspect* the Opus/AAC objects —
  *    codec, chunk rate, bitrate — since decoding them needs a codec we don't ship
  *    in JS.
- *  - `pcm-f32` (iOS): the chunks are already decoded PCM, so we feed them straight
- *    into react-native-audio-api for live playback and draw a level meter from the
+ *  - `pcm-f32`: the chunks are already decoded PCM, so we feed them straight into
+ *    react-native-audio-api for live playback and draw a level meter from the
  *    samples.
  */
 export function AudioChunksScreen({
@@ -162,13 +163,13 @@ const EMPTY_STATS: ChunkStats = {
 
 type DemoMode = 'playback' | 'transcribe';
 
-// On iOS the decoded-PCM chunks drive two demos — play them back / meter them,
-// or run them through on-device Whisper. Android only has encoded chunks today,
-// so it goes straight to the playback/inspector panel.
+// Decoded-PCM chunks drive the playback / meter demo on every platform. On iOS
+// they can also be run through on-device Whisper, so the mode switch only shows
+// where transcription is wired up.
 function AudioChunksDemo({ broadcast }: { broadcast: BroadcastInfo }) {
   const [mode, setMode] = useState<DemoMode>('playback');
 
-  if (!SUPPORTS_PCM) {
+  if (!SUPPORTS_TRANSCRIBE) {
     return <PlaybackPanel broadcast={broadcast} />;
   }
 
@@ -196,9 +197,7 @@ function AudioChunksDemo({ broadcast }: { broadcast: BroadcastInfo }) {
 }
 
 function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
-  const [format, setFormat] = useState<AudioChunkFormat>(
-    SUPPORTS_PCM ? 'pcm-f32' : 'encoded'
-  );
+  const [format, setFormat] = useState<AudioChunkFormat>('pcm-f32');
   const isPcm = format !== 'encoded';
 
   const playback = useAudioApiPlayback();
@@ -273,7 +272,6 @@ function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
         <FormatTab
           label="Decoded PCM"
           active={isPcm}
-          disabled={!SUPPORTS_PCM}
           onPress={() => setFormat('pcm-f32')}
         />
         <FormatTab
@@ -302,9 +300,8 @@ function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
         </>
       ) : (
         <Text style={styles.muted}>
-          {SUPPORTS_PCM
-            ? 'Encoded objects are delivered exactly as published — decode them (e.g. with a codec) before playback. Inspect their stats below.'
-            : 'Decoded PCM is iOS-only for now, so Android receives encoded objects. Inspect their stats below.'}
+          Encoded objects are delivered exactly as published — decode them (e.g.
+          with a codec) before playback. Inspect their stats below.
         </Text>
       )}
 
