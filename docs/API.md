@@ -4,10 +4,12 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
 
 ## Contents
 
+- [Conventions](#conventions)
 - [Playback API](#playback-api)
   - [`useSession(url, setup?)`](#usesessionurl-setup)
   - [`useBroadcasts(session, prefix?)`](#usebroadcastssession-prefix)
   - [`useVideoPlayer(broadcast, setup?)`](#usevideoplayerbroadcast-setup)
+  - [Choosing an audio API](#choosing-an-audio-api)
   - [`useAudioPlayer(broadcast, setup?)`](#useaudioplayerbroadcast-setup)
   - [`useAudioChunks(broadcast, onChunk, options?)`](#useaudiochunksbroadcast-onchunk-options)
   - [`subscribeAudioChunks(broadcast, trackName, onChunk, options?)`](#subscribeaudiochunksbroadcast-trackname-onchunk-options)
@@ -19,6 +21,7 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
   - [Types](#types)
 - [Publishing](#publishing)
   - [`useCamera(options?)`](#usecameraoptions)
+  - [`useMultiCamera(options?)`](#usemulticameraoptions)
   - [`useMicrophone(options?)`](#usemicrophoneoptions)
   - [`usePublisher(session)`](#usepublishersession)
   - [`<PublisherView />`](#publisherview-)
@@ -31,6 +34,7 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
   - [Quality / rendition switching](#quality--rendition-switching)
   - [Custom target latency](#custom-target-latency)
   - [Displaying live stats](#displaying-live-stats)
+- [Troubleshooting](#troubleshooting)
 - [Default UI components (`react-native-moq-ui`)](#default-ui-components-react-native-moq-ui)
   - [`<VideoPlayerView>`](#videoplayerview)
   - [`useFullscreenControls()`](#usefullscreencontrols)
@@ -40,79 +44,89 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
   - [`<VolumeSlider />` and `<SpeakerGlyph />`](#volumeslider--and-speakerglyph-)
   - [Fullscreen playback](#fullscreen-playback)
 
+## Conventions
+
+A few rules hold across the whole API. They're stated once here instead of repeated on every hook:
+
+- **Mount lifecycle.** Hooks that own a native resource (`useCamera`, `useMicrophone`, `useMultiCamera`, `useDataTrack`, `useBroadcasts`, `useAudioChunks`, `useVideoPlayer`, `useAudioPlayer`) start their work on mount and tear it down on unmount.
+- **`setup` callbacks** run once, on mount. They're where you kick things off (`connect()`, `play()`, latency config).
+- **Refcounted singletons.** Capture hooks share one native instance across all consumers — two `useCamera` calls drive the same physical camera, and `flip()` on one is visible to all. Subscriptions to the same track are ref-counted too, so subscribing more than once is safe.
+- **`state` strings.** Every `state` field is a string union that includes an `` `error:${string}` `` variant carrying the message inline. Objects that also expose `lastError` surface that same message separately.
+- **Events.** Anything with an `emitter` can be observed three ways: [`useEvent`](#useeventsource-eventname-initialvalue) (reactive state), [`useEventListener`](#useeventlistenersource-eventname-listener) (side effects), and [`addListener`](#playeraddlistenereventname-listener--sessionaddlistenereventname-listener) (imperative; returns a subscription with `.remove()`). Prefer the hooks inside components — they clean up for you.
+
 ## Playback API
+
+Playback is a short pipeline — each step is one hook:
+
+1. **Session** — [`useSession(url)`](#usesessionurl-setup) opens the connection to a relay. Call `connect()`.
+2. **Broadcasts** — [`useBroadcasts(session, prefix?)`](#usebroadcastssession-prefix) lists what's available on that relay as `BroadcastInfo[]`.
+3. **Player** — [`useVideoPlayer(broadcast)`](#usevideoplayerbroadcast-setup) (or [`useAudioPlayer`](#useaudioplayerbroadcast-setup)) turns one broadcast into a playable `Player`. Call `play()`.
+4. **Render** — pass the player to [`<VideoView>`](#videoview) (or [`<VideoPlayerView>`](#videoplayerview) from `react-native-moq-ui`).
+
+```
+useSession ──▶ useBroadcasts ──▶ useVideoPlayer ──▶ <VideoView>
+  (connect)      (discover)          (play)           (render)
+```
+
+One session feeds any number of broadcasts, and one broadcast any number of players.
 
 ### `useSession(url, setup?)`
 
-Manages the connection to a MoQ relay server. `connect()` opens the relay session; broadcast discovery is a separate step driven by [`useBroadcasts`](#usebroadcastssession-prefix). Either step can be deferred until the user opts in.
+Manages the connection to a MoQ relay. `connect()` opens the session; broadcast discovery is a separate step handled by [`useBroadcasts`](#usebroadcastssession-prefix). The hook does **not** auto-connect — call `connect()` yourself, in the `setup` callback or in response to user interaction.
 
 ```tsx
 const session = useSession('http://relay.example.com:4443');
 
-// With setup callback — runs once on mount
-const session = useSession('http://relay.example.com:4443', (s) => {
-  s.connect(); // auto-connect on mount
-});
+// Auto-connect on mount
+const session = useSession('http://relay.example.com:4443', (s) => s.connect());
 
-// With a custom target latency
-const session = useSession('http://relay.example.com:4443', (s) => {
-  s.connect(500); // target latency in ms
-});
+// Auto-connect with a custom target latency (ms)
+const session = useSession('http://relay.example.com:4443', (s) => s.connect(500));
 ```
 
-Returns a `Session` object:
+Returns a `Session`:
 
 | Property / Method | Type | Description |
 |---|---|---|
-| `id` | `string` | Opaque per-hook identifier. Used internally to route native calls and events when multiple sessions are active |
+| `id` | `string` | Opaque per-hook identifier. Routes native calls/events when multiple sessions are active |
 | `url` | `string` | Relay URL passed to the hook |
 | `state` | `SessionState` | Current connection state |
-| `emitter` | `EventEmitter<SessionEvents>` | Stable emitter for session events |
-| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a session event imperatively; call `.remove()` to unsubscribe |
-| `connect(targetLatencyMs?)` | `(targetLatencyMs?: number) => void` | Open the relay session. Default: `targetLatencyMs=200` |
+| `emitter` | `EventEmitter<SessionEvents>` | Emitter for session events |
+| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe imperatively |
+| `connect(targetLatencyMs?)` | `(targetLatencyMs?: number) => void` | Open the session. Default `targetLatencyMs=200` |
 | `disconnect()` | `() => void` | Close the session (also tears down all active broadcast subscriptions) and reset state |
 
-**`SessionState`** is one of: `'idle'` · `'connecting'` · `'connected'` · `'closed'` · `` `error:${string}` ``
+**`SessionState`** — `'idle'` · `'connecting'` · `'connected'` · `'closed'` · `` `error:${string}` ``
 
-Call `connect()` manually — either in the setup callback or in response to user interaction. The hook does not auto-connect. To start receiving broadcasts, call [`useBroadcasts(session, prefix?)`](#usebroadcastssession-prefix) — it begins the underlying native subscription on mount and tears it down on unmount.
-
-**Multiple sessions.** Each `useSession` call is independent: subscribe to one relay while publishing to another, or open two logical sessions against the same URL. Pass the right `Session` into `useBroadcasts` / `usePublisher` to scope work to it; the library keys all native state by `session.id`.
+**Multiple sessions.** Each `useSession` call is independent — subscribe to one relay while publishing to another, or open two logical sessions against the same URL. Pass the right `Session` into `useBroadcasts` / `usePublisher`; the library keys all native state by `session.id`.
 
 ---
 
 ### `useBroadcasts(session, prefix?)`
 
-Subscribes to broadcasts under a given prefix and returns the current `BroadcastInfo[]`. The hook starts the underlying native subscription on mount and tears it down on unmount; multiple components calling `useBroadcasts(session, prefix)` with the same prefix share a single underlying subscription via JS-side ref-counting.
+Subscribes to broadcasts under a prefix and returns the current `BroadcastInfo[]`. An empty prefix matches everything. Components calling this with the same prefix share one underlying subscription (ref-counted).
 
 ```tsx
-// All broadcasts the relay exposes (empty prefix matches everything)
-const all = useBroadcasts(session);
-
-// Just the broadcasts under a specific prefix
-const streams = useBroadcasts(session, '/streams');
+const all = useBroadcasts(session);              // everything the relay exposes
+const streams = useBroadcasts(session, '/streams'); // just this prefix
 ```
 
-The returned array is empty until `session.state === 'connected'` and re-populates automatically on reconnect. Different prefixes produce independent broadcast lists, each backed by its own native `BroadcastSubscription`; overlapping prefixes that match the same broadcast path are not supported.
+The array is empty until `session.state === 'connected'`, and re-populates automatically on reconnect. Different prefixes produce independent lists; overlapping prefixes that match the same broadcast path are not supported.
 
 ```tsx
 function CamerasGrid({ session }) {
   const cameras = useBroadcasts(session, '/cameras');
   return cameras.map((b) => <BroadcastPlayer key={b.path} broadcast={b} />);
 }
-
-function MicrophonesList({ session }) {
-  const mics = useBroadcasts(session, '/microphones');
-  return mics.map((b) => <AudioOnly key={b.path} broadcast={b} />);
-}
 ```
 
-To discover when broadcasts appear or disappear without rendering them directly, diff the returned array between renders, or — for imperative side effects — wrap the hook in a small component that compares the previous and current path sets in `useEffect`.
+To react to broadcasts appearing/disappearing, diff the returned array between renders (e.g. compare path sets in a `useEffect`).
 
 ---
 
 ### `useVideoPlayer(broadcast, setup?)`
 
-Creates a reactive `Player` from a `BroadcastInfo`. The optional `setup` callback runs once on mount and is the right place to start playback and configure the player. The returned player is passed directly to `<VideoView>` (or `<VideoPlayerView>`).
+Creates a reactive `Player` from a `BroadcastInfo`. Use the `setup` callback to start and configure playback. Pass the returned player to [`<VideoView>`](#videoview) (or [`<VideoPlayerView>`](#videoplayerview)).
 
 ```tsx
 const player = useVideoPlayer(broadcast, (p) => {
@@ -121,39 +135,51 @@ const player = useVideoPlayer(broadcast, (p) => {
 });
 ```
 
-Returns a `Player` object:
+Returns a `Player`:
 
 | Property / Method | Type | Description |
 |---|---|---|
-| `sessionId` | `string` | The session this player belongs to (matches `broadcast.sessionId`) |
-| `broadcastPath` | `string` | The broadcast path this player belongs to |
+| `sessionId` | `string` | Session this player belongs to (matches `broadcast.sessionId`) |
+| `broadcastPath` | `string` | Broadcast path this player belongs to |
 | `isPlaying` | `boolean` | True while tracks are actively playing |
 | `playbackStats` | `PlaybackStats \| null` | Live metrics, updated every 500 ms |
-| `currentVideoTrackName` | `string \| undefined` | Name of the active video track |
-| `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
-| `volume` | `number` | Current per-player audio output volume in `0..1`. Defaults to `1`; does not affect other audio playing on the device |
-| `emitter` | `EventEmitter<PlayerEvents>` | Stable emitter for player events |
-| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a player event imperatively; call `.remove()` to unsubscribe |
+| `currentVideoTrackName` | `string \| undefined` | Active video track |
+| `currentAudioTrackName` | `string \| undefined` | Active audio track |
+| `volume` | `number` | Per-player output volume `0..1` (default `1`). Doesn't affect other device audio |
+| `emitter` | `EventEmitter<PlayerEvents>` | Emitter for player events |
+| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe imperatively |
 | `play()` | `() => void` | Start or resume playback |
 | `pause()` | `() => void` | Pause playback |
 | `stop()` | `() => void` | Stop playback and reset state |
 | `updateTargetLatency(ms)` | `(ms: number) => void` | Change buffering latency at runtime |
-| `switchVideoTrack(name)` | `(name: string) => void` | Switch to a different video rendition |
-| `switchAudioTrack(name)` | `(name: string) => void` | Switch to a different audio track |
-| `setVolume(volume)` | `(volume: number) => void` | Set per-player audio output volume. Values are clamped to `0..1` |
+| `switchVideoTrack(name)` | `(name: string) => void` | Switch video rendition |
+| `switchAudioTrack(name)` | `(name: string) => void` | Switch audio track |
+| `setVolume(volume)` | `(volume: number) => void` | Set output volume; clamped to `0..1` |
+
+---
+
+### Choosing an audio API
+
+Three ways to consume a broadcast's audio — pick by what you need:
+
+| API | Use when | You get |
+|---|---|---|
+| [`useAudioPlayer`](#useaudioplayerbroadcast-setup) | You just want to **hear** the audio | A `Player` that plays through the device speaker — nothing else to wire up |
+| [`useAudioChunks`](#useaudiochunksbroadcast-onchunk-options) | You want the **raw audio** to feed another pipeline (playback engine, ML model, recording) | Per-chunk callbacks — encoded Opus/AAC, or decoded PCM |
+| [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options) | Same as above, but **outside React** or over a **dynamic** set of tracks/broadcasts | The same chunk stream as a plain function, no hook rules |
+
+`useAudioChunks` is `subscribeAudioChunks` wrapped for React. All three run independently of `useVideoPlayer`, so you can play video while routing its audio elsewhere.
 
 ---
 
 ### `useAudioPlayer(broadcast, setup?)`
 
-Creates a reactive `AudioPlayer` that streams **audio only** for a broadcast — the video track is never subscribed and no video pipeline is started natively. Useful for background-audio modes, music broadcasts, or low-bandwidth contexts. The hook lazily creates a dedicated native player on mount and tears it down on unmount. The video+audio player from `broadcast.player` is independent and can run alongside if you also call `useVideoPlayer`.
+Like `useVideoPlayer`, but streams **audio only** — the video track is never subscribed and no video pipeline starts. Useful for background audio, music broadcasts, or low-bandwidth contexts. It uses a **separate** native player from the video+audio one, so both can run for the same broadcast at once.
 
 ```tsx
 import { useAudioPlayer } from 'react-native-moq';
 
-const audio = useAudioPlayer(broadcast, (p) => {
-  p.play();
-});
+const audio = useAudioPlayer(broadcast, (p) => p.play());
 
 return (
   <Button
@@ -163,39 +189,25 @@ return (
 );
 ```
 
-Returns an `AudioPlayer` object — same shape as `Player` minus the video-only members:
+Returns an [`AudioPlayer`](#audioplayer) — the `Player` shape minus the video-only members (`currentVideoTrackName`, `switchVideoTrack`). Its `broadcastPath` carries an `_audio` suffix, and `playbackStats` populates only audio fields. The same `PlayerEvents` apply; `trackSwitched` only fires with `trackKind: 'audio'`.
 
-| Property / Method | Type | Description |
-|---|---|---|
-| `sessionId` | `string` | The session this player belongs to |
-| `broadcastPath` | `string` | Internal key for this audio-only player (broadcast path with an `_audio` suffix) |
-| `isPlaying` | `boolean` | True while audio is actively playing |
-| `playbackStats` | `PlaybackStats \| null` | Live metrics, updated every 500 ms (only audio fields are populated) |
-| `currentAudioTrackName` | `string \| undefined` | Name of the active audio track |
-| `volume` | `number` | Current per-player audio output volume in `0..1`. Defaults to `1` |
-| `emitter` | `EventEmitter<PlayerEvents>` | Stable emitter for player events |
-| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a player event imperatively |
-| `play()` | `() => void` | Start or resume playback |
-| `pause()` | `() => void` | Pause playback |
-| `stop()` | `() => void` | Stop playback and reset state |
-| `updateTargetLatency(ms)` | `(ms: number) => void` | Change buffering latency at runtime |
-| `switchAudioTrack(name)` | `(name: string) => void` | Switch to a different audio track |
-| `setVolume(volume)` | `(volume: number) => void` | Set per-player audio output volume. Values are clamped to `0..1` |
-
-The same `PlayerEvents` apply (`playingChange`, `trackStopped`, `trackSwitched`, `statsUpdate`); `trackSwitched` only fires with `trackKind: 'audio'`. The audio-only stream uses a separate native player from the video+audio one, so both can run alongside each other for the same broadcast.
-
-Passing an `AudioPlayer` to `<VideoView>` (or `<VideoPlayerView>`) is a type error — the audio-only mode has no video output by design.
+Passing an `AudioPlayer` to `<VideoView>` / `<VideoPlayerView>` is a type error — audio-only mode has no video output by design.
 
 ---
 
 ### `useAudioChunks(broadcast, onChunk, options?)`
 
-Receives a broadcast's audio as a stream of chunks — each callback gets one chunk's bytes as an `ArrayBuffer`. By default chunks are **encoded** (one MoQ object, i.e. one Opus/AAC frame exactly as published); pass `format: 'pcm-f32'` or `'pcm-i16'` to instead receive **decoded interleaved PCM**. Use this to route audio into another pipeline such as [react-native-audio-api](https://docs.swmansion.com/react-native-audio-api/) or [react-native-executorch](https://docs.swmansion.com/react-native-executorch/) instead of (or alongside) the built-in `useAudioPlayer`. The example app's **Audio** tab is a worked integration of both — decoded-PCM playback and on-device Whisper transcription.
+Receives a broadcast's audio as a stream of chunks — one `AudioChunk` per callback. Use it to route audio into another pipeline such as [react-native-audio-api](https://docs.swmansion.com/react-native-audio-api/) or [react-native-executorch](https://docs.swmansion.com/react-native-executorch/), instead of (or alongside) [`useAudioPlayer`](#useaudioplayerbroadcast-setup). The example app's **Audio** tab is a worked integration of both.
+
+Two delivery modes, set by `format`:
+
+- **`'encoded'`** (default) — raw Opus/AAC bytes, exactly as published. Decode them downstream before use.
+- **`'pcm-f32'` / `'pcm-i16'`** — moq-kit decodes for you; `data` is interleaved PCM with `frameCount`, `timestampUs`, and the decoded `sampleRate` / `channelCount`. Both work on iOS and Android.
 
 ```tsx
 import { useAudioChunks } from 'react-native-moq';
 
-// Encoded (default, cross-platform) — decode chunk.data before use.
+// Encoded (default) — decode chunk.data before use.
 const audio = useAudioChunks(broadcast, (chunk) => {
   decoder.push(chunk.data); // chunk.codec — 'opus' | 'aac'
 });
@@ -210,66 +222,60 @@ const pcm = useAudioChunks(
 return <Button title="Stop" onPress={audio.stop} />;
 ```
 
-> **Encoded vs. PCM.** With the default `format: 'encoded'`, `data` holds raw Opus/AAC bytes — decode them downstream (e.g. with react-native-audio-api) before playback or feeding an ML model, since executorch speech-to-text expects mono Float32 PCM at 16 kHz and `AudioContext.decodeAudioData` handles AAC but not Opus or un-containerized streaming frames. With `format: 'pcm-f32'` / `'pcm-i16'`, moq-kit decodes for you and `data` is interleaved PCM (with `frameCount` / `timestampUs` and the decoded `sampleRate` / `channelCount`). The PCM formats work on both iOS and Android.
-
-`onChunk` is kept in a ref, so changing it between renders does not re-create the subscription. The subscription stops automatically on unmount. Changing `format` re-creates the subscription.
+`onChunk` is kept in a ref, so changing it between renders does not re-create the subscription. Changing `format` does.
 
 **Options:**
 
 | Option | Type | Description |
 |---|---|---|
 | `trackName` | `string` | Audio track to listen to. Defaults to the broadcast's first audio track |
-| `autoStart` | `boolean` | Start receiving on mount. Defaults to `true`; pass `false` to defer until `.start()` |
-| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | How to deliver audio. Defaults to `'encoded'`. The `pcm-*` formats deliver decoded interleaved PCM (iOS and Android) |
+| `autoStart` | `boolean` | Start on mount. Default `true`; pass `false` to defer until `.start()` |
+| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | Delivery mode. Default `'encoded'` |
 
 Returns a [`ChunkSubscription`](#chunksubscription):
 
 | Property / Method | Type | Description |
 |---|---|---|
-| `sessionId` | `string` | The session this subscription belongs to |
-| `broadcastPath` | `string` | The broadcast path being consumed |
-| `trackName` | `string` | The audio track being consumed |
+| `sessionId` | `string` | Session this subscription belongs to |
+| `broadcastPath` | `string` | Broadcast path being consumed |
+| `trackName` | `string` | Audio track being consumed |
 | `isActive` | `boolean` | Whether chunks are currently being received |
 | `start()` | `() => void` | (Re)start receiving. Idempotent |
 | `stop()` | `() => void` | Stop receiving and release the native track subscription. Idempotent |
 
-`stop()` closes the underlying moq-kit track subscription, which **stops pulling that track over the network** — call it whenever you aren't consuming. For a *dynamic* set of tracks or broadcasts, use [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options) inside your own effect rather than calling this hook in a loop.
+`stop()` closes the underlying track, which **stops pulling it over the network** — call it whenever you aren't consuming. For a *dynamic* set of tracks or broadcasts, use [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options) inside your own effect rather than calling this hook in a loop.
 
 ---
 
 ### `subscribeAudioChunks(broadcast, trackName, onChunk, options?)`
 
-The framework-agnostic core that `useAudioChunks` wraps — works with or without React. Each call subscribes to one `(broadcast, trackName)` and returns an independent [`ChunkSubscription`](#chunksubscription). For multiple audio tracks (within one broadcast or across several), call it once per track; each handle starts/stops on its own.
+The framework-agnostic core that `useAudioChunks` wraps — works with or without React. Each call subscribes to one `(broadcast, trackName)` and returns an independent [`ChunkSubscription`](#chunksubscription). For multiple tracks, call it once per track; each handle starts/stops on its own. Subscriptions to the same `(session, path, track)` share one native subscription (ref-counted).
 
 ```ts
 import { subscribeAudioChunks } from 'react-native-moq';
 
-// single track
+// Single track
 const sub = subscribeAudioChunks(broadcast, 'audio', onChunk);
 sub.stop();
 
-// multiple tracks across multiple broadcasts
+// One track from each of several broadcasts
 const subs = broadcasts.map((b) =>
   subscribeAudioChunks(b, b.audioTracks[0].name, (c) => route(b.path, c))
 );
 // teardown: subs.forEach((s) => s.stop());
-```
 
-Subscriptions to the same `(session, path, track)` share one native track subscription under the hood (ref-counted), so it is safe to subscribe more than once.
-
-**Options:**
-
-| Option | Type | Description |
-|---|---|---|
-| `autoStart` | `boolean` | Start immediately. Defaults to `true` |
-| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | How to deliver audio. Defaults to `'encoded'`. The `pcm-*` formats deliver decoded interleaved PCM (iOS and Android) |
-
-```ts
-// decoded PCM (iOS) — framework-agnostic
+// Decoded PCM
 const pcm = subscribeAudioChunks(broadcast, 'audio', onChunk, { format: 'pcm-i16' });
 ```
 
-In React, use this inside an effect for dynamic track sets — it sidesteps the rules-of-hooks constraint of calling `useAudioChunks` in a loop:
+**Options** (same meaning as in [`useAudioChunks`](#useaudiochunksbroadcast-onchunk-options)):
+
+| Option | Type | Description |
+|---|---|---|
+| `autoStart` | `boolean` | Start immediately. Default `true` |
+| `format` | `'encoded' \| 'pcm-f32' \| 'pcm-i16'` | Delivery mode. Default `'encoded'`; the `pcm-*` formats deliver decoded interleaved PCM (iOS and Android) |
+
+In React, use it inside an effect for dynamic track sets — this sidesteps the rules-of-hooks constraint of calling `useAudioChunks` in a loop:
 
 ```tsx
 useEffect(() => {
@@ -282,51 +288,36 @@ useEffect(() => {
 
 ### `useEvent(source, eventName, initialValue?)`
 
-Returns reactive state that re-renders the component whenever the named event fires. `source` can be a `Player`, `Session`, or any `EventEmitter`.
+Reactive state that re-renders when the named event fires. `source` can be a `Player`, `Session`, or any `EventEmitter`. Without an initial value, the return type includes `undefined`.
 
 ```tsx
 const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: false });
 ```
 
-Without an initial value the return type includes `undefined`.
-
 ---
 
 ### `useEventListener(source, eventName, listener)`
 
-Registers a listener without creating React state. Use this for side effects (logging, analytics, etc.) rather than driving UI. `source` can be a `Player`, `Session`, or any `EventEmitter`.
+Registers a listener without creating React state — for side effects (logging, analytics) rather than driving UI. No `useCallback` needed; the listener is kept in a ref.
 
 ```tsx
 useEventListener(player, 'trackSwitched', ({ trackKind, trackName }) => {
   console.log(`Switched ${trackKind} track to ${trackName}`);
 });
-
-useEventListener(session, 'stateChange', ({ state }) => {
-  console.log('Session state:', state);
-});
 ```
-
-No `useCallback` is needed — the listener is kept in a ref internally.
 
 ---
 
 ### `player.addListener(eventName, listener)` / `session.addListener(eventName, listener)`
 
-Subscribes to an event outside of the React lifecycle. Returns an `EventSubscription` whose `.remove()` method cancels the subscription.
+Subscribe from outside the React lifecycle (stores, services, callbacks). Returns an `EventSubscription`; call `.remove()` to unsubscribe. Inside components, prefer [`useEvent`](#useeventsource-eventname-initialvalue) / [`useEventListener`](#useeventlistenersource-eventname-listener) — they clean up automatically.
 
 ```ts
-// Subscribe
 const sub = player.addListener('playingChange', ({ isPlaying }) => {
   console.log('Playing:', isPlaying);
 });
-
-// Later — unsubscribe manually
 sub.remove();
 ```
-
-Use this when you need to subscribe from non-component code (stores, services, callbacks) or when you want full control over the subscription lifetime. Inside components, prefer `useEvent` or `useEventListener` instead — they clean up automatically.
-
----
 
 **`player` events**
 
@@ -345,19 +336,12 @@ Use this when you need to subscribe from non-component code (stores, services, c
 
 ---
 
-The core library ships a single component for putting the player on screen: [`<VideoView>`](#videoview), the bare native video surface. Build your own controls and overlays around it, or pull in the companion [`react-native-moq-ui`](#default-ui-components-react-native-moq-ui) package for a ready-made player layout with fullscreen + platform-styled chrome.
-
----
-
 ### `<VideoView>`
 
-The bare native video surface. Behaves like a normal RN view: takes `style` (and the rest of `ViewProps`), renders the player's video output at whatever size you give it, and that's it. No fullscreen, no controls, no overlay slot — for those you compose your own UI around it (or use [`<VideoPlayerView>`](#videoplayerview)).
+The bare native video surface. It behaves like a normal RN view — takes `style` (and the rest of `ViewProps`) and renders the player's video at whatever size you give it. No fullscreen, controls, or overlay slot; compose your own UI around it, or use [`<VideoPlayerView>`](#videoplayerview) from `react-native-moq-ui`.
 
 ```tsx
-<VideoView
-  player={player}
-  style={{ width: '100%', aspectRatio: 16 / 9 }}
-/>
+<VideoView player={player} style={{ width: '100%', aspectRatio: 16 / 9 }} />
 ```
 
 | Prop | Type | Required | Description |
@@ -365,22 +349,21 @@ The bare native video surface. Behaves like a normal RN view: takes `style` (and
 | `player` | `Player` | Yes | Player returned by `useVideoPlayer` |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
 
-`<VideoView>` accepts the rest of the standard `ViewProps` and forwards them to the native view. It does **not** accept children — the underlying native view is not a `ViewGroup` on Android, so overlays must be siblings (typically absolutely positioned alongside the video).
+It does **not** accept children — the underlying native view is not a `ViewGroup` on Android, so overlays must be siblings (typically absolutely positioned alongside the video).
 
 ---
 
 ### `PlayerHandle`
 
-An opaque reference to a native player, available as `broadcast.player` inside `BroadcastInfo`. `useVideoPlayer(broadcast)` consumes this internally to produce a reactive `Player`. You can also call playback methods on the handle directly without the hook.
+An opaque reference to a native player, available as `broadcast.player`. `useVideoPlayer(broadcast)` consumes it internally to produce a reactive `Player`, but you can call playback methods on the handle directly without the hook:
 
 ```tsx
-// Direct usage — no hook needed
 broadcast.player.play();
 broadcast.player.switchVideoTrack('1080p');
 broadcast.player.updateTargetLatency(100);
 ```
 
-On iOS the handle is backed by a JSI host object — method calls go directly to the native player without bridge serialisation. On Android they delegate to the TurboModule bridge.
+On iOS the handle is a JSI host object (calls go straight to native, no bridge serialisation); on Android calls go through the TurboModule bridge.
 
 ---
 
@@ -388,42 +371,38 @@ On iOS the handle is backed by a JSI host object — method calls go directly to
 
 #### `PlayerEvents`
 
-Event map for `player.emitter`. Each key is an event name; the value is the event payload type.
+Event map for `player.emitter` — each key is an event name, the value its payload type.
 
 ```ts
 type PlayerEvents = {
-  // Fires when playback starts, pauses, or resumes.
-  // Deduplicated — only one emission per state transition even when multiple
-  // tracks (video + audio) change simultaneously.
+  // Playback started, paused, or resumed. Deduplicated — one emission per
+  // state transition even when video + audio tracks change simultaneously.
   playingChange: (event: { isPlaying: boolean }) => void;
 
-  // Fires when all tracks stop (end of broadcast or explicit stop).
+  // All tracks stopped (end of broadcast or explicit stop).
   trackStopped: (event: Record<never, never>) => void;
 
-  // Fires when the active video or audio track changes.
+  // Active video or audio track changed.
   trackSwitched: (event: { trackKind: 'video' | 'audio'; trackName: string }) => void;
 
-  // Fires every ~500 ms with updated playback metrics.
+  // Updated playback metrics, ~every 500 ms.
   statsUpdate: (event: PlaybackStats) => void;
 };
 ```
 
 #### `SessionEvents`
 
-Event map for `session.emitter`.
-
 ```ts
 type SessionEvents = {
-  // Fires on every session state transition.
   stateChange: (event: { state: SessionState }) => void;
 };
 ```
 
-Broadcast availability is observed reactively via [`useBroadcasts`](#usebroadcastssession-prefix) rather than imperative session events.
+Broadcast availability is observed via [`useBroadcasts`](#usebroadcastssession-prefix), not session events.
 
 #### `AudioPlayer`
 
-Returned by `useAudioPlayer`. A `Player` shape narrowed to audio-only — no `currentVideoTrackName`, no `switchVideoTrack`.
+Returned by `useAudioPlayer` — the `Player` shape narrowed to audio-only (no `currentVideoTrackName`, no `switchVideoTrack`).
 
 ```ts
 interface AudioPlayer {
@@ -452,7 +431,7 @@ interface BroadcastInfo {
   path: string;
   videoTracks: VideoTrackInfo[];
   audioTracks: AudioTrackInfo[];
-  player: PlayerHandle;    // opaque native handle — call methods directly, or pass the broadcast to useVideoPlayer / useAudioPlayer
+  player: PlayerHandle;    // opaque native handle — call directly, or pass to useVideoPlayer / useAudioPlayer
 }
 ```
 
@@ -483,7 +462,7 @@ interface AudioTrackInfo {
 
 #### `AudioChunk`
 
-One audio chunk delivered by [`useAudioChunks`](#useaudiochunksbroadcast-onchunk-options) / [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options). Which fields are populated depends on `format`: `groupSequence` / `objectIndex` are set for `'encoded'` chunks; `frameCount` / `timestampUs` are set for the `pcm-*` formats.
+One chunk from [`useAudioChunks`](#useaudiochunksbroadcast-onchunk-options) / [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options). Which optional fields are set depends on `format`: `groupSequence` / `objectIndex` for `'encoded'`; `frameCount` / `timestampUs` for the `pcm-*` formats.
 
 ```ts
 type AudioChunkFormat = 'encoded' | 'pcm-f32' | 'pcm-i16';
@@ -543,24 +522,18 @@ interface StallStats {
 
 ## Publishing
 
-The publisher captures audio + video from the device camera + microphone and pushes them to a MoQ relay. It reuses a [`Session`](#usesessionurl-setup) you've already opened with `useSession`, so the same connection can simultaneously publish and subscribe.
+The publisher captures audio + video from the device camera + microphone and pushes them to a relay. It reuses a [`Session`](#usesessionurl-setup) you've already opened, so **one connection can publish and subscribe at once**.
 
-Sources live in their own hooks — `useCamera` and `useMicrophone` each own the native capture lifecycle and are refcounted singletons (one physical camera and one physical mic shared across every consumer). The hooks start their capture on mount and stop it on unmount. `usePublisher` consumes the source objects: pass the ones you want to publish into `publish({ path, tracks })`.
+The pieces:
 
-Screen sharing is a different beast — it runs out-of-process and opens its own MoQ connection — so it has its own hook, [`useScreenBroadcast`](#screen-broadcasting), independent of `usePublisher`.
-
-To publish arbitrary data alongside (or instead of) camera/microphone media — controller input, chat, telemetry — add a [`useDataTrack`](#usedatatrackoptions) source to `publish()`. A single broadcast can mix video, audio, and data tracks, just like MoQKit's `Publisher`.
+- **Sources** — `useCamera`, `useMicrophone`, and `useDataTrack` each own a native capture and are refcounted singletons (see [Conventions](#conventions)).
+- **`usePublisher`** — consumes those sources: `publish({ path, tracks })` starts a broadcast; a single broadcast can mix video, audio, and data tracks.
+- **Screen sharing** runs out-of-process with its own MoQ connection, so it has a separate hook, [`useScreenBroadcast`](#screen-broadcasting).
 
 ```tsx
 import { useEffect } from 'react';
 import { Button, PermissionsAndroid, Platform } from 'react-native';
-import {
-  PublisherView,
-  useCamera,
-  useMicrophone,
-  usePublisher,
-  useSession,
-} from 'react-native-moq';
+import { PublisherView, useCamera, useMicrophone, usePublisher, useSession } from 'react-native-moq';
 
 function PublishScreen() {
   const session = useSession('http://relay.example.com:4443');
@@ -568,7 +541,7 @@ function PublishScreen() {
   const microphone = useMicrophone();
   const publisher = usePublisher(session);
 
-  // Open the shared session up front so publish() has a connection to reuse.
+  // Open the session up front so publish() has a connection to reuse.
   useEffect(() => {
     if (session.state === 'idle' || session.state === 'closed') session.connect();
   }, [session]);
@@ -599,21 +572,17 @@ function PublishScreen() {
 }
 ```
 
-Because publish reuses the host session, you can subscribe and publish on the same connection — pair `usePublisher(session)` with `useBroadcasts(session, prefix)` to do both at once. You can also drive two relays concurrently by opening two `useSession` hooks and handing each one to its own publisher / subscriber.
-
-The host app is responsible for requesting `CAMERA` / `RECORD_AUDIO` runtime permissions on Android, and for adding `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` to `Info.plist` on iOS. The library does not request these for you.
+**Permissions are the host app's job.** Request `CAMERA` / `RECORD_AUDIO` at runtime on Android, and add `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` to `Info.plist` on iOS. The library does not request these for you.
 
 ---
 
 ### `useCamera(options?)`
 
-Owns the device camera. Starts capture on mount, stops on unmount. The capture is refcounted natively, so multiple `useCamera` hooks (or a hook + a live publish + an on-screen preview) share one `CameraCapture` instance. The position is global to the physical camera — calling `flip()` or `setPosition()` on any hook is visible to every other consumer.
-
-`publish()` snapshots the current encoder config (`videoCodec`, `width`, `height`, `framerate`) from the camera object at call time; to change those on a live broadcast, update the options and call `publish()` again.
+Owns the device camera (refcounted singleton). Position is global to the physical camera — `flip()` / `setPosition()` on any consumer is visible to all. `publish()` snapshots the encoder config (`videoCodec`, `width`, `height`, `framerate`) at call time; to change it on a live broadcast, update the options and call `publish()` again.
 
 ```tsx
 const camera = useCamera({
-  position: 'front',     // initial — change at runtime via camera.setPosition / camera.flip
+  position: 'front',   // initial — change at runtime via setPosition / flip
   videoCodec: 'h264',
   width: 1280,
   height: 720,
@@ -626,25 +595,25 @@ Returns a `CameraTrack`:
 | Property / Method | Type | Description |
 |---|---|---|
 | `state` | `CameraCaptureState` | `'idle' \| 'starting' \| 'active' \| `error:${string}`` |
-| `lastError` | `string \| null` | Last capture error, or `null` if healthy |
-| `position` | `'front' \| 'back'` | Currently active camera |
+| `lastError` | `string \| null` | Last capture error, or `null` |
+| `position` | `'front' \| 'back'` | Active camera |
 | `encoder` | `VideoEncoderOptions` | `{ codec, width, height, framerate }` — snapshotted by `publish()` |
-| `flip()` | `() => void` | Toggle between front and back |
+| `flip()` | `() => void` | Toggle front/back |
 | `setPosition(pos)` | `('front' \| 'back') => void` | Switch to a specific camera |
 
-Pass it into `publisher.publish({ tracks: [camera, …] })` to include the camera in a broadcast, and into `<PublisherView camera={camera} />` to render the on-screen preview.
+Pass it into `publisher.publish({ tracks: [camera, …] })` to broadcast it, and into `<PublisherView camera={camera} />` for the on-screen preview.
 
 ---
 
 ### `useMultiCamera(options?)`
 
-Captures the front and back cameras **simultaneously** and exposes them as two independent publishable tracks. This is a distinct capture path from `useCamera` (iOS `AVCaptureMultiCamSession`, Android CameraX concurrent camera), so it's a fixed front+back pair — not arbitrary cameras — and the two streams can't be flipped. Like `useCamera`, the capture is a refcounted native singleton started on mount and stopped on unmount.
+Captures the front and back cameras **simultaneously** as two independent publishable tracks (iOS `AVCaptureMultiCamSession`, Android CameraX concurrent camera). It's a fixed front+back pair — the streams can't be flipped. Refcounted singleton, like `useCamera`.
 
-Concurrent capture isn't available on every device. Gate your UI on the returned `isSupported`, or call [`isMultiCameraSupported()`](#ismulticamerasupported) before mounting the hook (it doesn't start any hardware).
+Concurrent capture isn't available on every device — gate your UI on the returned `isSupported`, or call [`isMultiCameraSupported()`](#ismulticamerasupported) before mounting the hook.
 
 ```tsx
 const { isSupported, state, front, back } = useMultiCamera({
-  videoCodec: 'h264', // see the note below on dual-encoder support
+  videoCodec: 'h264', // see the dual-encoder note below
   width: 720,
   height: 1280,
   framerate: 30,
@@ -655,15 +624,15 @@ Returns a `MultiCameraTrack`:
 
 | Property | Type | Description |
 |---|---|---|
-| `isSupported` | `boolean \| null` | Whether the device can run both cameras at once. `null` while the async capability check is in flight |
+| `isSupported` | `boolean \| null` | Whether the device can run both cameras at once. `null` while the async check is in flight |
 | `state` | `MultiCameraState` | Shared capture state: `'idle' \| 'starting' \| 'active' \| `error:${string}`` |
-| `lastError` | `string \| null` | Last capture error, or `null` if healthy |
-| `front` | `CameraTrack` | The front camera, published as the `front-camera` track |
-| `back` | `CameraTrack` | The back camera, published as the `back-camera` track |
+| `lastError` | `string \| null` | Last capture error, or `null` |
+| `front` | `CameraTrack` | Front camera, published as the `front-camera` track |
+| `back` | `CameraTrack` | Back camera, published as the `back-camera` track |
 
-`front` and `back` are ordinary `CameraTrack`s — pass them into `<PublisherView camera={front} />` to preview each, and into `publisher.publish({ tracks: [front, back, …] })` to publish both. Each becomes a separate video track in the broadcast, so a subscriber can play or switch between them. (`flip()` / `setPosition()` on these tracks are no-ops — the positions are fixed.)
+`front` and `back` are ordinary `CameraTrack`s — preview each with `<PublisherView camera={front} />`, publish both with `publisher.publish({ tracks: [front, back, …] })`, and a subscriber can switch between them. (`flip()` / `setPosition()` are no-ops here — positions are fixed.)
 
-> **Dual encoder support.** Publishing two cameras runs two hardware video encoders at once. Two H.264 encoders run concurrently on a wide range of devices; two **H.265** encoders are far more limited — on many devices the second HEVC encoder is created but silently produces no frames, so only one track reaches the broadcast. Prefer `videoCodec: 'h264'` for dual-camera publishing unless you've verified H.265 works on your target hardware.
+> **Dual encoder support.** Publishing two cameras runs two hardware encoders at once. Two H.264 encoders run on a wide range of devices; two **H.265** encoders are far more limited — on many devices the second HEVC encoder silently produces no frames, so only one track reaches the broadcast. Prefer `videoCodec: 'h264'` for dual-camera publishing unless you've verified H.265 on your target hardware.
 
 #### `isMultiCameraSupported()`
 
@@ -671,21 +640,16 @@ Returns a `MultiCameraTrack`:
 function isMultiCameraSupported(): Promise<boolean>;
 ```
 
-Resolves whether the device supports concurrent front+back capture, without starting any capture. Use it to decide whether to offer a dual-camera mode before mounting `useMultiCamera`.
+Resolves whether the device supports concurrent front+back capture, without starting any hardware. Use it to decide whether to offer a dual-camera mode before mounting `useMultiCamera`.
 
 ---
 
 ### `useMicrophone(options?)`
 
-Owns the device microphone. Starts capture on mount, stops on unmount. Refcounted in the same way as the camera. The audio session category is driven from the mic lifecycle: `playAndRecord` while the mic is capturing, `playback` otherwise.
-
-`publish()` snapshots the encoder config at call time; the `audioSampleRate` is also the AudioRecord capture format on Android, so changing it after the hook has mounted is a no-op until the hook is remounted (e.g. with a `key` prop).
+Owns the device microphone (refcounted singleton). The audio session category follows the mic lifecycle: `playAndRecord` while capturing, `playback` otherwise. `publish()` snapshots the encoder config at call time; `audioSampleRate` is also the Android capture format, so changing it after mount is a no-op until the hook is remounted (e.g. with a `key` prop).
 
 ```tsx
-const microphone = useMicrophone({
-  audioCodec: 'opus',
-  audioSampleRate: 48000,
-});
+const microphone = useMicrophone({ audioCodec: 'opus', audioSampleRate: 48000 });
 ```
 
 Returns a `MicrophoneTrack`:
@@ -693,20 +657,20 @@ Returns a `MicrophoneTrack`:
 | Property | Type | Description |
 |---|---|---|
 | `state` | `MicrophoneCaptureState` | `'idle' \| 'starting' \| 'active' \| `error:${string}`` |
-| `lastError` | `string \| null` | Last capture error, or `null` if healthy |
+| `lastError` | `string \| null` | Last capture error, or `null` |
 | `encoder` | `AudioEncoderOptions` | `{ codec, sampleRate }` — snapshotted by `publish()` |
 
 ---
 
 ### `usePublisher(session)`
 
-Attaches a publisher to a `Session` returned by [`useSession`](#usesessionurl-setup). Mounting the hook does not start anything — calling `publish()` creates a native `Publisher` on top of the existing session, adds the tracks you pass, and starts it; calling `stop()` tears the publisher down (the session stays open). Re-renders are driven by native state events (`publisherStateChanged`, `publisherTrackStateChanged`).
+Attaches a publisher to a [`Session`](#usesessionurl-setup). Mounting the hook starts nothing — `publish()` creates a native `Publisher` on the existing session, adds the tracks, and starts it; `stop()` tears the publisher down (the session stays open).
 
-The session must be `connected` when `publish()` is called — otherwise the publisher transitions to `error:session is not connected` immediately. Wait for `session.state === 'connected'` (or gate the UI on it) before publishing. Each `PublishTrack` in `tracks` must come from a currently-mounted source hook (`useCamera` / `useMicrophone` / `useDataTrack`); if a media capture is still starting, `publish()` awaits it.
+The session must be `connected` when `publish()` is called, or the publisher goes to `error:session is not connected` immediately — gate the UI on `session.state === 'connected'`. Each track must come from a currently-mounted source hook; if a capture is still starting, `publish()` awaits it. Changing the published track set means calling `publish()` again — moq-kit finalizes the track set at start, so swapping sources restarts the broadcast.
 
 ```tsx
 const session = useSession('http://relay.example.com:4443');
-const camera = useCamera({ videoCodec: 'h265', width: 1280, height: 720, framerate: 30 });
+const camera = useCamera({ videoCodec: 'h264', width: 1280, height: 720, framerate: 30 });
 const microphone = useMicrophone({ audioCodec: 'opus', audioSampleRate: 48000 });
 const publisher = usePublisher(session);
 
@@ -716,29 +680,27 @@ publisher.publish({
 });
 ```
 
-Changing the published track set (e.g. dropping the mic) is a `publish()` again — moq-kit finalizes the track set when the broadcaster starts, so swapping sources restarts the broadcast.
-
-Returns a `Publisher` object:
+Returns a `Publisher`:
 
 | Property / Method | Type | Description |
 |---|---|---|
 | `state` | `PublisherState` | Current publishing state |
-| `trackStates` | `Record<string, PublishedTrackState>` | Per-track lifecycle, keyed by track name (`"camera"`, `"mic"`, …) |
-| `lastError` | `string \| null` | Last error message, or `null` if the publisher is healthy |
-| `emitter` | `EventEmitter<PublisherEvents>` | Stable emitter for publisher events |
-| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe to a publisher event imperatively; call `.remove()` to unsubscribe |
-| `publish(opts)` | `(opts: PublishOptions) => void` | Start publishing the listed tracks on the bound session. Requires `session.state === 'connected'` |
-| `stop()` | `() => void` | Stop all tracks and clear `trackStates`. Does not disconnect the underlying session, nor stop the capture hooks |
+| `trackStates` | `Record<string, PublishedTrackState>` | Per-track lifecycle, keyed by track name |
+| `lastError` | `string \| null` | Last error message, or `null` |
+| `emitter` | `EventEmitter<PublisherEvents>` | Emitter for publisher events |
+| `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe imperatively |
+| `publish(opts)` | `(opts: PublishOptions) => void` | Start publishing the tracks. Requires `session.state === 'connected'` |
+| `stop()` | `() => void` | Stop all tracks and clear `trackStates`. Leaves the session and capture hooks running |
 
-**`PublisherState`** is one of: `'idle'` · `'connecting'` · `'publishing'` · `'stopped'` · `` `error:${string}` ``
+**`PublisherState`** — `'idle'` · `'connecting'` · `'publishing'` · `'stopped'` · `` `error:${string}` ``
 
-**`PublishedTrackState`** is one of: `'idle'` · `'starting'` · `'active'` · `'stopped'`
+**`PublishedTrackState`** — `'idle'` · `'starting'` · `'active'` · `'stopped'`
 
 ---
 
 ### `<PublisherView />`
 
-Renders whatever the shared camera capture is producing. The capture lifecycle belongs to `useCamera` — mounting or unmounting the view does **not** start or stop the camera. Pass the camera hook in via the `camera` prop so the dependency is explicit and the capture is guaranteed to be alive while the preview is on screen.
+Renders whatever the shared camera capture is producing. The capture lifecycle belongs to `useCamera`, not the view — mounting/unmounting `<PublisherView>` does **not** start or stop the camera. Pass the camera hook in via the `camera` prop so the capture is guaranteed alive while the preview is on screen.
 
 ```tsx
 const camera = useCamera({ position: 'front' });
@@ -748,22 +710,19 @@ const camera = useCamera({ position: 'front' });
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `camera` | `CameraTrack` | Yes | The camera driving this preview — a `useCamera` track, or a `front` / `back` track from [`useMultiCamera`](#usemulticameraoptions) |
+| `camera` | `CameraTrack` | Yes | A `useCamera` track, or a `front` / `back` track from [`useMultiCamera`](#usemulticameraoptions) |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
 
-The component accepts the rest of the standard `ViewProps` and forwards them to the native view.
+The rest of the standard `ViewProps` are forwarded to the native view.
 
 ---
 
 ### `getSupportedVideoCodecs()` / `getSupportedAudioCodecs()`
 
-Synchronous queries for the codecs whose encoder will actually initialize on this device. Use them to gate codec pickers in publishing UI — selecting a codec the device can't encode silently terminates the broadcast on Android (moq-kit reports the failure as a clean stop, not an error state).
+Synchronous queries for the codecs whose encoder will actually initialize on this device. Use them to gate codec pickers — selecting a codec the device can't encode silently terminates the broadcast on Android (moq-kit reports it as a clean stop, not an error). Results depend only on hardware/OS, so cache them at module load.
 
 ```tsx
-import {
-  getSupportedVideoCodecs,
-  getSupportedAudioCodecs,
-} from 'react-native-moq';
+import { getSupportedVideoCodecs, getSupportedAudioCodecs } from 'react-native-moq';
 
 const VIDEO = getSupportedVideoCodecs(); // → ['h264', 'h265']
 const AUDIO = getSupportedAudioCodecs(); // → ['opus', 'aac']
@@ -771,15 +730,11 @@ const AUDIO = getSupportedAudioCodecs(); // → ['opus', 'aac']
 const initialVideoCodec = VIDEO.includes('h265') ? 'h265' : 'h264';
 ```
 
-Both depend only on hardware/OS capabilities and won't change at runtime, so it's safe to call once at module load and cache the result.
-
 ---
 
 ### `useDataTrack(options?)`
 
-A publishable **data track** — the data counterpart of [`useCamera`](#usecameraoptions) / [`useMicrophone`](#usemicrophoneoptions). Instead of media, it carries app-defined string payloads (controller input, chat, telemetry). Like the media source hooks, it owns its native resource for the hook's lifetime (here a MoQKit `DataTrackEmitter`, created on mount, destroyed on unmount) and is consumed by [`usePublisher`](#usepublishersession): pass it in `tracks` and it becomes a data track in the broadcast, alongside any camera/microphone tracks.
-
-This mirrors MoQKit directly — a standalone emitter handed to `Publisher.addDataTrack` — so a single broadcast can mix video, audio, and data tracks under one path.
+A publishable **data track** — the data counterpart of [`useCamera`](#usecameraoptions) / [`useMicrophone`](#usemicrophoneoptions). Instead of media it carries app-defined string payloads (controller input, chat, telemetry). Owns a native `DataTrackEmitter` for the hook's lifetime and is consumed by [`usePublisher`](#usepublishersession): pass it in `tracks` and it becomes a data track in the broadcast, alongside any camera/mic tracks.
 
 ```tsx
 import { useDataTrack } from 'react-native-moq';
@@ -791,11 +746,11 @@ Returns a `DataTrack`:
 
 | Property / Method | Type | Description |
 |---|---|---|
-| `__type` | `'data'` | Discriminator used by `usePublisher` to route to a data track |
+| `__type` | `'data'` | Discriminator `usePublisher` uses to route to a data track |
 | `__name` | `string` | Track name in the broadcast catalog (the `name` option) |
-| `send(payload)` | `(payload: string) => void` | Send one UTF-8 string payload (e.g. JSON). No-op until the owning publisher has published and started; payloads are delivered in call order |
+| `send(payload)` | `(payload: string) => void` | Send one UTF-8 string (e.g. JSON). No-op until the publisher is `publishing`; payloads deliver in call order |
 
-Include it in a publish to start sending. The track sends nothing until the publisher reaches `publishing`; `send()` before then is a no-op:
+Include it in a publish to start sending. `send()` before the publisher reaches `publishing` is a no-op:
 
 ```tsx
 const session = useSession('http://relay.example.com:4443', (s) => s.connect());
@@ -808,10 +763,9 @@ publisher.publish({ path: 'live/game-1', tracks: [camera, command] });
 
 // Push payloads once publisher.state === 'publishing'.
 command.send(JSON.stringify({ type: 'buttons', buttons: ['a', 'up'] }));
-command.send(JSON.stringify({ type: 'reset' }));
 ```
 
-Subscribers read these objects from a track of the same `name` on the broadcast. For a data-only broadcast (e.g. a controller publishing to its own path), just pass a single data track: `publisher.publish({ path, tracks: [command] })`. Pair it with [`useBroadcasts(session, prefix)`](#usebroadcastssession-prefix) to discover peers and exchange data over one connection — the pattern behind chat- and cloud-gaming-style demos. The MoQBoy tab in the example app ([`example/src/screens/MoQBoyScreen.tsx`](../example/src/screens/MoQBoyScreen.tsx)) is a worked cloud-gaming controller built on exactly this hook.
+Subscribers read these objects from a track of the same `name`. For a data-only broadcast, pass a single data track: `publisher.publish({ path, tracks: [command] })`. Pair it with [`useBroadcasts`](#usebroadcastssession-prefix) to discover peers and exchange data over one connection — the pattern behind chat- and cloud-gaming demos. The example app's **MoQBoy** tab ([`example/src/screens/MoQBoyScreen.tsx`](../example/src/screens/MoQBoyScreen.tsx)) is a worked cloud-gaming controller built on this hook.
 
 **`DataTrackOptions`**
 
@@ -827,13 +781,11 @@ interface DataTrackOptions {
 
 ### Screen broadcasting
 
-Screen capture runs out-of-process on iOS (a `Broadcast Upload Extension`) and in a foreground `Service` on Android. Because it lives in another process, it can't share the host's `usePublisher` session — it opens its own MoQ connection from the session URL you pass in. It also publishes to its own broadcast path (independent of any camera/mic publish), so subscribers can pick it up as a separate stream.
+Screen capture runs out-of-process — a `Broadcast Upload Extension` on iOS, a foreground `Service` on Android. Because it's a separate process it can't share the host's `usePublisher` session: it opens its own MoQ connection from the session URL you pass in, and publishes to its own path. It's also a device singleton (one ReplayKit / MediaProjection session at a time), so multiple instances of the hook observe the same state.
 
 #### `useScreenBroadcast(session, options)`
 
-Manages the out-of-process screen broadcast bound to the given `Session`. Mounting the hook reconfigures the native side with the current relay URL + options (on iOS this writes the App Group descriptor that the Broadcast Upload Extension reads at launch; on Android it caches the config for the next `start()` call). The options are watched — change any field and the native config is rewritten automatically.
-
-Screen broadcast is a device singleton (one ReplayKit / MediaProjection session at a time), so multiple instances of this hook will all observe the same state.
+Manages the out-of-process screen broadcast bound to a `Session`. Mounting the hook writes the current relay URL + options to the native side (on iOS the App Group descriptor the extension reads at launch; on Android the config for the next `start()`). The options are watched — change any field and the native config is rewritten.
 
 ```tsx
 import { useScreenBroadcast, useSession } from 'react-native-moq';
@@ -851,20 +803,20 @@ const screen = useScreenBroadcast(session, {
 });
 ```
 
-Returns a `ScreenBroadcast` object:
+Returns a `ScreenBroadcast`:
 
 | Property / Method | Type | Description |
 |---|---|---|
-| `state` | `ScreenBroadcastState` | Current screen-broadcast state |
-| `lastError` | `string \| null` | Last error message, or `null` if healthy |
-| `start()` | `() => Promise<void>` | Android only — starts the foreground MediaProjection service. Rejects on iOS |
+| `state` | `ScreenBroadcastState` | Current state |
+| `lastError` | `string \| null` | Last error message, or `null` |
+| `start()` | `() => Promise<void>` | **Android only** — starts the foreground MediaProjection service. Rejects on iOS |
 | `stop()` | `() => void` | Stop the active screen broadcast |
 
-**`ScreenBroadcastState`** is one of: `'idle'` · `'connecting'` · `'broadcasting'` · `'stopped'` · `` `error:${string}` ``
+**`ScreenBroadcastState`** — `'idle'` · `'connecting'` · `'broadcasting'` · `'stopped'` · `` `error:${string}` ``
 
 #### iOS
 
-iOS cannot start a system broadcast programmatically — the user must tap `<BroadcastPickerView>` to open the system sheet. `screen.start()` always rejects. The extension reports its real state back through `screen.state`.
+iOS can't start a system broadcast programmatically — the user must tap `<BroadcastPickerView>` to open the system sheet, so `screen.start()` always rejects. The extension reports its real state back through `screen.state`.
 
 ```tsx
 import { BroadcastPickerView } from 'react-native-moq';
@@ -876,28 +828,25 @@ import { BroadcastPickerView } from 'react-native-moq';
 />
 ```
 
-Setup on iOS requires:
-- A `Broadcast Upload Extension` target in your Xcode project. The library ships `MoQReplayKitBroadcastSampleHandler` — subclass it in your extension and override `makeReplayKitBroadcastConfiguration` if you need custom encoder settings.
-- An `App Group` entitlement on **both** the host app and the extension. Pass its identifier as `appGroupIdentifier` so the two processes can share the broadcast descriptor.
-- The extension's bundle identifier supplied via `preferredExtension` so the picker pre-selects it.
+Setup requires:
+- A `Broadcast Upload Extension` target in Xcode. The library ships `MoQReplayKitBroadcastSampleHandler` — subclass it and override `makeReplayKitBroadcastConfiguration` for custom encoder settings.
+- An `App Group` entitlement on **both** the host app and the extension. Pass its identifier as `appGroupIdentifier`.
+- The extension's bundle identifier via `preferredExtension` so the picker pre-selects it.
 
 #### Android
 
-Android drives the foreground service directly. `screen.start()` triggers the system `MediaProjection` consent dialog and only resolves once the user grants it.
+Android drives the foreground service directly. `screen.start()` triggers the system `MediaProjection` consent dialog and resolves only once the user grants it.
 
 ```tsx
 const onToggleScreen = (next: boolean) => {
-  if (next) {
-    screen.start().catch(() => {/* user denied consent */});
-  } else {
-    screen.stop();
-  }
+  if (next) screen.start().catch(() => {/* user denied consent */});
+  else screen.stop();
 };
 ```
 
-Setup on Android requires the `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PROJECTION` permissions and the `ScreenBroadcastService` service declaration in `AndroidManifest.xml` (handled by the library's manifest merger — no manual step needed in typical apps).
+Setup requires the `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PROJECTION` permissions and the `ScreenBroadcastService` declaration in `AndroidManifest.xml` (handled by the library's manifest merger — no manual step in typical apps).
 
-`<BroadcastPickerView>` renders nothing on Android, so the same JSX can be conditionally branched on `Platform.OS` without crashing.
+`<BroadcastPickerView>` renders nothing on Android, so the same JSX branches safely on `Platform.OS`.
 
 ---
 
@@ -906,9 +855,9 @@ Setup on Android requires the `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_P
 | Event | Payload | Description |
 |---|---|---|
 | `stateChange` | `{ state: PublisherState }` | Publisher state transitioned |
-| `trackStateChange` | `{ name, state, error? }` | A published track changed lifecycle state (or errored) |
+| `trackStateChange` | `{ name, state, error? }` | A published track changed state (or errored) |
 
-Subscribe via `useEventListener`, `useEvent`, or `publisher.addListener` — same patterns as the player/session events documented above.
+Subscribe via `useEventListener`, `useEvent`, or `publisher.addListener` — same patterns as the player/session events above.
 
 ---
 
@@ -963,6 +912,8 @@ interface ScreenBroadcastOptions {
 
 ### Quality / rendition switching
 
+Sort a broadcast's video tracks and call `switchVideoTrack` to change rendition:
+
 ```tsx
 const player = useVideoPlayer(broadcast, (p) => p.play());
 
@@ -981,68 +932,89 @@ sortedTracks.map((track) => (
 
 ### Custom target latency
 
-```tsx
-// Set at session level via connect() (applies to all players created in this session)
-const session = useSession(url, (s) => s.connect(500));
-const broadcasts = useBroadcasts(session);
+Set it at three levels:
 
-// Override per player in the setup callback
+```tsx
+// Session level — applies to all players in this session
+const session = useSession(url, (s) => s.connect(500));
+
+// Per player, in the setup callback
 const player = useVideoPlayer(broadcast, (p) => {
   p.updateTargetLatency(100);
   p.play();
 });
 
-// Or change at runtime on the returned player
+// At runtime on the returned player
 player.updateTargetLatency(300);
 ```
 
 ### Displaying live stats
+
+Read `player.playbackStats` (updated every ~500 ms), or subscribe to `statsUpdate`:
 
 ```tsx
 const player = useVideoPlayer(broadcast, (p) => p.play());
 
 if (player.playbackStats) {
   console.log(`Latency: ${player.playbackStats.videoLatencyMs} ms`);
-  console.log(`Bitrate: ${player.playbackStats.videoBitrateKbps} kbps`);
-  console.log(`FPS: ${player.playbackStats.videoFps}`);
 }
-```
 
-Alternatively, subscribe to `statsUpdate` directly:
-
-```tsx
+// Or reactively:
 const stats = useEvent(player, 'statsUpdate');
 ```
 
+## Troubleshooting
+
+### `useBroadcasts` returns an empty array
+
+The list stays empty until `session.state === 'connected'` — make sure you've called `connect()` and the session reached `connected` (watch `stateChange`, or gate your UI on the state). Also check the `prefix`: it must match how broadcasts are published (an empty prefix matches everything).
+
+### A broadcast appears in the list but won't play
+
+Relays namespace broadcasts by **URL path**, so the publisher and subscriber must agree on it. Connecting to `http://host:4443` (root) can surface a broadcast's existence while playing it fails, if it was actually published under a sub-path like `http://host:4443/anon`. Point `useSession` at the same path the broadcast was published to. (A relay reset with `code=13` / `NotFound` is the usual symptom of a path mismatch.)
+
+### `publisher.state` goes straight to `error:session is not connected`
+
+`publish()` was called before the session finished connecting. Wait for `session.state === 'connected'` first — gate the publish button on it, or connect in the session's `setup` callback and only publish once connected.
+
+### On Android, publishing starts then immediately stops with no error
+
+Almost always an encoder that can't initialize for the chosen codec — moq-kit reports this as a clean stop, not an error. Gate your codec choice with [`getSupportedVideoCodecs()`](#getsupportedvideocodecs--getsupportedaudiocodecs) / `getSupportedAudioCodecs()`, and prefer `videoCodec: 'h264'`. For [`useMultiCamera`](#usemulticameraoptions), also avoid two H.265 encoders at once — see the dual-encoder note there.
+
+### The camera/mic preview is black, or nothing is published
+
+Runtime permissions aren't granted. The library does **not** request them — the host app must ask for `CAMERA` / `RECORD_AUDIO` on Android and declare `NSCameraUsageDescription` / `NSMicrophoneUsageDescription` in `Info.plist` on iOS. See [Publishing](#publishing).
+
+### Video is stretched in the fullscreen modal on Android
+
+Pass the source aspect ratio via `videoAspectRatio` on [`<VideoPlayerView>`](#videoplayerview) so it letterboxes instead of stretching — Android's `SurfaceView` doesn't preserve aspect on its own. See [Fullscreen playback](#fullscreen-playback).
+
 ## Default UI components (`react-native-moq-ui`)
 
-A companion package that layers a ready-made player chrome on top of the core [`<VideoView>`](#videoview): a `<VideoPlayerView>` with platform-styled inline + fullscreen controls, a `<VolumeSlider>`, and matching context hooks for composing your own chrome on top of the same fade / tap-to-toggle behavior.
+A companion package layering ready-made player chrome on top of the core [`<VideoView>`](#videoview): a [`<VideoPlayerView>`](#videoplayerview) with platform-styled inline + fullscreen controls, a [`<VolumeSlider>`](#volumeslider--and-speakerglyph-), and context hooks for building your own chrome on the same fade / tap-to-toggle behavior.
 
-It's a separate install so apps that build their own player UI don't pay for it — see [Optional: default UI components](../README.md#optional-default-ui-components) for setup. Everything below is exported from `react-native-moq-ui` and consumes [`Player`](#usevideoplayerbroadcast-setup) / [`AudioPlayer`](#useaudioplayerbroadcast-setup) values produced by the core hooks.
+It's a separate install so apps that build their own UI don't pay for it — see [Optional: default UI components](../README.md#optional-default-ui-components) for setup. Everything below is exported from `react-native-moq-ui` and consumes [`Player`](#usevideoplayerbroadcast-setup) / [`AudioPlayer`](#useaudioplayerbroadcast-setup) values from the core hooks.
 
 ### `<VideoPlayerView>`
 
-A complete video player composed on top of `<VideoView>`. Inline it renders platform-styled mini chrome on top of the video — a centered play/pause and a bottom-right enter-fullscreen button, wrapped in the same tap-to-toggle auto-hide as the fullscreen chrome. Calling `enterFullscreen()` on its ref (or tapping the inline button) opens the video in an RN `<Modal>` with platform-styled chrome — close button, centered play/pause, tap-to-toggle auto-hide — and your overlay children layered on top. Both inline and fullscreen chrome are fully customizable (see [Fullscreen playback](#fullscreen-playback)); if you outgrow the preset entirely, the [source](../packages/react-native-moq-ui/src/VideoPlayerView.tsx) is short enough to copy into your app and adapt on top of `<VideoView>`.
+A complete video player built on `<VideoView>`. Inline it shows mini chrome (centered play/pause + a bottom-right fullscreen button) with tap-to-toggle auto-hide. `enterFullscreen()` (via ref or the inline button) opens the video in an RN `<Modal>` with fullscreen chrome — close button, play/pause, auto-hide — and your overlay children on top. Both inline and fullscreen chrome are customizable (see [Fullscreen playback](#fullscreen-playback)); to go further, copy the short [source](../packages/react-native-moq-ui/src/VideoPlayerView.tsx) and adapt it on top of `<VideoView>`.
 
 ```tsx
-<VideoPlayerView
-  player={player}
-  style={{ width: '100%', aspectRatio: 16 / 9 }}
-/>
+<VideoPlayerView player={player} style={{ width: '100%', aspectRatio: 16 / 9 }} />
 ```
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `player` | `Player` | Yes | Player returned by [`useVideoPlayer`](#usevideoplayerbroadcast-setup) |
+| `player` | `Player` | Yes | Player from [`useVideoPlayer`](#usevideoplayerbroadcast-setup) |
 | `style` | `ViewStyle` | No | Standard React Native style prop |
-| `children` | `ReactNode` | No | Overlay content rendered above the video, inline and in fullscreen |
-| `videoAspectRatio` | `number` | No | Source video aspect ratio (`width / height`). Used to letterbox the video inside the fullscreen modal so it isn't stretched on Android. Defaults to `16 / 9` |
-| `controls` | `boolean \| ReactNode` | No | Chrome shown while in fullscreen. `true` (default) renders the built-in platform-styled controls; `false` disables them; passing your own element replaces them while keeping the same fade + tap-to-toggle behavior |
-| `miniControls` | `boolean \| ReactNode` | No | Chrome shown inline (when not fullscreen). `true` (default) renders the built-in `<MiniPlayerControls />` — centered play/pause plus a bottom-right enter-fullscreen button; `false` disables them; passing your own element replaces them while keeping the same fade + tap-to-toggle behavior |
+| `children` | `ReactNode` | No | Overlay content above the video, inline and in fullscreen |
+| `videoAspectRatio` | `number` | No | Source aspect (`width / height`). Letterboxes the video in the fullscreen modal so it isn't stretched on Android. Default `16 / 9` |
+| `controls` | `boolean \| ReactNode` | No | Fullscreen chrome. `true` (default) built-in; `false` disabled; a ReactNode replaces it while keeping the fade + tap-to-toggle behavior |
+| `miniControls` | `boolean \| ReactNode` | No | Inline chrome. `true` (default) renders [`<MiniPlayerControls />`](#miniplayercontrols-); `false` disabled; a ReactNode replaces it |
 | `onFullscreenEnter` | `() => void` | No | Fired after the fullscreen modal opens |
-| `onFullscreenExit` | `() => void` | No | Fired after the fullscreen modal closes (including dismissal via the Android hardware back button) |
+| `onFullscreenExit` | `() => void` | No | Fired after it closes (including Android hardware back) |
 
-Imperative methods on the ref:
+Imperative ref methods:
 
 | Method | Description |
 |---|---|
@@ -1054,18 +1026,16 @@ import { useRef } from 'react';
 import { VideoPlayerView, type VideoPlayerViewRef } from 'react-native-moq-ui';
 
 const ref = useRef<VideoPlayerViewRef>(null);
-// ...
 ref.current?.enterFullscreen();
-ref.current?.exitFullscreen();
 ```
 
-See [Fullscreen playback](#fullscreen-playback) below for examples covering the default chrome, disabling it, and replacing it with your own.
+See [Fullscreen playback](#fullscreen-playback) for the default chrome, disabling it, and replacing it.
 
 ---
 
 ### `useFullscreenControls()`
 
-Reads the fullscreen controls API from inside an element you've passed to `<VideoPlayerView controls={...} />`. Use this when building your own chrome and you want to opt in to the same tap-to-toggle / fade behavior the built-in controls use.
+Reads the fullscreen controls API from inside an element passed to `<VideoPlayerView controls={...} />`. Use it when building your own chrome that opts into the same tap-to-toggle / fade behavior. Throws if called outside a VideoPlayerView fullscreen modal.
 
 ```tsx
 const { player, exit, show, visible } = useFullscreenControls();
@@ -1073,18 +1043,18 @@ const { player, exit, show, visible } = useFullscreenControls();
 
 | Field | Type | Description |
 |---|---|---|
-| `player` | `Player` | The player driving the VideoPlayerView this chrome is mounted in |
-| `exit` | `() => void` | Programmatically exit fullscreen (equivalent to `ref.current?.exitFullscreen()`) |
-| `show` | `() => void` | Mark controls as visible and reset the auto-hide timer. Call this from any of your custom buttons' `onPress` so a tap doesn't immediately fade the chrome out from under the user's finger |
-| `visible` | `boolean` | Whether the surrounding fade is currently animating to visible — only useful if your custom controls want to render differently while hidden |
+| `player` | `Player` | The player driving this VideoPlayerView |
+| `exit` | `() => void` | Exit fullscreen (same as `ref.current?.exitFullscreen()`) |
+| `show` | `() => void` | Mark controls visible and reset the auto-hide timer. Call from your buttons' `onPress` so a tap doesn't immediately fade the chrome out |
+| `visible` | `boolean` | Whether the fade is currently animating to visible — for rendering differently while hidden |
 
-Throws if called outside a VideoPlayerView fullscreen modal. The built-in [`<FullscreenControls />`](#fullscreencontrols-) component (also exported) is the canonical consumer — read its [source](../packages/react-native-moq-ui/src/components/FullscreenControls.tsx) for a worked example.
+The built-in [`<FullscreenControls />`](#fullscreencontrols-) is the canonical consumer — see its [source](../packages/react-native-moq-ui/src/components/FullscreenControls.tsx).
 
 ---
 
 ### `<FullscreenControls />`
 
-The default fullscreen chrome — a platform-styled close + play/pause overlay. Mounted automatically when `<VideoPlayerView controls />` (or `controls={true}`) is used. Exported so you can compose it into a larger custom chrome, e.g. side-by-side with extra buttons:
+The default fullscreen chrome — a platform-styled close + play/pause overlay. Mounted automatically by `<VideoPlayerView controls />`. Exported so you can compose it into larger custom chrome:
 
 ```tsx
 import { FullscreenControls, useFullscreenControls } from 'react-native-moq-ui';
@@ -1108,7 +1078,7 @@ Takes no props.
 
 ### `useMiniPlayerControls()`
 
-Reads the inline (non-fullscreen) controls API from inside an element you've passed to `<VideoPlayerView miniControls={...} />`. Use this when building your own inline chrome and you want to opt in to the same tap-to-toggle / fade behavior the built-in mini controls use.
+The inline counterpart of `useFullscreenControls` — reads the inline controls API from inside an element passed to `<VideoPlayerView miniControls={...} />`. Throws if called outside a VideoPlayerView inline view.
 
 ```tsx
 const { player, enterFullscreen, show, visible } = useMiniPlayerControls();
@@ -1116,18 +1086,18 @@ const { player, enterFullscreen, show, visible } = useMiniPlayerControls();
 
 | Field | Type | Description |
 |---|---|---|
-| `player` | `Player` | The player driving the VideoPlayerView this chrome is mounted in |
-| `enterFullscreen` | `() => void` | Programmatically enter fullscreen (equivalent to `ref.current?.enterFullscreen()`) |
-| `show` | `() => void` | Mark controls as visible and reset the auto-hide timer. Call this from any of your custom buttons' `onPress` so a tap doesn't immediately fade the chrome out from under the user's finger |
-| `visible` | `boolean` | Whether the surrounding fade is currently animating to visible — only useful if your custom controls want to render differently while hidden |
+| `player` | `Player` | The player driving this VideoPlayerView |
+| `enterFullscreen` | `() => void` | Enter fullscreen (same as `ref.current?.enterFullscreen()`) |
+| `show` | `() => void` | Mark controls visible and reset the auto-hide timer |
+| `visible` | `boolean` | Whether the fade is currently animating to visible |
 
-Throws if called outside a VideoPlayerView inline view. The built-in [`<MiniPlayerControls />`](#miniplayercontrols-) component (also exported) is the canonical consumer — read its [source](../packages/react-native-moq-ui/src/components/MiniPlayerControls.tsx) for a worked example.
+The built-in [`<MiniPlayerControls />`](#miniplayercontrols-) is the canonical consumer — see its [source](../packages/react-native-moq-ui/src/components/MiniPlayerControls.tsx).
 
 ---
 
 ### `<MiniPlayerControls />`
 
-The default inline chrome — a platform-styled centered play/pause, a bottom-left volume slider, and a bottom-right enter-fullscreen button. Mounted automatically when `<VideoPlayerView miniControls />` (or `miniControls={true}`) is used. The same volume slider is also rendered along the bottom of the default fullscreen chrome. Exported so you can compose it into a larger custom chrome:
+The default inline chrome — centered play/pause, a bottom-left volume slider, and a bottom-right fullscreen button. Mounted automatically by `<VideoPlayerView miniControls />`. (The same volume slider also runs along the bottom of the fullscreen chrome.) Exported for composing into larger custom chrome:
 
 ```tsx
 import { MiniPlayerControls, useMiniPlayerControls } from 'react-native-moq-ui';
@@ -1151,7 +1121,7 @@ Takes no props.
 
 ### `<VolumeSlider />` and `<SpeakerGlyph />`
 
-Building blocks behind the volume control in the default mini and fullscreen chrome. Useful for adding volume to your own custom chrome, or to non-video surfaces like the audio-only example in [`example/src/components/BroadcastPlayer.tsx`](../example/src/components/BroadcastPlayer.tsx).
+The building blocks behind the volume control in the default chrome. Useful for your own chrome or non-video surfaces (e.g. an audio-only card). Drawn from plain `<View>`s — no SVG or icon-font dependency.
 
 ```tsx
 import { useAudioPlayer } from 'react-native-moq';
@@ -1172,42 +1142,37 @@ function AudioCard({ broadcast }) {
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `player` | `Player \| AudioPlayer` | Yes | Player to drive — calls `setVolume()` and reads `volume` |
-| `width` | `number` | No | Pixel width of the slider. Default `140` |
-| `theme` | `'dark' \| 'light'` | No | `'dark'` (default) renders white on a translucent dark scrim — meant for video overlays. `'light'` renders blue-ish on neutral gray — meant for light card backgrounds |
+| `player` | `Player \| AudioPlayer` | Yes | Player to drive — calls `setVolume()`, reads `volume` |
+| `width` | `number` | No | Pixel width. Default `140` |
+| `theme` | `'dark' \| 'light'` | No | `'dark'` (default) white on a translucent scrim, for video overlays; `'light'` blue-ish on gray, for light cards |
 
 `<SpeakerGlyph>` props:
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
 | `size` | `number` | No | Icon size in pixels. Default `16` |
-| `volume` | `number` | No | `0..1`; selects how many of the three wave arcs are filled. `0` shows the mute slash. Default `1` |
-| `color` | `string` | No | Foreground color. Inactive arcs use a 35%-alpha variant of the same color. Default `#fff` |
-
-Drawn from plain `<View>`s — no SVG or icon-font dependency.
+| `volume` | `number` | No | `0..1`; selects how many of the three wave arcs are filled (`0` shows the mute slash). Default `1` |
+| `color` | `string` | No | Foreground color (inactive arcs use a 35%-alpha variant). Default `#fff` |
 
 ---
 
 ### Fullscreen playback
 
-Fullscreen support lives on the [`<VideoPlayerView>`](#videoplayerview) preset, which exposes imperative `enterFullscreen()` / `exitFullscreen()` methods on its ref. Internally it renders the video into an RN `<Modal>` so children are still part of RN's tree — overlay buttons remain tappable, and rendering works on both iOS and Android (where the underlying `SurfaceView` cannot host child views directly). If you want fullscreen with a different UX, copy [`packages/react-native-moq-ui/src/VideoPlayerView.tsx`](../packages/react-native-moq-ui/src/VideoPlayerView.tsx) into your app and adapt it on top of the bare [`<VideoView>`](#videoview) primitive.
+Fullscreen lives on [`<VideoPlayerView>`](#videoplayerview) via its `enterFullscreen()` / `exitFullscreen()` ref methods. It renders the video into an RN `<Modal>`, so overlay children stay tappable and it works on both platforms (Android's `SurfaceView` can't host child views directly). For a different UX, copy [`VideoPlayerView.tsx`](../packages/react-native-moq-ui/src/VideoPlayerView.tsx) and adapt it on top of `<VideoView>`.
 
-By default the fullscreen modal renders platform-styled chrome — a close button (top-left on iOS, top-right on Android), a centered play/pause, and tap-to-toggle auto-hide. Most apps need nothing more than this:
+By default the modal renders platform-styled chrome — a close button (top-left iOS, top-right Android), centered play/pause, and tap-to-toggle auto-hide. Most apps need nothing more:
 
 ```tsx
 import { useRef } from 'react';
 import { Button, View } from 'react-native';
 import { useVideoPlayer, type BroadcastInfo } from 'react-native-moq';
-import {
-  VideoPlayerView,
-  type VideoPlayerViewRef,
-} from 'react-native-moq-ui';
+import { VideoPlayerView, type VideoPlayerViewRef } from 'react-native-moq-ui';
 
 function VideoSection({ broadcast }: { broadcast: BroadcastInfo }) {
   const player = useVideoPlayer(broadcast, (p) => p.play());
   const ref = useRef<VideoPlayerViewRef>(null);
 
-  // Pass the active track's aspect to letterbox correctly in fullscreen
+  // Pass the active track's aspect so fullscreen letterboxes correctly
   // (Android's SurfaceView would otherwise stretch the video).
   const active =
     broadcast.videoTracks.find((t) => t.name === player.currentVideoTrackName) ??
@@ -1231,13 +1196,13 @@ function VideoSection({ broadcast }: { broadcast: BroadcastInfo }) {
 
 #### Disabling or replacing the default chrome
 
-Pass `controls={false}` to hide it entirely — useful if you want a bare presentation, or if you're going to render your own overlay via `children`:
+Pass `controls={false}` to hide it (e.g. for a bare presentation, or when you render your own overlay via `children`):
 
 ```tsx
 <VideoPlayerView ref={ref} player={player} controls={false} />
 ```
 
-Pass any ReactNode to replace it. Custom controls are wrapped in the same fade + tap-to-toggle gesture as the default, so they auto-hide after a few seconds and reappear on tap. Inside, call `useFullscreenControls()` to read the visibility state and the same `{ exit, show, player }` API the built-in chrome uses:
+Pass a ReactNode to replace it — it's wrapped in the same fade + tap-to-toggle gesture. Inside, call [`useFullscreenControls()`](#usefullscreencontrols) for the `{ exit, show, player, visible }` API:
 
 ```tsx
 import { Pressable, Text, View, StyleSheet } from 'react-native';
@@ -1245,27 +1210,16 @@ import { useEvent } from 'react-native-moq';
 import { VideoPlayerView, useFullscreenControls } from 'react-native-moq-ui';
 
 function MyControls() {
-  const { player, exit, show, visible } = useFullscreenControls();
-  const { isPlaying } = useEvent(player, 'playingChange', {
-    isPlaying: player.isPlaying,
-  });
+  const { player, exit, show } = useFullscreenControls();
+  const { isPlaying } = useEvent(player, 'playingChange', { isPlaying: player.isPlaying });
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Pressable
-        onPress={() => {
-          show(); // restart the auto-hide timer
-          exit();
-        }}
-        style={styles.closeBtn}
-      >
+      <Pressable onPress={() => { show(); exit(); }} style={styles.closeBtn}>
         <Text style={{ color: 'white' }}>✕</Text>
       </Pressable>
       <Pressable
-        onPress={() => {
-          show();
-          isPlaying ? player.pause() : player.play();
-        }}
+        onPress={() => { show(); isPlaying ? player.pause() : player.play(); }}
         style={styles.playBtn}
       >
         <Text style={{ color: 'white' }}>{isPlaying ? '⏸' : '▶'}</Text>
@@ -1277,11 +1231,11 @@ function MyControls() {
 <VideoPlayerView ref={ref} player={player} controls={<MyControls />} />
 ```
 
-You can mix and match: keep the default chrome on and use `children` for non-auto-hiding overlays like a rendition picker.
+You can mix and match — keep the default chrome on and use `children` for non-auto-hiding overlays like a rendition picker.
 
 #### Notes
 
-- `onFullscreenEnter` / `onFullscreenExit` fire on every transition, including dismissal via the Android hardware back button — your local `isFullscreen` state stays in sync without manual back-button handling.
-- Children render alongside the native video (not inside it) on both platforms, so use absolute positioning for overlays.
-- The native view briefly remounts on fullscreen toggle. The shared video output (the `AVSampleBufferDisplayLayer` on iOS, the player `Surface` on Android) is keyed by `broadcastPath` and re-attaches automatically; expect at most one frame of black during the transition.
-- `videoAspectRatio` is only consulted in fullscreen. Inline layout is driven by the `style` prop as usual.
+- `onFullscreenEnter` / `onFullscreenExit` fire on every transition, including Android hardware-back dismissal — your local `isFullscreen` state stays in sync without manual back-button handling.
+- Children render alongside the native video (not inside it) on both platforms — use absolute positioning for overlays.
+- The native view briefly remounts on toggle. The shared video output (iOS `AVSampleBufferDisplayLayer`, Android player `Surface`) is keyed by `broadcastPath` and re-attaches automatically; expect at most one frame of black.
+- `videoAspectRatio` only applies in fullscreen. Inline layout is driven by `style` as usual.
