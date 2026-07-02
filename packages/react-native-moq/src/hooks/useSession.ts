@@ -8,7 +8,7 @@ const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
 let nextSessionId = 1;
 function mintSessionId(): string {
-  // Sufficient for in-bundle uniqueness; native maps are keyed by this string.
+  // Native maps are keyed by this string.
   return `s${nextSessionId++}`;
 }
 

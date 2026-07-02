@@ -1,24 +1,20 @@
 import AVFoundation
 import UIKit
 
-// Previews a single camera (front or back) of the shared multi-camera session.
-// With an AVCaptureMultiCamSession a preview layer can't infer which camera to
-// show, so we build a manual connection from the matching device input's video
-// port to a connection-less preview layer (Apple's AVMultiCamPiP pattern).
+// Previews one camera of the multi-camera session. AVCaptureMultiCamSession
+// can't infer which camera, so we build a manual connection from the matching
+// input's video port to a connection-less preview layer (Apple's AVMultiCamPiP).
 @objc(MoQMultiCameraPreviewView)
 public class MultiCameraPreviewView: UIView {
-  // Set by the view manager from the `source` prop ('front' | 'back').
   @objc public var source: NSString = "front" {
     didSet { Task { @MainActor in self.attach() } }
   }
 
   private var previewLayer: AVCaptureVideoPreviewLayer?
   private var previewConnection: AVCaptureConnection?
-  // The session we added previewConnection to. A no-connection preview layer
-  // doesn't expose `.session`, so we must track it ourselves to be able to
-  // remove the connection on teardown — otherwise the layer is deallocated with
-  // a live connection still in the running session, which crashes AVFoundation.
-  // Weak so a session torn down by stopCapture simply drops out.
+  // A no-connection preview layer doesn't expose `.session`, so track it to
+  // remove the connection on teardown — otherwise AVFoundation crashes on a
+  // layer deallocated with a live connection. Weak so stopCapture drops it out.
   private weak var previewSession: AVCaptureMultiCamSession?
 
   public override init(frame: CGRect) {
@@ -53,9 +49,8 @@ public class MultiCameraPreviewView: UIView {
 
   @MainActor
   private func detach() {
-    // Remove our connection while the session is still valid. The contains()
-    // check covers the case where stopCapture already removed it, and the weak
-    // session covers the case where the session was already deallocated.
+    // Remove our connection while the session is still valid; contains() covers
+    // stopCapture already removing it, weak session covers deallocation.
     if let connection = previewConnection, let session = previewSession {
       session.beginConfiguration()
       if session.connections.contains(connection) {

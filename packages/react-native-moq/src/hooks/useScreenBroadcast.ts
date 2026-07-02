@@ -17,8 +17,8 @@ export type ScreenBroadcastState =
 
 export interface ScreenBroadcastOptions {
   path: string;
-  // iOS-only. Must match the App Group entitlement on both the host app and
-  // the Broadcast Upload Extension target. Required on iOS, ignored on Android.
+  // iOS-only: must match the App Group entitlement on the host app and the
+  // Broadcast Upload Extension target. Ignored on Android.
   appGroupIdentifier?: string;
   // iOS-only: capture app audio (RPSampleBufferType.audioApp). Defaults true.
   appAudio?: boolean;
@@ -42,15 +42,10 @@ export interface ScreenBroadcast {
 }
 
 // Screen broadcasting runs out-of-process (iOS Broadcast Upload Extension /
-// Android foreground service), so it doesn't reuse the host's MoQ session — it
-// opens its own connection using the session's URL. We still take a Session
-// rather than a raw URL to keep the API symmetric with usePublisher.
-//
-// Reconfigures the native side whenever URL or any option changes. On iOS this
-// rewrites the App Group descriptor the extension reads at launch; on Android
-// it caches the config for the next start() call. Screen broadcast is a device
-// singleton (one ReplayKit / MediaProjection session at a time), so state is
-// not session-scoped — multiple hook instances will observe the same state.
+// Android foreground service), so it opens its own connection from the
+// session's URL rather than reusing the host's MoQ session. It's a device
+// singleton (one ReplayKit / MediaProjection at a time), so state is not
+// session-scoped — multiple hook instances observe the same state.
 export function useScreenBroadcast(
   session: Session,
   options: ScreenBroadcastOptions

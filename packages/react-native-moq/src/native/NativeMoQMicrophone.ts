@@ -4,13 +4,12 @@ export interface Spec extends TurboModule {
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 
-  // Returns the set of audio codecs whose encoder can actually be initialized
-  // on this device. Same rationale as camera codec gating.
+  // Audio codecs whose encoder can be initialized on this device (same
+  // rationale as camera codec gating).
   getSupportedCodecs(): string[];
 
-  // Microphone is a device singleton, ref-counted. sampleRate is the AudioRecord
-  // capture format on Android; ignored on iOS (the AVAudioSession category
-  // drives it). Changing sample rate while the mic is already running is a
+  // Mic is a device singleton, ref-counted. sampleRate applies on Android;
+  // iOS ignores it (AVAudioSession drives it). Changing it while running is a
   // no-op — stop and restart to apply.
   startCapture(sampleRate: number): void;
   stopCapture(): void;

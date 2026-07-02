@@ -11,9 +11,6 @@ interface BoyScreenPanelProps {
   lastError?: string | null;
 }
 
-// The bezel + dot-matrix screen, ported from BoyConsoleView.screenPanel.
-// Renders live video through the bare <VideoView> when a game is playing,
-// otherwise a powered-off / waiting placeholder.
 export function BoyScreenPanel({
   player,
   isConnected,

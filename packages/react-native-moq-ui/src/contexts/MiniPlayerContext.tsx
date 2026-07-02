@@ -2,20 +2,15 @@ import { createContext, useContext } from 'react';
 import type { Player } from 'react-native-moq';
 
 /**
- * API exposed to whatever element is mounted in the VideoPlayerView's
- * `miniControls` slot (the inline, non-fullscreen view). The built-in
- * `<MiniPlayerControls />` reads from this; a custom chrome you pass via
- * `<VideoPlayerView miniControls={...} />` can read it too to respect the
- * same tap-to-toggle behavior the native players use.
+ * API for the element mounted in the inline `miniControls` slot. Read via
+ * `useMiniPlayerControls()` to respect the same tap-to-toggle behavior.
  */
 export interface MiniPlayerControlsAPI {
-  /** Whether controls should currently be on screen. Drives the fade. */
+  /** Whether controls are on screen. Drives the fade. */
   visible: boolean;
-  /** Mark controls as visible and reset the auto-hide timer. */
+  /** Mark controls visible and reset the auto-hide timer. */
   show(): void;
-  /** Enter fullscreen mode programmatically. */
   enterFullscreen(): void;
-  /** The player driving this VideoPlayerView. */
   player: Player;
 }
 
@@ -23,11 +18,7 @@ export const MiniPlayerContext = createContext<MiniPlayerControlsAPI | null>(
   null
 );
 
-/**
- * Read the mini player controls API from inside a custom `miniControls`
- * element. Throws if used outside a VideoPlayerView inline view — these
- * controls only make sense in that context.
- */
+/** Read the mini player controls API. Throws if used outside the inline view. */
 export function useMiniPlayerControls(): MiniPlayerControlsAPI {
   const ctx = useContext(MiniPlayerContext);
   if (!ctx) {

@@ -1,15 +1,10 @@
 import Foundation
 import MoQKit
 
-// Owns the app-side DataTrackEmitters created by useDataTrack, keyed by the id
-// the hook assigns. Mirrors MoQKit's model where an emitter is a standalone
-// object handed to Publisher.addDataTrack — PublisherImpl looks the emitter up
-// by id when wiring a data track into a broadcast, and send() pushes payloads
-// straight to it.
-//
-// Unlike the camera/mic impls there is no hardware, refcount, or MainActor
-// state — emitters are cheap and accessed from the JS thread (send) and the
-// publisher (MainActor), so they live behind a lock.
+// Owns the DataTrackEmitters created by useDataTrack, keyed by hook-assigned id.
+// PublisherImpl looks an emitter up by id when wiring a data track into a
+// broadcast; send() pushes payloads to it. Accessed from the JS thread and the
+// publisher (MainActor), so guarded by a lock.
 @objc public class DataTrackImpl: NSObject {
   @objc public static let shared = DataTrackImpl()
   private override init() {}
@@ -46,7 +41,6 @@ import MoQKit
 
   // MARK: - Swift-only accessor for PublisherImpl
 
-  // Returns the emitter for trackId, or nil if useDataTrack hasn't created it.
   public func emitter(forId trackId: String) -> MoQKit.DataTrackEmitter? {
     lock.lock()
     defer { lock.unlock() }

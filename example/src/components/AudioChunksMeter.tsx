@@ -11,17 +11,13 @@ const DEFAULT_FORMAT: AudioChunkFormat =
   Platform.OS === 'ios' ? 'pcm-f32' : 'encoded';
 
 /**
- * Demonstrates `useAudioChunks`: subscribes to the broadcast's audio track and
- * shows a live tally of the chunks arriving as ArrayBuffers. On iOS it requests
- * decoded `pcm-f32` chunks (one tap on the title toggles back to the raw
- * encoded objects); Android always gets encoded. In a real app you'd feed
- * `chunk.data` straight to playback / an ML model when it's PCM, or to a decoder
- * (react-native-audio-api) first when it's encoded.
+ * Demonstrates `useAudioChunks`: subscribes to the audio track and shows a live
+ * tally of arriving chunks. iOS requests decoded `pcm-f32` (tap the title to
+ * toggle to encoded); Android always gets encoded.
  */
 export function AudioChunksMeter({ broadcast }: { broadcast: BroadcastInfo }) {
   const [format, setFormat] = useState<AudioChunkFormat>(DEFAULT_FORMAT);
-  // Chunks arrive at frame rate, so accumulate in a ref and flush to state on a
-  // timer rather than re-rendering on every chunk.
+  // Chunks arrive at frame rate; accumulate in a ref, flush to state on a timer.
   const tally = useRef({ count: 0, bytes: 0, last: 0, frames: 0, rate: 0 });
   const [display, setDisplay] = useState({
     count: 0,
@@ -44,8 +40,7 @@ export function AudioChunksMeter({ broadcast }: { broadcast: BroadcastInfo }) {
     { format }
   );
 
-  // Reset the tally whenever the delivery format changes so the numbers reflect
-  // the current stream rather than a mix of encoded + PCM.
+  // Reset the tally on format change so numbers reflect only the current stream.
   useEffect(() => {
     tally.current = { count: 0, bytes: 0, last: 0, frames: 0, rate: 0 };
   }, [format]);

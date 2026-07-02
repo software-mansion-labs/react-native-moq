@@ -1,8 +1,6 @@
 import type { VideoTrackInfo } from 'react-native-moq';
 
-// Highest-resolution first (by pixel area). Used to pick a default rendition
-// and to order the rendition picker. Returns a new array; the input is left
-// untouched.
+// Highest-resolution first (by pixel area). Returns a new array.
 export function sortVideoTracksByResolution(
   tracks: VideoTrackInfo[]
 ): VideoTrackInfo[] {

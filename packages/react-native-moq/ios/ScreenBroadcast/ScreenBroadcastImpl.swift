@@ -1,19 +1,14 @@
 import Foundation
 import MoQKit
 
-// Shared identifiers used by the host app side AND the Broadcast Upload
-// Extension's MoQReplayKitBroadcastSampleHandler subclass. Both sides MUST
-// agree on these — they're documented in the README so integrators can wire
-// up their extension to the same keys.
+// Identifiers shared by the host and the Broadcast Upload Extension; both sides
+// MUST agree on these (also documented in the README).
 public enum MoQScreenBroadcastSharedKeys {
-  // Key under which the host writes the full ReplayKitBroadcastConfiguration
-  // (JSON-encoded). The extension's sample handler reads this on launch.
+  // Host writes the JSON ReplayKitBroadcastConfiguration; extension reads it on launch.
   public static let configurationKey = "com.swmansion.moq.screenBroadcast.config"
-  // Key under which the extension writes its current state for the host to
-  // observe: { "state": "...", "error": "..." }.
+  // Extension writes its state here: { "state": "...", "error": "..." }.
   public static let stateKey = "com.swmansion.moq.screenBroadcast.state"
-  // Darwin notification posted by the extension whenever the state key
-  // changes, so the host can react without polling.
+  // Darwin notification posted when the state key changes, so the host avoids polling.
   public static let stateNotificationName = "com.swmansion.moq.screenBroadcast.stateChanged"
 }
 
@@ -23,9 +18,7 @@ public enum MoQScreenBroadcastSharedKeys {
 
   @objc public var onEvent: ((_ name: String, _ body: [String: Any]) -> Void)?
 
-  // App Group identifier currently configured for screen broadcasting. We keep
-  // it so we can read state written by the Broadcast Upload Extension and clear
-  // the descriptor when the host calls stop().
+  // Kept to read extension-written state and clear the descriptor on stop().
   private var appGroupIdentifier: String?
   private var darwinObserver: UnsafeMutableRawPointer?
 
@@ -70,9 +63,8 @@ public enum MoQScreenBroadcastSharedKeys {
         sampleRate: opts.audioSampleRate))
 
     do {
-      // Write both: the standard descriptor (used by MoQReplayKitBroadcastSampleHandler's
-      // default config path) AND our full configuration override (read by the
-      // example's SampleHandler subclass, which overrides makeReplayKitBroadcastConfiguration).
+      // Write both the standard descriptor and our full configuration override
+      // (read by a SampleHandler that overrides makeReplayKitBroadcastConfiguration).
       let store = ReplayKitBroadcastDescriptorStore(appGroupIdentifier: appGroup)
       try store.save(descriptor)
 
@@ -83,11 +75,9 @@ public enum MoQScreenBroadcastSharedKeys {
       let encoded = try JSONEncoder().encode(configuration)
       defaults.set(encoded, forKey: MoQScreenBroadcastSharedKeys.configurationKey)
 
-      // (Re)attach the Darwin observer for state notifications from the extension.
       setupStateObserver(appGroup: appGroup)
       appGroupIdentifier = appGroup
 
-      // Re-emit whatever state the extension last reported (or "idle" if none).
       emitCurrentState()
     } catch {
       emitState("error:\(error.localizedDescription)")
@@ -96,9 +86,8 @@ public enum MoQScreenBroadcastSharedKeys {
 
   @MainActor
   private func _stop() {
-    // We cannot programmatically stop a ReplayKit broadcast from the host — the
-    // user (or the extension itself) controls that. What we CAN do is clear the
-    // shared descriptor so the next launch fails fast, and locally signal idle.
+    // Can't stop a ReplayKit broadcast from the host; just clear the shared
+    // descriptor so the next launch fails fast, and signal idle locally.
     if let appGroup = appGroupIdentifier,
       let defaults = UserDefaults(suiteName: appGroup)
     {
@@ -114,9 +103,8 @@ public enum MoQScreenBroadcastSharedKeys {
   private func setupStateObserver(appGroup: String) {
     teardownStateObserver()
 
-    // Darwin notifications are process-wide and don't carry user info, so the
-    // host reads the latest state out of App Group UserDefaults whenever the
-    // extension fires this.
+    // Darwin notifications carry no user info, so read state from App Group
+    // UserDefaults when the extension fires this.
     let observer = Unmanaged.passUnretained(self).toOpaque()
     darwinObserver = observer
     CFNotificationCenterAddObserver(
@@ -172,9 +160,8 @@ public enum MoQScreenBroadcastSharedKeys {
     var appAudio: Bool = true
     var mic: Bool = true
     var videoCodec: VideoCodec = .h265
-    // ReplayKitBroadcastPipeline overrides width/height/maxFrameRate with the
-    // device's screen metrics at start time; these are placeholders that just
-    // need to be valid VideoEncoderConfig values.
+    // Placeholders; ReplayKitBroadcastPipeline overrides these with the device's
+    // screen metrics at start time.
     var width: Int32 = 1920
     var height: Int32 = 1080
     var framerate: Double = 60

@@ -72,8 +72,7 @@ function VideoSection({
     p.play();
   });
 
-  // Pause when this section unmounts (mode switch or full disconnect) so the
-  // video stream stops while audio mode is active.
+  // Pause on unmount (mode switch / disconnect) so the video stream stops.
   useEffect(() => {
     return () => player.pause();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,9 +80,8 @@ function VideoSection({
 
   const sortedVideoTracks = sortVideoTracksByResolution(broadcast.videoTracks);
 
-  // Aspect ratio of the active video track (or the largest one we know of).
-  // Passed to VideoPlayerView so the fullscreen modal letterboxes correctly on
-  // Android, where SurfaceView would otherwise stretch the video.
+  // Aspect ratio of the active track, so Android's fullscreen modal letterboxes
+  // rather than stretching the video.
   const activeTrack =
     broadcast.videoTracks.find(
       (t) => t.name === player.currentVideoTrackName
@@ -97,11 +95,8 @@ function VideoSection({
 
   return (
     <>
-      {/* VideoPlayerView renders its own native-looking inline mini chrome
-          (centered play/pause + bottom-right fullscreen-enter) and fullscreen
-          chrome (close + play/pause), both with tap-to-toggle auto-hide. Pass
-          `miniControls={false}` / `controls={false}` to opt out, or pass a
-          ReactNode to either to swap in your own. */}
+      {/* Renders its own inline + fullscreen chrome; pass
+          `miniControls`/`controls` (false or a ReactNode) to opt out or replace. */}
       <VideoPlayerView
         player={player}
         style={styles.video}
@@ -178,8 +173,7 @@ function AudioSection({
   );
 }
 
-// Mirrors moq-kit's iOS demo SessionPlayerView InfoPill row — shows the
-// currently-playing track's codec / dimensions / sample rate.
+// Codec / dimensions / sample rate of the currently-playing track.
 function TrackInfoPills({
   video,
   audio,

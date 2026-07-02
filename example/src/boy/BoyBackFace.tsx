@@ -12,10 +12,7 @@ interface BoyBackFaceProps {
   onLatencyChange: (ms: number) => void;
 }
 
-// The flip side of the console — the cartridge bay. Mirrors
-// BoyConsoleView.backFace: model header, a CARTRIDGE dock showing the inserted
-// game, a wheel of available cartridges to insert, plus catalog/latency detail
-// pills. Flip back to the front to play.
+// The flipped-over back face: the cartridge bay.
 export function BoyBackFace({
   games,
   selectedGamePath,

@@ -3,7 +3,6 @@
 #include <memory>
 #include <vector>
 
-// Only include from ObjC++ (.mm) translation units.
 @class PlayerRef;
 
 namespace moq {
@@ -19,7 +18,7 @@ class PlayerHostObject final : public facebook::jsi::HostObject {
       facebook::jsi::Runtime& rt) override;
 
  private:
-  void* _refBridge;  // CF-retained PlayerRef*, managed via CFBridgingRetain/Release
+  void* _refBridge;  // CF-retained PlayerRef*
 };
 
 }  // namespace moq

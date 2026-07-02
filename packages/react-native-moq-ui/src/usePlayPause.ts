@@ -1,11 +1,9 @@
 import { useEvent, type Player } from 'react-native-moq';
 
 /**
- * Reactive play/pause state + toggle shared by FullscreenControls and
- * MiniPlayerControls. Follows the player's `playingChange` event, seeded with
- * the current value to avoid a one-frame mismatch before the first event
- * lands. `show` is called on toggle so the auto-hide timer restarts (we don't
- * want the controls fading out from under the user's finger).
+ * Reactive play/pause state + toggle. Follows `playingChange`, seeded with the
+ * current value to avoid a one-frame mismatch. `show` restarts the auto-hide
+ * timer on toggle so controls don't fade out under the user's finger.
  */
 export function usePlayPause(player: Player, show: () => void) {
   const playingEvent = useEvent(player, 'playingChange', {

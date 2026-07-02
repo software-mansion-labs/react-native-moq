@@ -5,16 +5,9 @@ import { useMiniPlayerControls } from '../contexts/MiniPlayerContext';
 import { usePlayPause } from '../usePlayPause';
 import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
 
-// Default inline chrome for VideoPlayerView. Mirrors the platform split used
-// by FullscreenControls but scaled down for an embedded view:
-//   - centered play/pause (smaller than the fullscreen version)
-//   - bottom-right fullscreen-enter button (the universal convention for
-//     inline players: YouTube embed, AVPlayerViewController inline, Media3
-//     PlayerView's default control bar)
-// No close button (you're already not fullscreen), no scrubber (live).
-//
-// Visibility and the enter-fullscreen action are read from MiniPlayerContext;
-// this component only renders the chrome itself.
+// Default inline chrome for VideoPlayerView: centered play/pause and a
+// bottom-right fullscreen-enter button. Visibility and the enter-fullscreen
+// action come from MiniPlayerContext.
 export function MiniPlayerControls() {
   const { player, enterFullscreen, show } = useMiniPlayerControls();
   const { isPlaying, onTogglePlay } = usePlayPause(player, show);
@@ -43,10 +36,6 @@ export function MiniPlayerControls() {
     />
   );
 }
-
-// ---------------------------------------------------------------------------
-// iOS
-// ---------------------------------------------------------------------------
 
 function IOSChrome({
   player,
@@ -105,10 +94,6 @@ function IOSChrome({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Android
-// ---------------------------------------------------------------------------
-
 function AndroidChrome({
   player,
   isPlaying,
@@ -122,17 +107,15 @@ function AndroidChrome({
 }) {
   return (
     <View style={styles.fill} pointerEvents="box-none">
-      {/* Soft scrim, matching Media3 PlayerView's default look when controls
-          are showing. Keeps the icons legible over light video frames. */}
+      {/* Soft scrim so icons stay legible over light video frames. */}
       <View
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, styles.androidScrim]}
       />
 
       <View style={styles.center} pointerEvents="box-none">
-        {/* `borderless: false` for the same reason as the fullscreen play
-            button: keeping the bg drawable around the ripple so the dark
-            circle is visible over a bright video frame. */}
+        {/* `borderless: false` keeps the bg drawable so the dark circle
+            stays visible over a bright frame (see FullscreenControls). */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
@@ -181,10 +164,6 @@ function AndroidChrome({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
 const styles = StyleSheet.create({
   fill: { ...StyleSheet.absoluteFill },
   pressed: { opacity: 0.7 },
@@ -216,7 +195,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
 
-  // iOS — translucent black pills, matching the fullscreen chrome's look.
   iosPlayButton: {
     width: 52,
     height: 52,
@@ -234,8 +212,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Android — bounded ripple on the play button, borderless on the corner
-  // (the corner button has no background; the ripple alone gives feedback).
   androidPlayButton: {
     width: 56,
     height: 56,

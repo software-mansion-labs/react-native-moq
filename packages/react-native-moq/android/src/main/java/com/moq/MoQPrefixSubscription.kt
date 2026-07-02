@@ -9,12 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/**
- * Owns the state for a single prefix subscription: the underlying MoQKit
- * [BroadcastSubscription], the coroutine collecting its `broadcasts` flow,
- * and the per-path catalog jobs.  The owning [MoQModule] keeps one of these
- * per active prefix and forwards callbacks for player creation/teardown.
- */
+/** Owns the state for a single prefix subscription. */
 class MoQPrefixSubscription(
   val prefix: String,
   private val subscription: BroadcastSubscription,
@@ -26,17 +21,11 @@ class MoQPrefixSubscription(
   private var broadcastsJob: Job? = null
   private val catalogJobs = ConcurrentHashMap<String, Job>()
 
-  /**
-   * Begin observing the relay's broadcast flow.  Each new broadcast spins up
-   * a child coroutine that follows its catalog updates and reports the final
-   * unavailable when the catalog flow ends naturally.
-   */
   fun start() {
     broadcastsJob = scope.launch {
       subscription.broadcasts.collect { broadcast ->
         val path = broadcast.path
-        // Replace any in-flight catalog job for this path — the relay
-        // re-emitted the broadcast so we restart catalog observation.
+        // Relay re-emitted the broadcast; restart catalog observation.
         catalogJobs[path]?.cancel()
         val job = launch {
           try {
@@ -45,7 +34,7 @@ class MoQPrefixSubscription(
                 onBroadcastAvailable(prefix, b, catalog)
               }
             }
-            // Natural end of the catalog flow — broadcast unavailable.
+            // Catalog flow ended — broadcast unavailable.
             onBroadcastUnavailable(prefix, path)
           } catch (_: CancellationException) {
           } catch (_: Exception) {
@@ -59,20 +48,12 @@ class MoQPrefixSubscription(
     }
   }
 
-  /**
-   * Cancel the in-flight catalog job for a single broadcast path.  Used when
-   * [MoQModule] tears down a player externally (e.g. stopPlayer) so the job
-   * doesn't keep emitting events afterward.
-   */
+  /** Cancel the catalog job for one path so it stops emitting after external teardown. */
   fun cancelCatalogJob(path: String) {
     catalogJobs.remove(path)?.cancel()
   }
 
-  /**
-   * Cancel the underlying subscription and all in-flight jobs.  Returns the
-   * set of broadcast paths the subscription was tracking so the caller can
-   * tear down the corresponding players.
-   */
+  /** Cancel the subscription and all jobs; returns the paths it was tracking. */
   fun cancel(): Set<String> {
     val paths = catalogJobs.keys.toSet()
     broadcastsJob?.cancel()

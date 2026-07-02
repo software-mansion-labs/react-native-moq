@@ -2,11 +2,9 @@ import AVFoundation
 import Foundation
 import MoQKit
 
-// Owns the device microphone as a refcounted singleton. Multiple consumers
-// (useMicrophone hooks, live publishers) call start/stop independently — the
-// physical mic only stops when the refcount drops to zero (see
-// RefcountedCapture). The audio session category is driven from here too:
-// playAndRecord while the mic is active, playback otherwise.
+// Refcounted device-microphone singleton: the mic stops only when the refcount
+// drops to zero. Drives the audio session category too — playAndRecord while
+// active, playback otherwise.
 @objc public class MicrophoneImpl: NSObject {
   @objc public static let shared = MicrophoneImpl()
   private override init() {}
@@ -23,9 +21,8 @@ import MoQKit
     manager.current()
   }
 
-  // Awaits any in-flight start so publish() can grab the mic right after the
-  // useMicrophone hook calls startCapture. Throws if no consumer has asked for
-  // the mic at all.
+  // Awaits any in-flight start so publish() can grab the mic right after a hook
+  // calls startCapture. Throws if no consumer asked for the mic.
   @MainActor public func waitForMicrophone() async throws -> MicrophoneCapture {
     try await manager.waitForCapture("microphone capture not started")
   }
@@ -73,9 +70,8 @@ import MoQKit
   }
 }
 
-// Shared error type used by all three capture impls (and RefcountedCapture) so
-// publish() can distinguish "capture not started" from generic moq-kit failures
-// and surface a useful error message.
+// Shared error type letting publish() distinguish "capture not started" from
+// generic moq-kit failures.
 public enum MoQCaptureError: Error, LocalizedError {
   case notStarted(String)
 

@@ -7,9 +7,8 @@ import type {
   ChunkSubscription,
 } from './types';
 
-// One shared emitter for the MoQ module — mirrors useBroadcasts. The native
-// side fans every received track object out as a `trackObject` event; each
-// subscription filters by (sessionId, broadcastPath, trackName).
+// Shared emitter: native fans every track object out as one `trackObject`
+// event; each subscription filters by (sessionId, broadcastPath, trackName).
 const emitter = new NativeEventEmitter(NativeMoQ);
 
 interface TrackObjectEvent {
@@ -33,8 +32,7 @@ interface AudioDataEvent {
   timestampUs: number;
 }
 
-// `pcm-f32` / `pcm-i16` map to the moq-kit AudioDataStream sample formats the
-// native layer understands; `encoded` uses the raw-object path instead.
+// Maps public formats to moq-kit AudioDataStream sample formats.
 const PCM_SAMPLE_FORMAT: Record<
   Exclude<AudioChunkFormat, 'encoded'>,
   'f32' | 'i16'
@@ -53,9 +51,7 @@ const BASE64_LOOKUP = /* @__PURE__ */ (() => {
   return table;
 })();
 
-// Dependency-free base64 → ArrayBuffer. Chunks cross the RN event bridge as
-// base64 (JSON can't carry binary); decode once here so consumers get an
-// ArrayBuffer ready for react-native-audio-api / executorch.
+// Chunks cross the RN bridge as base64 (JSON can't carry binary); decode here.
 /* eslint-disable no-bitwise */
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const len = base64.length;
@@ -78,9 +74,8 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 /* eslint-enable no-bitwise */
 
-// Shared lifecycle skeleton for both the encoded and PCM subscriptions. `open`
-// wires up the native subscription + emitter listener and returns its teardown;
-// this just guards start/stop so they're idempotent and tracks `isActive`.
+// Shared lifecycle for both subscriptions: `open` wires up the native
+// subscription + listener and returns its teardown; guards start/stop as idempotent.
 function buildSubscription(
   sessionId: string,
   path: string,
@@ -120,22 +115,16 @@ export interface SubscribeAudioChunksOptions {
   autoStart?: boolean;
   /**
    * How to deliver audio. Defaults to `'encoded'` (one Opus/AAC object per
-   * chunk). The `'pcm-f32'` / `'pcm-i16'` formats deliver decoded interleaved
-   * PCM via moq-kit's `AudioDataStream` decoder.
+   * chunk); `'pcm-f32'` / `'pcm-i16'` deliver decoded interleaved PCM.
    */
   format?: AudioChunkFormat;
 }
 
 /**
  * Subscribe to a broadcast's audio track and receive each chunk as an
- * `ArrayBuffer`. Framework-agnostic — works with or without React. For multiple
- * tracks or broadcasts, call it once per `(broadcast, trackName)`; each call
- * returns its own independent handle.
- *
- * By default chunks are *encoded* audio (one Opus/AAC object) — decode them
- * downstream (e.g. react-native-audio-api) before playback or feeding
- * executorch. Pass `format: 'pcm-f32'` or `'pcm-i16'` to instead receive decoded
- * interleaved PCM.
+ * `ArrayBuffer`. Framework-agnostic; call once per `(broadcast, trackName)`.
+ * Chunks are encoded audio by default; pass `format: 'pcm-f32'` / `'pcm-i16'`
+ * for decoded interleaved PCM.
  */
 export function subscribeAudioChunks(
   broadcast: BroadcastInfo,
@@ -149,8 +138,7 @@ export function subscribeAudioChunks(
   }
 
   const { sessionId, path } = broadcast;
-  // Enrich every chunk with codec/sampleRate from the catalog so consumers
-  // don't have to look the track up themselves. Stable for a given path+track.
+  // Enrich each chunk with codec/sampleRate from the catalog.
   const info = broadcast.audioTracks.find((t) => t.name === trackName);
   const codec = info?.codec ?? '';
   const sampleRate = info?.sampleRate ?? 0;
@@ -191,12 +179,8 @@ export function subscribeAudioChunks(
   );
 }
 
-/**
- * Decoded-PCM variant of `subscribeAudioChunks`, backed by moq-kit's
- * `AudioDataStream`. Mirrors the encoded path but listens on the `audioData`
- * event and carries the decoder's PCM metadata (frameCount / timestampUs /
- * decoded sampleRate).
- */
+// Decoded-PCM variant of subscribeAudioChunks, backed by moq-kit's
+// AudioDataStream; listens on `audioData` and carries the decoder's PCM metadata.
 function subscribePcmChunks(
   broadcast: BroadcastInfo,
   trackName: string,

@@ -70,12 +70,8 @@ import MoQKit
 
   // MARK: - Event observation
 
-  // MoQKit 0.2.0 replaced the flat `player.events` AsyncStream with a
-  // push-based `subscribeEvents` callback over a richer event model. Pause and
-  // end are now session-level rather than per-track, so we fold the lifecycle
-  // events onto the `trackPlaying` / `trackPaused` / `allTracksStopped` /
-  // `trackSwitched` types the usePlayer hook acts on, and forward the remaining
-  // diagnostic events under their own names (the JS side ignores unknown types).
+  // MoQKit 0.2.0's session-level events are folded onto the per-track
+  // types usePlayer acts on; unknown types are ignored by JS.
   @MainActor
   func startObservingEvents() {
     eventsSubscription?.cancel()

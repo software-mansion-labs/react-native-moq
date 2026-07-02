@@ -1,12 +1,8 @@
 /**
- * Streaming PCM → 16 kHz mono resampler.
- *
- * executorch's Whisper models want a single-channel 16 kHz `Float32Array`, but
- * the decoded MoQ audio arrives interleaved at the decoder's rate (typically
- * 48 kHz, sometimes stereo). This downmixes to mono and linearly resamples to
- * the target rate, carrying a fractional read cursor + the previous chunk's
+ * Streaming PCM → 16 kHz mono resampler for Whisper. Downmixes to mono and
+ * linearly resamples, carrying a fractional read cursor + the previous chunk's
  * final sample across calls so back-to-back chunks resample as one continuous
- * stream (no per-chunk clicks or drift). Good enough for STT; not hi-fi.
+ * stream (no clicks or drift). Good enough for STT; not hi-fi.
  */
 export function createMonoResampler(targetRate = 16000) {
   let nextPos = 0; // next output position, in this chunk's sample coordinates
@@ -21,7 +17,6 @@ export function createMonoResampler(targetRate = 16000) {
     const frames = Math.floor(interleaved.length / Math.max(1, channels));
     if (frames === 0 || sourceRate <= 0) return new Float32Array(0);
 
-    // Downmix to mono.
     const mono = new Float32Array(frames);
     for (let i = 0; i < frames; i++) {
       let sum = 0;

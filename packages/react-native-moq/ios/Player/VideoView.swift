@@ -36,7 +36,7 @@ public class VideoView: UIView {
     let userInfo = notification.userInfo ?? [:]
     let changedSession = userInfo[MoQImpl.playerChangedSessionIdKey] as? String
     let changedPath = userInfo[MoQImpl.playerChangedBroadcastPathKey] as? String
-    // No session in payload = global change (legacy); otherwise match ours.
+    // No session in payload = global change; otherwise match ours.
     if let changedSession, changedSession != sessionId { return }
     if let changedPath, changedPath != broadcastPath { return }
     reattach()
@@ -54,16 +54,14 @@ public class VideoView: UIView {
   }
 
   private func attach(layer newLayer: AVSampleBufferDisplayLayer?) {
-    // The video layer is shared via PlayerRef and may currently be hosted
-    // by a sibling VideoView (e.g. the inline copy while we mount the
-    // fullscreen one). Only detach if it's still parented to us — otherwise
-    // we'd yank it out of the new owner.
+    // Layer is shared via PlayerRef and may be hosted by a sibling VideoView;
+    // only detach if it's still parented to us.
     if let current = displayLayer, current.superlayer === self.layer {
       current.removeFromSuperlayer()
     }
     displayLayer = newLayer
     if let newLayer {
-      // Insert at the back so RN-managed subviews stay on top of the video.
+      // Insert at the back so RN-managed subviews stay on top.
       self.layer.insertSublayer(newLayer, at: 0)
       newLayer.frame = bounds
     }

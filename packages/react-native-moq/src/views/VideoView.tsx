@@ -13,10 +13,8 @@ export interface VideoViewProps extends ViewProps {
 const NativeMoQVideoView =
   requireNativeComponent<NativeVideoViewProps>('MoQVideoView');
 
-// Thin wrapper around the MoQ native view: renders the player's video output
-// with no extra chrome, fullscreen handling, or overlay support. This is the
-// building block for fully custom video UIs. If you want a ready-made layout
-// with fullscreen + platform-styled controls, reach for `<VideoPlayerView>`.
+// Bare native video output, no chrome — the building block for custom UIs.
+// For a ready-made layout with fullscreen + controls, use `<VideoPlayerView>`.
 export function VideoView({ player, ...rest }: VideoViewProps) {
   return (
     <NativeMoQVideoView

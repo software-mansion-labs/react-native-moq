@@ -1,7 +1,4 @@
-/* eslint-disable no-bitwise -- djb2 hash + HSV math, ported verbatim */
-// Color palette + cartridge-color hashing ported from moq-kit's iOS demo
-// (MoQDemo/Features/Boy/Models/BoyModels.swift). SwiftUI Color(red:green:blue:)
-// values are 0…1; converted to hex here.
+/* eslint-disable no-bitwise -- djb2 hash + HSV math */
 export const boyColors = {
   shellTop: '#E6E0C9',
   shellBottom: '#D1CCB5',
@@ -54,8 +51,7 @@ function hsvToHex(h: number, s: number, v: number): string {
   return `#${to(r)}${to(g)}${to(b)}`;
 }
 
-// Mirrors BoyCartridgePalette.colors(for:) — a stable djb2 hash of the game
-// name maps to a hue, giving every cartridge a distinct two-tone color.
+// Stable djb2 hash of the game name → hue, giving each cartridge a two-tone color.
 export function cartridgeColors(name: string | null): {
   top: string;
   bottom: string;

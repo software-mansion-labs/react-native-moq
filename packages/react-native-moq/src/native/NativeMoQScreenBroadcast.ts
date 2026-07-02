@@ -4,16 +4,11 @@ export interface Spec extends TurboModule {
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 
-  // Screen broadcasting runs out-of-process on iOS (Broadcast Upload Extension)
-  // and in a foreground Service on Android. It opens its own MoQ session using
-  // the URL passed here — it does not share the host app's MoQPublisher
-  // session.
-  //
-  // configureScreenBroadcast persists the relay URL + path + encoder config so
-  // that the iOS extension (launched via <BroadcastPickerView/>) or the
-  // Android service can pick them up. On Android, call startScreenBroadcast
-  // afterwards to actually launch the foreground service (this triggers the
-  // MediaProjection consent dialog). iOS cannot start the broadcast
+  // Screen broadcast runs out-of-process (iOS Broadcast Upload Extension /
+  // Android foreground Service) with its own MoQ session, not the host app's.
+  // configureScreenBroadcast persists the URL/path/encoder config for the
+  // extension or service to pick up. On Android, follow with startScreenBroadcast
+  // (triggers the MediaProjection consent dialog); iOS can't start it
   // programmatically — the user must tap the system broadcast picker.
   //
   // optsJson shape:

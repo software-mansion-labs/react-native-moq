@@ -22,23 +22,18 @@ export interface BoyConsoleProps {
   selectedGameName: string | null;
   placeholder: { title: string; subtitle: string };
   lastError?: string | null;
-  // Cartridge bay (rendered on the flipped-over back face).
   games: BoyGame[];
   selectedGamePath: string | null;
   onSelectGame: (path: string | null) => void;
   latency: number;
   onLatencyChange: (ms: number) => void;
-  // Flip state, lifted so it survives the front/back remount on game change.
+  // Lifted so it survives the front/back remount on game change.
   showsBack: boolean;
   onToggleFlip: () => void;
-  // Fired when the flip animation settles facing front — the cue to mount the
-  // selected game so its VideoView never initializes behind a rotated face.
+  // Fires when the flip settles facing front — cue to mount the game's video.
   onFlipSettled?: () => void;
 }
 
-// The plastic shell. The console flips on its Y axis between a playable front
-// face (screen + control deck) and a cartridge-bay back face, exactly like
-// BoyConsoleView in moq-kit's iOS demo. Pure presentation; all state via props.
 export function BoyConsole({
   isConnected,
   isConnecting,
@@ -59,11 +54,9 @@ export function BoyConsole({
   onToggleFlip,
   onFlipSettled,
 }: BoyConsoleProps) {
-  // A 0→1 driver: 0 shows the front face, 1 the back. Initialized to the
-  // current side so a remount (front↔game) lands without a spurious spin.
+  // 0 = front, 1 = back. Init to the current side so remounts don't spin.
   const flip = useRef(new Animated.Value(showsBack ? 1 : 0)).current;
 
-  // Keep the latest callback without re-running the animation effect.
   const onFlipSettledRef = useRef(onFlipSettled);
   onFlipSettledRef.current = onFlipSettled;
 
@@ -74,8 +67,7 @@ export function BoyConsole({
       friction: 9,
       tension: 12,
     }).start(({ finished }) => {
-      // Only when the flip actually completed facing front (not interrupted
-      // by another toggle) is it safe to mount the game's video.
+      // Only safe to mount the game's video once fully facing front.
       if (finished && !showsBack) onFlipSettledRef.current?.();
     });
   }, [showsBack, flip]);
@@ -88,9 +80,8 @@ export function BoyConsole({
     inputRange: [0, 1],
     outputRange: ['180deg', '360deg'],
   });
-  // Hard cut each face at the halfway point so the away-facing side never shows
-  // through (the back face is absolute and sits on top in z-order). Belt and
-  // braces with backfaceVisibility, which is unreliable on Android.
+  // Hard-cut each face at the halfway point; backfaceVisibility is unreliable
+  // on Android.
   const frontOpacity = flip.interpolate({
     inputRange: [0, 0.5, 0.5, 1],
     outputRange: [1, 1, 0, 0],

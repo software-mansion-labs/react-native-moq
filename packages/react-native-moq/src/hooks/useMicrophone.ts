@@ -28,7 +28,6 @@ export interface MicrophoneTrack {
   readonly __type: 'microphone';
   readonly state: MicrophoneCaptureState;
   readonly lastError: string | null;
-  // Snapshotted by usePublisher at publish() time.
   readonly encoder: AudioEncoderOptions;
 }
 
@@ -36,10 +35,8 @@ export function getSupportedAudioCodecs(): AudioCodec[] {
   return NativeMoQMicrophone.getSupportedCodecs() as AudioCodec[];
 }
 
-// Starts the microphone capture on mount, stops on unmount. Ref-counted — the
-// physical mic is shared across all consumers. The initial sampleRate sets the
-// AudioRecord capture format on Android; changing audioSampleRate after mount
-// is only honored by re-mounting the hook (e.g. with a `key` prop).
+// Ref-counted: the physical mic is shared across consumers. Changing
+// audioSampleRate after mount requires re-mounting the hook (e.g. via `key`).
 export function useMicrophone(
   options: MicrophoneOptions = {}
 ): MicrophoneTrack {
@@ -55,9 +52,7 @@ export function useMicrophone(
   useEffect(() => {
     NativeMoQMicrophone.startCapture(sampleRate);
     return () => NativeMoQMicrophone.stopCapture();
-    // Intentionally mount-only: changing sampleRate after start has no effect
-    // on the native capture, so re-running the effect would just churn the
-    // refcount. Document this in the public API instead.
+    // Mount-only: sampleRate changes don't affect the running native capture.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

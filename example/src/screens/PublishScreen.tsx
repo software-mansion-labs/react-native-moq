@@ -31,9 +31,7 @@ import {
 const SUPPORTED_VIDEO = getSupportedVideoCodecs();
 const SUPPORTED_AUDIO = getSupportedAudioCodecs();
 
-// Landscape dimensions — Android's camera capture produces landscape frames
-// and the native default is 1280x720. Forcing portrait here caused the
-// Publisher to self-stop immediately on Android.
+// Landscape dimensions: forcing portrait made the Publisher self-stop on Android.
 type VideoResolution = 'HD' | 'FHD';
 const RESOLUTIONS: Record<
   VideoResolution,
@@ -49,13 +47,10 @@ type FrameRate = (typeof FRAME_RATES)[number];
 const SAMPLE_RATES = [44100, 48000] as const;
 type SampleRate = (typeof SAMPLE_RATES)[number];
 
-// Must match the App Group in MoQBroadcastUpload.entitlements +
-// MoQExample.entitlements. iOS-only.
+// Must match the App Group in the entitlements files (iOS-only).
 const SCREEN_APP_GROUP = 'group.moq.example.screenbroadcast';
 // Must match the Broadcast Upload Extension's bundle identifier in pbxproj.
 const SCREEN_PREFERRED_EXT = 'moq.example.MoQBroadcastUpload';
-// Appended to the main broadcast path to derive the screen-share broadcast's
-// path. Matches moq-kit's iOS demo convention.
 const SCREEN_PATH_SUFFIX = '/screenshare';
 
 async function requestCapturePermissions() {
@@ -78,8 +73,7 @@ export function PublishScreen({
   const [micEnabled, setMicEnabled] = useState(true);
   const [screenEnabled, setScreenEnabled] = useState(false);
 
-  // Dual-camera (concurrent front+back) is only available on some devices, so
-  // probe support before offering the mode.
+  // Dual-camera is device-dependent; probe support before offering the mode.
   const [multiSupported, setMultiSupported] = useState(false);
   const [dualCamera, setDualCamera] = useState(false);
   useEffect(() => {
@@ -88,8 +82,7 @@ export function PublishScreen({
       .catch(() => {});
   }, []);
 
-  // Prefer H.265 when the device can actually initialize it, else fall back
-  // to H.264. Mirrors moq-kit's iOS demo CodecConfigView gating.
+  // Prefer H.265 when supported, else fall back to H.264.
   const [videoCodec, setVideoCodec] = useState<VideoCodec>(
     SUPPORTED_VIDEO.includes('h265') ? 'h265' : 'h264'
   );
@@ -100,7 +93,7 @@ export function PublishScreen({
   );
   const [audioSampleRate, setAudioSampleRate] = useState<SampleRate>(48000);
 
-  // Opus is fixed at 48 kHz — mirror moq-kit demo's behaviour.
+  // Opus is fixed at 48 kHz.
   useEffect(() => {
     if (audioCodec === 'opus' && audioSampleRate !== 48000) {
       setAudioSampleRate(48000);
@@ -111,12 +104,8 @@ export function PublishScreen({
     requestCapturePermissions();
   }, []);
 
-  // Camera and mic hooks own the native capture lifecycle. They start on
-  // mount, stop on unmount, and are refcounted natively so multiple consumers
-  // can share the same physical device. Codec config travels with the hook
-  // and is snapshotted by publisher.publish() at call time.
-  // Both camera hooks stay mounted, but `enabled` ensures only the active mode
-  // actually runs hardware — concurrent single + multi capture would conflict.
+  // Both camera hooks stay mounted; `enabled` runs hardware only for the active
+  // mode, since concurrent single + multi capture would conflict.
   const cameraConfig = {
     videoCodec,
     width: RESOLUTIONS[videoResolution].width,
@@ -142,9 +131,8 @@ export function PublishScreen({
   const session = useSession(url);
   const publisher = usePublisher(session);
 
-  // Open the shared session as soon as the screen mounts so publish() has a
-  // connection to reuse. usePublisher errors out if the session isn't
-  // connected when publish is called.
+  // Open the session on mount so publish() has a connection to reuse (it errors
+  // if the session isn't connected).
   useEffect(() => {
     if (session.state === 'idle' || session.state === 'closed') {
       session.connect();
@@ -169,10 +157,8 @@ export function PublishScreen({
   const canPublish =
     !isPublishing && (cameraEnabled || micEnabled) && path.length > 0;
 
-  // On Android the toggle drives the foreground service directly (the system
-  // consent dialog is part of startScreenBroadcast). On iOS the toggle only
-  // expresses intent — the user must tap the system broadcast picker, and the
-  // extension reports back its real state via screenBroadcastState.
+  // Android: the toggle drives the foreground service directly. iOS: the toggle
+  // is only intent — the user taps the system picker, which reports state back.
   const onToggleScreen = (next: boolean) => {
     setScreenEnabled(next);
     if (Platform.OS === 'android') {
@@ -186,9 +172,8 @@ export function PublishScreen({
     }
   };
 
-  // Reflect native screen state back into the toggle so iOS users see the
-  // switch flip on when the system picker actually starts the broadcast, and
-  // off when it stops.
+  // Reflect native screen state into the toggle so the iOS switch follows the
+  // system picker.
   useEffect(() => {
     if (screenBroadcasting) setScreenEnabled(true);
     else if (screen.state === 'idle' || screen.state === 'stopped') {
@@ -266,8 +251,7 @@ export function PublishScreen({
       </Row>
       <Row label="Screen">
         {Platform.OS === 'ios' ? (
-          // RPSystemBroadcastPickerView IS the toggle on iOS — tapping it
-          // opens the system sheet that starts/stops the extension.
+          // On iOS the picker itself is the toggle.
           <BroadcastPickerView
             preferredExtension={SCREEN_PREFERRED_EXT}
             tintColor="#2563eb"

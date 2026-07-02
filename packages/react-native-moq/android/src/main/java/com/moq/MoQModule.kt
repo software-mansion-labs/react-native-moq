@@ -35,8 +35,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   private val moduleScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
   private val mainHandler = Handler(Looper.getMainLooper())
 
-  // Per-session state. Each useSession on the JS side corresponds to one
-  // entry here; two sessions can subscribe / publish independently.
   private class SessionContext(val id: String, val session: Session) {
     var targetLatencyMs: Int = 200
     var state: Session.State = Session.State.Idle
@@ -44,32 +42,21 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val subscriptions = ConcurrentHashMap<String, MoQPrefixSubscription>()
     val prefixForPath = ConcurrentHashMap<String, String>()
     val catalogs = ConcurrentHashMap<String, Catalog>()
-    // Live broadcasts per path so raw-track subscriptions (audio chunks, data
-    // tracks) can call `subscribeTrack` after a broadcast appears.
     val broadcasts = ConcurrentHashMap<String, Broadcast>()
-    // Raw-track sinks keyed by "path|track", ref-counted across JS subscribers.
     val trackSinks = ConcurrentHashMap<String, TrackSink>()
-    // Decoded-PCM sinks keyed by "path|track|sampleFormat", ref-counted across
-    // JS subscribers. Each wraps one moq-kit AudioDataStream.
     val audioDataSinks = ConcurrentHashMap<String, AudioDataSink>()
   }
 
   private val contexts = ConcurrentHashMap<String, SessionContext>()
 
-  // MARK: - Companion: shared handle map and listeners for VideoView
-
   companion object {
     const val NAME = NativeMoQSpec.NAME
 
-    // Connected sessions, exposed to PublisherModule so it can attach a
-    // Publisher to one of them. Updated whenever the session reaches the
-    // Connected state and cleared on disconnect/error.
+    // Exposed to PublisherModule so it can attach a Publisher.
     private val connectedSessions = ConcurrentHashMap<String, Session>()
 
     fun connectedSession(sessionId: String): Session? = connectedSessions[sessionId]
 
-    // Player handles keyed by (sessionId, broadcastPath). Two sessions may
-    // surface the same broadcastPath; they get distinct player handles.
     private fun playerKey(sessionId: String, broadcastPath: String) =
       "$sessionId $broadcastPath"
 
@@ -102,7 +89,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       if (sessionId == null && broadcastPath == null) {
         playerChangeListeners.values.forEach { list -> list.forEach { it() } }
       } else if (sessionId != null && broadcastPath == null) {
-        // All players for this session changed (e.g. session unsubscribe-all).
         val prefix = "$sessionId "
         playerChangeListeners.forEach { (key, list) ->
           if (key.startsWith(prefix)) list.forEach { it() }
@@ -122,8 +108,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
       }
   }
 
-  // MARK: - NativeMoQSpec
-
   override fun addListener(eventName: String) {}
 
   override fun removeListeners(count: Double) {}
@@ -132,12 +116,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val latencyMs = targetLatencyMs.toInt()
     contexts[sessionId]?.let { existing ->
       when (existing.state) {
-        // The session terminated on its own (network drop, relay reset, a
-        // publish that errored the connection). Its context lingers dead, so
-        // without this a second connect() would no-op and the user could never
-        // power the session back on. Tear it down and reconnect fresh.
+        // Session died on its own; a dead context would make reconnect no-op. Rebuild.
         Session.State.Closed, is Session.State.Error -> disconnect(sessionId)
-        // idle / connecting / connected — already live, leave it.
         else -> return
       }
     }
@@ -180,9 +160,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun subscribe(sessionId: String, prefix: String) {
     val ctx = contexts[sessionId] ?: return
-    // Idempotent: a JS-side ref-count already ensures this call only fires
-    // once per (session, prefix) going from 0 → 1 subscribers, but guard
-    // anyway in case the relay had pending state.
     if (ctx.subscriptions.containsKey(prefix)) return
 
     val latencyMs = ctx.targetLatencyMs
@@ -193,7 +170,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         s.subscribe(prefix = prefix)
       } catch (_: Exception) { return@launch }
 
-      // Bail out if the user disconnected or already subscribed while we awaited.
+      // Bail if the user disconnected or already subscribed while awaiting.
       val currentCtx = contexts[sessionId]
       if (currentCtx == null || currentCtx.session !== s ||
         currentCtx.subscriptions.containsKey(prefix)
@@ -223,9 +200,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val ps = ctx.subscriptions.remove(prefix) ?: return
     val paths = ps.cancel()
 
-    // Tear down players for the paths this prefix owned.  We don't emit
-    // broadcastUnavailable events here — the JS-side useBroadcasts already
-    // cleared its local state synchronously when its ref count hit zero.
+    // No broadcastUnavailable emit: JS-side useBroadcasts already cleared state.
     for (path in paths) {
       if (ctx.prefixForPath[path] == prefix) {
         ctx.prefixForPath.remove(path)
@@ -260,13 +235,9 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
   override fun play(sessionId: String, broadcastPath: String) {
     val handle = playerHandle(sessionId, broadcastPath) ?: return
     handle.play()
-    // `play()` builds moq-kit's playback pipeline; a VideoView surface that
-    // arrived while it was still being built (or on a different thread —
-    // `Player.playbackPipeline` isn't volatile) is dropped, so the video track
-    // never starts even though audio plays. Re-deliver the surface now that the
-    // pipeline exists. Posting to the main thread provides the happens-before
-    // barrier so the surface push observes the freshly-built pipeline. (The
-    // player-recreation path in handleBroadcastAvailable already does this.)
+    // play() builds the pipeline; a surface delivered during the build is dropped
+    // (Player.playbackPipeline isn't volatile). Re-deliver via main-thread post
+    // for the happens-before barrier so the push sees the built pipeline.
     mainHandler.post { notifyPlayerChanged(sessionId, broadcastPath) }
   }
 
@@ -284,10 +255,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   override fun switchVideoTrack(sessionId: String, broadcastPath: String, trackName: String) {
     playerHandle(sessionId, broadcastPath)?.switchVideoTrack(trackName)
-    // `switchTrack()` rebuilds moq-kit's video pipeline for the new rendition;
-    // re-deliver the surface afterwards so the freshly-built pipeline sees it
-    // (same non-volatile `Player.playbackPipeline` race the `play()` path guards
-    // against). Posting to the main thread provides the happens-before barrier.
+    // switchTrack() rebuilds the video pipeline; re-deliver the surface (same
+    // non-volatile playbackPipeline race as play(); main-thread post for the barrier).
     mainHandler.post { notifyPlayerChanged(sessionId, broadcastPath) }
   }
 
@@ -305,9 +274,8 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val audioTrackName = catalog.audioTracks.firstOrNull()?.name ?: return
     val audioKey = broadcastPath + AUDIO_KEY_SUFFIX
 
-    // Run synchronously so `playerHandles[(sessionId, audioKey)]` is populated
-    // before this call returns to JS — otherwise a follow-up `play(audioKey)`
-    // from the hook's setup callback would no-op against an empty map.
+    // Synchronous so the handle exists before returning to JS; else a follow-up
+    // play(audioKey) would no-op against an empty map.
     removePlayer(sessionId, audioKey, notify = false)
 
     val p = try {
@@ -332,14 +300,11 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val ctx = contexts[sessionId] ?: return
     val key = "$broadcastPath|$trackName"
 
-    // Already streaming this track — share the one subscription.
     ctx.trackSinks[key]?.let {
       it.refCount.incrementAndGet()
       return
     }
 
-    // The JS layer only subscribes for a broadcast it already saw become
-    // available, so the broadcast should be present; if not, no-op.
     val broadcast = ctx.broadcasts[broadcastPath] ?: return
     val subscription = try {
       broadcast.subscribeTrack(trackName)
@@ -350,7 +315,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val sink = TrackSink(subscription)
     val prev = ctx.trackSinks.putIfAbsent(key, sink)
     if (prev != null) {
-      // Lost a race with another subscribe — reuse the existing sink.
+      // Lost a race with another subscribe — reuse existing sink.
       prev.refCount.incrementAndGet()
       subscription.close()
       return
@@ -369,7 +334,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
           emitEvent("trackObject", map)
         }
       } catch (_: Exception) {
-        // Stream ended or errored — close() handles teardown.
       }
     }
   }
@@ -386,8 +350,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
   }
 
-  // Close every sink (raw-track and decoded-PCM) belonging to `path`, used when a
-  // broadcast goes away or its prefix is unsubscribed.
   private fun removeTrackSinks(ctx: SessionContext, path: String) {
     val prefix = "$path|"
     for (key in ctx.trackSinks.keys.filter { it.startsWith(prefix) }) {
@@ -398,23 +360,18 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
   }
 
-  // Decoded-PCM audio via moq-kit's AudioDataStream. Mirrors the iOS
-  // AudioDataSink: one stream per (path, track, sampleFormat), ref-counted across
-  // JS subscribers, draining decoded chunks out as `audioData` events.
   override fun subscribeAudioData(
     sessionId: String, broadcastPath: String, trackName: String, sampleFormat: String
   ) {
     val ctx = contexts[sessionId] ?: return
     val key = "$broadcastPath|$trackName|$sampleFormat"
 
-    // Already decoding this (track, format) — share the one stream.
     ctx.audioDataSinks[key]?.let {
       it.refCount.incrementAndGet()
       return
     }
 
-    // Decoded audio rides the catalog's shared media subscription, so we resolve
-    // the track against the catalog the broadcast advertised.
+    // Decoded audio rides the catalog's shared media subscription.
     val catalog = ctx.catalogs[broadcastPath] ?: return
     val format = AudioDataFormat(
       sampleFormat = if (sampleFormat == "i16") AudioSampleFormat.Int16 else AudioSampleFormat.Float32
@@ -428,7 +385,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val sink = AudioDataSink(stream)
     val prev = ctx.audioDataSinks.putIfAbsent(key, sink)
     if (prev != null) {
-      // Lost a race with another subscribe — reuse the existing sink.
+      // Lost a race with another subscribe — reuse existing sink.
       prev.refCount.incrementAndGet()
       stream.close()
       return
@@ -450,7 +407,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
           emitEvent("audioData", map)
         }
       } catch (_: Exception) {
-        // Stream ended or errored — close() handles teardown.
       }
     }
   }
@@ -472,8 +428,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     for (id in contexts.keys.toList()) disconnect(id)
     moduleScope.cancel()
   }
-
-  // MARK: - Broadcast events
 
   private fun handleBroadcastAvailable(
     sessionId: String, prefix: String, broadcast: Broadcast, catalog: Catalog,
@@ -512,7 +466,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
         p.play()
       }
 
-      // Re-create the audio-only player if one was previously active.
       val audioKey = path + AUDIO_KEY_SUFFIX
       if (playerHandle(sessionId, audioKey) != null) {
         createAudioOnlyPlayer(sessionId, path)
@@ -557,8 +510,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   private fun handleBroadcastUnavailable(sessionId: String, prefix: String, path: String) {
     val ctx = contexts[sessionId] ?: return
-    // If the prefix's subscription was already torn down (e.g. by unsubscribe)
-    // we already handled cleanup; skip double-emit / double-tear-down.
+    // Prefix already torn down (e.g. by unsubscribe); skip double cleanup.
     if (ctx.prefixForPath[path] != prefix) return
 
     removePlayer(sessionId, path)
@@ -576,7 +528,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
 
   private fun removePlayer(sessionId: String, path: String, notify: Boolean = true) {
     val handle = removePlayerHandle(sessionId, path) ?: return
-    // Cancel the catalog job so it stops emitting events for this path.
     contexts[sessionId]?.let { ctx ->
       ctx.prefixForPath[path]?.let { owningPrefix ->
         ctx.subscriptions[owningPrefix]?.cancelCatalogJob(path)
@@ -588,14 +539,10 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
   }
 
-  // MARK: - Helpers
-
   private fun emitEvent(name: String, params: WritableMap) {
     reactApplicationContext.emitDeviceEvent(name, params)
   }
 
-  // Owns a single moq-kit TrackSubscription plus the coroutine draining its
-  // object flow, ref-counted across JS subscribers to the same (path, track).
   private class TrackSink(private val subscription: TrackSubscription) {
     var job: Job? = null
     val refCount = AtomicInteger(1)
@@ -607,9 +554,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
   }
 
-  // Owns a single moq-kit AudioDataStream plus the coroutine draining its decoded
-  // PCM flow, ref-counted across JS subscribers to the same
-  // (path, track, sampleFormat).
   private class AudioDataSink(private val stream: AudioDataStream) {
     var job: Job? = null
     val refCount = AtomicInteger(1)
@@ -621,8 +565,6 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     }
   }
 }
-
-// MARK: - PlaybackStats → WritableMap
 
 fun PlaybackStats.toWritableMap(): WritableMap {
   val map = Arguments.createMap()
@@ -650,6 +592,5 @@ private fun StallStats.toWritableMap(): WritableMap {
   return map
 }
 
-// MoQKit 0.2.0 reports timing as java.time.Duration instead of bare millisecond
-// Doubles. The JS-facing stats payload stays in ms, so convert here.
+// MoQKit reports timing as Duration; JS stats payload stays in ms.
 private fun Duration.toMillisDouble(): Double = toNanos() / 1_000_000.0

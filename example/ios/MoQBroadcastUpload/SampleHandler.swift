@@ -2,10 +2,9 @@ import Foundation
 import MoQKit
 import ReplayKit
 
-// Shared identifiers with the host app's PublisherImpl. Kept in lockstep
-// with MoQScreenBroadcastSharedKeys (ios/ScreenBroadcast/ScreenBroadcastImpl.swift). The host
-// writes the configuration here and we read it back; we write state to the
-// state key and post a Darwin notification so the host can update its UI.
+// Shared identifiers, kept in lockstep with MoQScreenBroadcastSharedKeys
+// (ios/ScreenBroadcast/ScreenBroadcastImpl.swift). Host writes config; we read
+// it and write state back, posting a Darwin notification so the host can update.
 private enum SharedKeys {
   static let appGroupIdentifier = "group.moq.example.screenbroadcast"
   static let configurationKey = "com.swmansion.moq.screenBroadcast.config"
@@ -13,18 +12,15 @@ private enum SharedKeys {
   static let stateNotificationName = "com.swmansion.moq.screenBroadcast.stateChanged"
 }
 
-// MoQKit-provided base handles the Session/Publisher lifecycle for us — we
-// just need to surface the right configuration and report state changes back
-// to the host app process.
+// The MoQKit base handles the Session/Publisher lifecycle; we only supply
+// configuration and report state changes back to the host process.
 class SampleHandler: MoQReplayKitBroadcastSampleHandler {
   override var replayKitAppGroupIdentifier: String? {
     SharedKeys.appGroupIdentifier
   }
 
-  // Override the default lookup (descriptor-only) to read the full
-  // ReplayKitBroadcastConfiguration that the host wrote to the App Group.
-  // Falls back to the base implementation (setupInfo or descriptor store) if
-  // our key isn't present.
+  // Read the full ReplayKitBroadcastConfiguration the host wrote to the App
+  // Group, falling back to the base implementation if our key isn't present.
   override func makeReplayKitBroadcastConfiguration(
     setupInfo: [String: NSObject]?
   ) throws -> ReplayKitBroadcastConfiguration {

@@ -7,7 +7,7 @@ import { PlayerHandle } from '../types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
-// Shared event-subscription and state logic for both useVideoPlayer and useAudioPlayer.
+// Shared event-subscription and state logic for useVideoPlayer and useAudioPlayer.
 export function usePlayer(player: PlayerHandle): Player {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackStats, setPlaybackStats] = useState<PlaybackStats | null>(
@@ -104,8 +104,7 @@ export function usePlayer(player: PlayerHandle): Player {
     return () => {
       subs.forEach((s) => s.remove());
     };
-    // Intentionally keyed on (sessionId, broadcastPath) — re-subscribe only
-    // when the player changes identity.
+    // Keyed on player identity: re-subscribe only when (sessionId, broadcastPath) changes.
   }, [sessionId, broadcastPath]);
 
   const play = useCallback(() => {

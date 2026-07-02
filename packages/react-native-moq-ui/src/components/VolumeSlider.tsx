@@ -11,13 +11,9 @@ import {
 import { MaterialIcons } from '@react-native-vector-icons/material-icons/static';
 import { useEvent, type Player, type AudioPlayer } from 'react-native-moq';
 
-// Lightweight horizontal volume slider, drawn with <View>s so the package
-// doesn't pull in @react-native-community/slider. Looks roughly like:
-//   - iOS: thin pill track (UISlider-ish), small circular thumb
-//   - Android: thicker pill track (Material slider), smaller round thumb
-//
-// Drag uses PanResponder so we react to grant + move on the same gesture,
-// avoiding the dead-zone you'd get with onResponderMove-only handling.
+// Lightweight horizontal volume slider drawn with <View>s to avoid pulling in
+// @react-native-community/slider. Drag uses PanResponder (grant + move on the
+// same gesture) to avoid the dead-zone of onResponderMove-only handling.
 export function VolumeSlider({
   player,
   width = 140,
@@ -25,27 +21,25 @@ export function VolumeSlider({
 }: {
   player: Player | AudioPlayer;
   width?: number;
-  // 'dark' = white slider on a translucent dark scrim (video overlay default).
-  // 'light' = blue-ish slider on a light card background.
+  // 'dark' = white slider on a dark scrim; 'light' = blue slider on light bg.
   theme?: 'dark' | 'light';
 }) {
-  // Mirror native state into a local value during drags. Releasing the touch
-  // re-syncs with player.volume so any clamping/native truncation wins.
+  // Mirror native state locally during drags; release re-syncs with
+  // player.volume so any native clamping wins.
   const [dragValue, setDragValue] = useState<number | null>(null);
   const widthRef = useRef(width);
 
   const value = dragValue ?? player.volume;
 
-  // useEvent isn't required here (volume already lives in player state), but
-  // referenced so the slider re-renders if some other surface mutates volume.
+  // Not needed for volume itself; referenced so the slider re-renders if some
+  // other surface mutates volume.
   useEvent(player, 'playingChange', { isPlaying: player.isPlaying });
 
   const isIOS = Platform.OS === 'ios';
   const trackHeight = isIOS ? 3 : 4;
   const thumbSize = isIOS ? 14 : 12;
-  // Inset the active track range by half a thumb on each side so the thumb
-  // stays fully inside the container at v=0 and v=1 (otherwise it visually
-  // overflows the right edge and bunches against the icon on the left).
+  // Inset the track range by half a thumb each side so the thumb stays inside
+  // the container at v=0 and v=1.
   const inset = thumbSize / 2;
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
@@ -75,7 +69,7 @@ export function VolumeSlider({
           e: GestureResponderEvent,
           g: PanResponderGestureState
         ) => {
-          // locationX can go negative or past width while dragging — clamp.
+          // locationX can go negative or past width while dragging; computeFromX clamps.
           const startX = e.nativeEvent.locationX - g.dx;
           const v = computeFromX(startX + g.dx);
           setDragValue(v);
@@ -117,7 +111,7 @@ export function VolumeSlider({
     height: thumbSize,
     borderRadius: thumbSize / 2,
     backgroundColor: fg,
-    // Slight elevation/shadow keeps the thumb visible against bright frames.
+    // Elevation/shadow keeps the thumb visible against bright frames.
     ...(isIOS
       ? {
           shadowColor: '#000',
@@ -146,19 +140,16 @@ export function VolumeSlider({
   );
 }
 
-// Speaker icon used alongside the slider. Picks one of Material's four
-// volume glyphs based on level, matching how Media3 / system UIs swap
-// between mute, low, mid, and high volume states.
+// Speaker icon that picks one of Material's four volume glyphs by level.
 export function SpeakerGlyph({
   size = 20,
   volume = 1,
   color = '#fff',
 }: {
   size?: number;
-  // 0..1; volume === 0 shows the muted (speaker-with-slash) glyph.
+  // 0..1; 0 shows the muted glyph.
   volume?: number;
-  // Defaults to white for video-overlay use; pass a darker shade on light
-  // backgrounds (e.g. the audio-only card in the example app).
+  // White for video overlays; pass a darker shade on light backgrounds.
   color?: string;
 }) {
   const name =

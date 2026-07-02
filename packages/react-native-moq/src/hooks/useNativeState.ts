@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { NativeEventEmitter } from 'react-native';
 
-// Shared listener for the native capture / broadcast modules. They all emit a
-// `{ state }` event whose value is either a known state string or
-// `error:<message>`. This tracks the latest state and lifts the error message
-// into `lastError`, clearing it again whenever capture re-enters one of the
-// `runningStates` (e.g. 'active' / 'broadcasting'). Used by useCamera,
-// useMicrophone, useMultiCamera and useScreenBroadcast.
+// Shared listener for native capture/broadcast modules that emit a `{ state }`
+// event of either a known state string or `error:<message>`. Lifts the error
+// into `lastError`, clearing it when state re-enters one of `runningStates`.
 export function useNativeState<S extends string>(
   emitter: NativeEventEmitter,
   eventName: string,
@@ -26,7 +23,7 @@ export function useNativeState<S extends string>(
       }
     });
     return () => sub.remove();
-    // `runningStates` is constant per call site; the listener captures it once.
+    // `runningStates` is constant per call site; captured once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emitter, eventName]);
 

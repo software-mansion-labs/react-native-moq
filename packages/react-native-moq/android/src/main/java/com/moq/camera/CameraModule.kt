@@ -19,11 +19,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-// Owns the device camera as a refcounted singleton (see RefcountedCapture).
-// Multiple consumers (useCamera hooks, live publishers, the on-screen
-// <PublisherView/>) call start/stop independently — the physical camera only
-// stops when the refcount drops to zero. Position changes are global to the
-// device, so they apply to every consumer at once.
+// Refcounted singleton owning the device camera: it stops only when the last
+// consumer releases. Position changes are global to the device.
 class CameraModule(reactContext: ReactApplicationContext) :
   NativeMoQCameraSpec(reactContext) {
 
@@ -49,8 +46,7 @@ class CameraModule(reactContext: ReactApplicationContext) :
     @Volatile var instance: CameraModule? = null
       private set
 
-    // Static listener list for the preview view — it talks to the camera
-    // through the singleton because views can't easily hold a module reference.
+    // Preview views reach the camera via the singleton; they can't hold a module ref.
     private val cameraListeners = CopyOnWriteArrayList<() -> Unit>()
 
     fun addCameraListener(listener: () -> Unit) { cameraListeners.add(listener) }
@@ -68,8 +64,7 @@ class CameraModule(reactContext: ReactApplicationContext) :
   override fun addListener(eventName: String) {}
   override fun removeListeners(count: Double) {}
 
-  // Awaits any in-flight start so publish() can grab the camera right after the
-  // useCamera hook calls startCapture.
+  // Awaits any in-flight start so publish() can grab the camera after startCapture.
   internal suspend fun waitForCamera(): CameraCapture = manager.waitForCapture()
 
   override fun startCapture(position: String) {
@@ -101,8 +96,7 @@ class CameraModule(reactContext: ReactApplicationContext) :
     moduleScope.launch { setPositionInternal(pos) }
   }
 
-  // Mirror moq-kit's iOS demo CodecConfigView gating. JS uses this to hide
-  // codec picker options whose encoder would fail to initialize.
+  // Lets JS hide codec picker options whose encoder would fail to initialize.
   override fun getSupportedCodecs(): WritableArray {
     val arr = Arguments.createArray()
     VideoEncoderConfig.supportedCodecs().forEach { arr.pushString(it.toJsString()) }

@@ -8,10 +8,8 @@ interface NativeMultiPublisherViewProps extends ViewProps {
 }
 
 export interface PublisherViewProps extends ViewProps {
-  // The camera hook driving this preview. Captures are started by the hook,
-  // not by mounting this view — the prop documents the dependency and ensures
-  // the camera capture is kept alive while the preview is on screen. Works with
-  // both useCamera tracks and the front/back tracks from useMultiCamera.
+  // The useCamera / useMultiCamera track driving this preview. Capture is owned
+  // by the hook, not by mounting this view; the prop keeps it alive on screen.
   camera: CameraTrack;
 }
 
@@ -23,10 +21,8 @@ const NativeMoQMultiCameraPreviewView =
     'MoQMultiCameraPreviewView'
   );
 
-// Renders whatever the backing camera capture is producing. The capture
-// lifecycle is owned by useCamera / useMultiCamera — mounting/unmounting this
-// view does not start or stop the camera. Routes to the multi-camera preview
-// (selecting the front or back stream) when given a useMultiCamera track.
+// Routes to the multi-camera preview (front/back stream) for useMultiCamera
+// tracks, otherwise the single-camera preview.
 export function PublisherView({ camera, ...rest }: PublisherViewProps) {
   if (camera.__source === 'multi-front' || camera.__source === 'multi-back') {
     const source = camera.__source === 'multi-front' ? 'front' : 'back';

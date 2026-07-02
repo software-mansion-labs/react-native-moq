@@ -22,9 +22,7 @@ export type PublishTrack = CameraTrack | MicrophoneTrack | DataTrack;
 
 export interface PublishOptions {
   path: string;
-  // Snapshotted at this call — changing the array later does not affect a
-  // running broadcast. To change the published source set, call publish() again
-  // (which restarts the broadcast).
+  // Snapshotted at this call; call publish() again to change the source set.
   tracks: PublishTrack[];
 }
 
@@ -57,7 +55,7 @@ interface SerializedTrack {
   source?: string;
   // Data-only: id of the native emitter created by useDataTrack.
   id?: string;
-  // Media-only: absent for data tracks, which carry no encoder.
+  // Absent for data tracks, which carry no encoder.
   encoder?: Record<string, unknown>;
 }
 

@@ -44,8 +44,7 @@ export function useEvent<
   initialValue?: TData
 ): TData | undefined {
   const [data, setData] = useState<TData | undefined>(initialValue);
-  // Keep latest setter in a ref so the effect closure never goes stale,
-  // without needing to re-subscribe when the component re-renders.
+  // Ref keeps the effect closure fresh without re-subscribing on every render.
   const setDataRef = useRef(setData);
   setDataRef.current = setData;
 

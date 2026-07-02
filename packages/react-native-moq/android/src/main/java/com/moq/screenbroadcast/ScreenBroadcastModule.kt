@@ -11,11 +11,9 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.moq.emitStateEvent
 
-// Out-of-process screen broadcasting on Android. configureScreenBroadcast
-// caches the relay URL + options; startScreenBroadcast launches the system
-// MediaProjection consent flow and, on approval, starts ScreenBroadcastService
-// in the foreground. The service opens its own MoQ session — it does not
-// reuse any host-side publisher session.
+// Screen broadcasting via the system MediaProjection consent flow; on approval
+// starts ScreenBroadcastService in the foreground, which opens its own MoQ
+// session rather than reusing any host-side publisher session.
 class ScreenBroadcastModule(reactContext: ReactApplicationContext) :
   NativeMoQScreenBroadcastSpec(reactContext), ActivityEventListener {
 
@@ -108,8 +106,7 @@ class ScreenBroadcastModule(reactContext: ReactApplicationContext) :
 
     val ctx = reactApplicationContext
     ScreenBroadcastService.stateListener = stateListener
-    // Per-track state events from the screen service are intentionally dropped —
-    // useScreenBroadcast exposes only the aggregate state.
+    // useScreenBroadcast exposes only aggregate state; drop per-track events.
     ScreenBroadcastService.trackListener = null
 
     val serviceIntent = Intent(ctx, ScreenBroadcastService::class.java)

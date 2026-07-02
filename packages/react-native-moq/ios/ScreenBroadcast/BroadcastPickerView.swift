@@ -1,9 +1,8 @@
 import ReplayKit
 import UIKit
 
-// React Native wrapper around RPSystemBroadcastPickerView. Tapping the embedded
-// system button presents the broadcast sheet for the configured extension —
-// the only Apple-sanctioned way to start a system-wide ReplayKit broadcast.
+// RN wrapper around RPSystemBroadcastPickerView, the only Apple-sanctioned way
+// to start a system-wide ReplayKit broadcast.
 @objc(MoQBroadcastPickerView)
 public class BroadcastPickerView: UIView {
   private let picker = RPSystemBroadcastPickerView()

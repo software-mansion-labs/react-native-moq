@@ -25,8 +25,7 @@ RCT_EXPORT_MODULE(MoQScreenBroadcast)
 
 - (void)startScreenBroadcast:(RCTPromiseResolveBlock)resolve
                       reject:(RCTPromiseRejectBlock)reject {
-  // iOS only allows starting a system broadcast via user interaction on
-  // RPSystemBroadcastPickerView. Programmatic start is not available.
+  // iOS has no programmatic start; only RPSystemBroadcastPickerView.
   reject(@"screen_broadcast_unavailable",
          @"On iOS, screen broadcasting must be started by tapping <BroadcastPickerView/>.",
          nil);

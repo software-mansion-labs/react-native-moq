@@ -2,19 +2,15 @@ import AVFoundation
 import Foundation
 import MoQKit
 
-// Owns the device camera as a refcounted singleton. Multiple consumers
-// (useCamera hooks, live publishers, the on-screen <PublisherView/>) call
-// start/stop independently — the physical camera only stops when the
-// refcount drops to zero (see RefcountedCapture). Position changes are global
-// to the device, so they apply to every consumer at once.
+// Refcounted device-camera singleton: the camera only stops when the refcount
+// drops to zero. Position changes are global to the device.
 @objc public class CameraImpl: NSObject {
   @objc public static let shared = CameraImpl()
   private override init() {}
 
   @objc public var onEvent: ((_ name: String, _ body: [String: Any]) -> Void)?
 
-  // Notification posted whenever the shared AVCaptureSession is created or
-  // torn down. CameraPreviewView observes this to (re)attach its layer.
+  // Posted when the shared AVCaptureSession is created/torn down; CameraPreviewView (re)attaches its layer.
   @objc public static let captureSessionChangedNotification = Notification.Name(
     "CameraImpl.cameraSessionChanged")
 
@@ -52,8 +48,7 @@ import MoQKit
     Task { @MainActor in self._setPosition(Self.parsePosition(position)) }
   }
 
-  // Mirror moq-kit's iOS demo CodecConfigView gating — return only codecs
-  // whose encoder will actually initialize on this device.
+  // Only codecs whose encoder will actually initialize on this device.
   @objc public func supportedCodecs() -> [String] {
     VideoEncoderConfig.supportedCodecs().compactMap { $0.jsString }
   }

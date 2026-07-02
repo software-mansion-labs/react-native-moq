@@ -2,19 +2,15 @@ import AVFoundation
 import Foundation
 import MoQKit
 
-// Owns the concurrent front+back capture as a refcounted singleton, mirroring
-// CameraImpl. Multiple consumers (useMultiCamera hooks, live publishers, the
-// on-screen <PublisherView/>s) call start/stop independently — the cameras only
-// stop when the refcount drops to zero (see RefcountedCapture). Unlike
-// CameraImpl there's no position switching; the two cameras are fixed front/back.
+// Refcounted concurrent front+back capture singleton, mirroring CameraImpl. The
+// cameras stop only when the refcount drops to zero; the two are fixed front/back.
 @objc public class MultiCameraImpl: NSObject {
   @objc public static let shared = MultiCameraImpl()
   private override init() {}
 
   @objc public var onEvent: ((_ name: String, _ body: [String: Any]) -> Void)?
 
-  // Notification posted whenever the shared AVCaptureMultiCamSession is created
-  // or torn down. MultiCameraPreviewView observes this to (re)attach its layer.
+  // Posted when the shared AVCaptureMultiCamSession is created/torn down; MultiCameraPreviewView (re)attaches its layer.
   @objc public static let captureSessionChangedNotification = Notification.Name(
     "MultiCameraImpl.cameraSessionChanged")
 

@@ -1,19 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing } from 'react-native';
 
-// Auto-hide timing for player controls. ~3.5s matches the AVPlayer default; the
-// fade itself is short so it doesn't feel sluggish.
+// ~3.5s matches the AVPlayer default.
 export const CONTROLS_AUTO_HIDE_MS = 3500;
 export const CONTROLS_FADE_MS = 220;
 
 /**
- * Shared auto-hide/fade behavior for the inline and fullscreen controls layers.
- * Tracks a `visible` flag, animates an opacity value to match, and exposes
- * `show()` (mark visible + reset the auto-hide timer) and `onBackgroundPress`
- * (the tap-to-toggle gesture used by both stages).
- *
- * Pass `hasControls = false` when the caller opted out of controls entirely —
- * the auto-hide timer is then skipped (nothing to dismiss).
+ * Shared auto-hide/fade behavior for the controls layers. Tracks `visible`,
+ * animates opacity to match, and exposes `show()` and `onBackgroundPress`.
+ * Pass `hasControls = false` to skip the auto-hide timer.
  */
 export function useAutoHideControls(hasControls: boolean) {
   const [visible, setVisible] = useState(true);
@@ -56,8 +51,7 @@ export function useAutoHideControls(hasControls: boolean) {
 
   const onBackgroundPress = useCallback(() => {
     if (visible) {
-      // Tapping the video while controls are visible hides them right away,
-      // matching the AVPlayer / PlayerView behavior.
+      // Tapping while visible hides immediately (AVPlayer/PlayerView behavior).
       clearHideTimer();
       setVisible(false);
     } else {

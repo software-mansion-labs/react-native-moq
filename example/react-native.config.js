@@ -11,8 +11,7 @@ module.exports = {
     [pkg.name]: {
       root: path.join(__dirname, '..', 'packages', 'react-native-moq'),
       platforms: {
-        // Codegen script incorrectly fails without this
-        // So we explicitly specify the platforms with empty object
+        // Codegen fails without explicit (empty) platform entries.
         ios: {},
         android: {},
       },

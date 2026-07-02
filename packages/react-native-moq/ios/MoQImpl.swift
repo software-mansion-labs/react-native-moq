@@ -16,9 +16,9 @@ private let audioKeySuffix = "_audio"
 
   // MARK: - Video layer notification
 
-  // userInfo carries the (sessionId, broadcastPath) pair so VideoView can
-  // tell whether it's the one whose layer just changed. A nil object means
-  // "every player went away for one session" (sent on disconnect).
+  // userInfo carries (sessionId, broadcastPath) so VideoView can tell whether
+  // it's the one whose layer changed; nil path means all players for a session
+  // went away (on disconnect).
   static let playerChangedNotification = Notification.Name("MoQImpl.playerChanged")
   static let playerChangedSessionIdKey = "sessionId"
   static let playerChangedBroadcastPathKey = "broadcastPath"
@@ -27,9 +27,8 @@ private let audioKeySuffix = "_audio"
     contexts[sessionId]?.playerRefs[broadcastPath]?.videoLayer
   }
 
-  // Exposed for PublisherImpl, which reuses the host session instead of
-  // opening its own. nil until the JS `useSession` for this id has called
-  // connect() and the relay has accepted the session.
+  // Exposed for PublisherImpl, which reuses the host session. nil until
+  // useSession has connected and the relay accepted the session.
   @MainActor public func currentSession(forSessionId sessionId: String) -> Session? {
     guard let ctx = contexts[sessionId], case .connected = ctx.state else {
       return nil
@@ -39,10 +38,8 @@ private let audioKeySuffix = "_audio"
 
   // MARK: - Private state
 
-  // Per-session context. Each useSession on the JS side corresponds to one of
-  // these. Two sessions can coexist (subscribe + publish to the same relay,
-  // talk to two different relays, etc.) so all state below is partitioned by
-  // sessionId.
+  // Per-session context; one per JS useSession. Sessions can coexist, so all
+  // state below is partitioned by sessionId.
   private final class SessionContext {
     let id: String
     let session: Session
@@ -54,14 +51,13 @@ private let audioKeySuffix = "_audio"
     var prefixForPath: [String: String] = [:]
     var playerRefs: [String: PlayerRef] = [:]
     var catalogs: [String: Catalog] = [:]
-    // Live broadcasts kept per path so raw-track subscriptions (audio chunks,
-    // data tracks) can call `subscribeTrack` after a broadcast appears.
+    // Live broadcasts per path so raw-track subscriptions can subscribeTrack
+    // after a broadcast appears.
     var broadcasts: [String: Broadcast] = [:]
     // Raw-track sinks keyed by "path|track", ref-counted across JS subscribers.
     var trackSinks: [String: StreamSink] = [:]
-    // Decoded-PCM sinks keyed by "path|track|sampleFormat", ref-counted across
-    // JS subscribers. Separate from trackSinks so encoded and decoded streams of
-    // the same track can coexist (moq-kit shares the compressed subscription).
+    // Decoded-PCM sinks keyed by "path|track|sampleFormat". Separate from
+    // trackSinks so encoded and decoded streams of a track can coexist.
     var audioDataSinks: [String: StreamSink] = [:]
 
     init(id: String, session: Session) {
@@ -97,10 +93,9 @@ private let audioKeySuffix = "_audio"
     Task { @MainActor in await self._unsubscribe(sessionId: sessionId, prefix: prefix) }
   }
 
-  // All control methods route through MainActor so they observe writes from
-  // _handleBroadcastAvailable / _createAudioOnlyPlayer in submission order.
-  // Without this, a follow-up play(audioKey) right after createAudioOnlyPlayer
-  // would race the create Task and find an empty playerRefs map.
+  // Control methods route through MainActor so they observe writes from
+  // _handleBroadcastAvailable / _createAudioOnlyPlayer in submission order,
+  // avoiding a play() racing the create Task with an empty playerRefs map.
 
   @objc(playWithSessionId:broadcastPath:)
   public func play(sessionId: String, broadcastPath: String) {
@@ -210,19 +205,16 @@ private let audioKeySuffix = "_audio"
     if let existing = contexts[sessionId] {
       switch existing.state {
       case .error, .closed:
-        // The relay/session terminated on its own (network drop, relay reset,
-        // a publish that errored the connection). The context lingers in a dead
-        // state, so without this a second connect() would no-op and the user
-        // could never power the session back on. Drop it and fall through to a
-        // fresh connect. A user-initiated disconnect removes the context
-        // itself, so we only reach here for self-terminated sessions.
+        // Session self-terminated (network drop, relay reset, failed publish)
+        // and lingers dead; drop it so a second connect() reconnects instead of
+        // no-oping. User-initiated disconnect removes the context itself.
         existing.stateTask?.cancel()
         for sub in existing.subscriptions.values { _ = sub.cancel() }
         let dead = existing.session
         contexts.removeValue(forKey: sessionId)
         Task.detached { await dead.close() }
       default:
-        // idle (a disconnect tearing down) / connecting / connected — leave it.
+        // idle / connecting / connected — leave it.
         return
       }
     }
@@ -251,15 +243,13 @@ private let audioKeySuffix = "_audio"
   @MainActor
   private func _subscribe(sessionId: String, prefix: String) {
     guard let ctx = contexts[sessionId] else { return }
-    // Idempotent: a JS-side ref-count already ensures this call only fires
-    // once per (session, prefix) going from 0 → 1 subscribers, but guard
-    // anyway in case the relay had pending state.
+    // Idempotent guard; the JS ref-count already gates this to one call per prefix.
     if ctx.subscriptions[prefix] != nil { return }
 
     let s = ctx.session
     Task { @MainActor in
       guard let sub = try? await s.subscribe(prefix: prefix) else { return }
-      // Bail out if the user disconnected or already subscribed while we awaited.
+      // Bail if the user disconnected or already subscribed while we awaited.
       guard let ctx = self.contexts[sessionId], ctx.session === s,
         ctx.subscriptions[prefix] == nil
       else {
@@ -291,9 +281,8 @@ private let audioKeySuffix = "_audio"
     else { return }
     let paths = ps.cancel()
 
-    // Tear down players for the paths this prefix owned.  We don't emit
-    // broadcastUnavailable events here — the JS-side useBroadcasts already
-    // cleared its local state synchronously when its ref count hit zero.
+    // Tear down players for this prefix's paths. No broadcastUnavailable events —
+    // JS-side useBroadcasts already cleared its state when its ref count hit zero.
     for path in paths where ctx.prefixForPath[path] == prefix {
       ctx.prefixForPath.removeValue(forKey: path)
       ctx.catalogs.removeValue(forKey: path)
@@ -324,8 +313,8 @@ private let audioKeySuffix = "_audio"
     contexts.removeValue(forKey: sessionId)
 
     Task { @MainActor in
-      // Unsubscribe needs the context to still exist; recreate a minimal one
-      // briefly so the existing unsubscribe path can tear subscriptions down.
+      // Unsubscribe needs the context to exist; recreate a minimal one so the
+      // existing unsubscribe path can tear subscriptions down.
       let temp = SessionContext(id: sessionId, session: s)
       temp.subscriptions = ctx.subscriptions
       temp.prefixForPath = ctx.prefixForPath
@@ -380,7 +369,6 @@ private let audioKeySuffix = "_audio"
         try? await p.play()
       }
 
-      // Re-create the audio-only player if one was previously active.
       let audioKey = path + audioKeySuffix
       if ctx.playerRefs[audioKey] != nil {
         await _createAudioOnlyPlayer(sessionId: sessionId, broadcastPath: path)
@@ -422,9 +410,8 @@ private let audioKeySuffix = "_audio"
     sessionId: String, prefix: String, path: String
   ) async {
     guard let ctx = contexts[sessionId] else { return }
-    // If the prefix's subscription was already torn down (e.g. by _unsubscribe)
-    // the catalog task may still call into here once after cancellation.  Skip
-    // double-emit / double-tear-down.
+    // The catalog task may call here once after _unsubscribe already tore the
+    // subscription down; skip the double emit / tear-down.
     guard ctx.prefixForPath[path] == prefix else { return }
 
     await _removePlayer(sessionId: sessionId, path: path)
@@ -515,8 +502,6 @@ private let audioKeySuffix = "_audio"
       return
     }
 
-    // The JS layer only subscribes for a broadcast it already saw become
-    // available, so the broadcast should be present; if not, no-op.
     guard let broadcast = ctx.broadcasts[broadcastPath],
       let subscription = try? broadcast.subscribeTrack(name: trackName)
     else { return }
@@ -577,8 +562,7 @@ private let audioKeySuffix = "_audio"
       return
     }
 
-    // Decoded audio rides the catalog's shared media subscription, so we resolve
-    // the track against the catalog the broadcast advertised.
+    // Decoded audio rides the catalog's shared media subscription.
     guard let catalog = ctx.catalogs[broadcastPath] else { return }
     let format = AudioDataFormat(
       sampleFormat: sampleFormat == "i16" ? .int16 : .float32)
@@ -619,7 +603,7 @@ private let audioKeySuffix = "_audio"
         path: broadcastPath, trackName: trackName, sampleFormat: sampleFormat))
   }
 
-  // Drop one JS subscriber's hold on a sink; tear it down once the last leaves.
+  // Drop one subscriber's hold; tear the sink down once the last leaves.
   @MainActor
   private func releaseSink(_ sinks: inout [String: StreamSink], key: String) {
     guard let sink = sinks[key] else { return }
@@ -630,8 +614,7 @@ private let audioKeySuffix = "_audio"
     }
   }
 
-  // Close every sink whose key belongs to `prefix` (a "path|" string), used when
-  // a broadcast goes away.
+  // Close every sink whose key belongs to `prefix` (a "path|" string).
   @MainActor
   private func closeSinks(_ sinks: inout [String: StreamSink], withPathPrefix prefix: String) {
     for (key, sink) in sinks where key.hasPrefix(prefix) {
@@ -643,19 +626,16 @@ private let audioKeySuffix = "_audio"
 
 // MARK: - StreamSink
 
-/// Owns one moq-kit subscription/stream plus the task draining it, ref-counted
-/// across JS subscribers to the same key. Backs both raw track objects (audio
-/// chunks / data) and decoded-PCM audio — they differ only in the async sequence
-/// drained and the event emitted, which the caller supplies via `drain`.
+/// Owns one moq-kit subscription/stream plus its draining task, ref-counted
+/// across subscribers. Backs both raw track objects and decoded-PCM audio; they
+/// differ only in the sequence drained and event emitted, supplied via `drain`.
 @MainActor
 final class StreamSink {
   private var task: Task<Void, Never>?
   private let closeResource: () -> Void
   var refCount = 1
 
-  /// `drain` runs the async read loop, emitting each element; `closeResource`
-  /// tears down the underlying subscription/stream. Loop errors are swallowed —
-  /// the stream simply ended, and close() handles teardown.
+  /// Loop errors are swallowed — the stream simply ended, and close() tears down.
   init(drain: @escaping () async throws -> Void, closeResource: @escaping () -> Void) {
     self.closeResource = closeResource
     task = Task {
@@ -729,9 +709,8 @@ extension PlaybackStats {
   }
 }
 
-// MoQKit 0.2.0 reports timing as `Duration` instead of bare millisecond
-// Doubles. The library's own `Duration.milliseconds` helper is internal, so
-// mirror it here for the JS-facing stats payload (which stays in ms).
+// MoQKit reports timing as `Duration`; its `Duration.milliseconds` helper is
+// internal, so mirror it here for the JS-facing stats payload (which stays ms).
 private extension Duration {
   var inMilliseconds: Double {
     let c = components

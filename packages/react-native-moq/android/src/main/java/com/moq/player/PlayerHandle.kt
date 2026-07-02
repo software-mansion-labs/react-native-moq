@@ -26,8 +26,6 @@ class PlayerHandle(
   @Volatile private var eventJob: Job? = null
   @Volatile private var statsRunnable: Runnable? = null
 
-  // MARK: - Playback controls
-
   fun play() = player.play()
   fun pause() = player.pause()
   fun updateTargetLatency(ms: Int) =
@@ -57,14 +55,9 @@ class PlayerHandle(
     onEvent?.invoke("playerEvent", map)
   }
 
-  // MARK: - Event observation
-
-  // MoQKit 0.2.0 replaced the flat `Player.Event` sealed class with a richer
-  // event model delivered through `player.events` as `PlayerEvent`. Pause and end
-  // are now session-level rather than per-track, so we fold the lifecycle events
-  // onto the `trackPlaying` / `trackPaused` / `allTracksStopped` / `trackSwitched`
-  // types the usePlayer hook acts on, and forward the remaining diagnostic events
-  // under their own names (the JS side ignores unknown types).
+  // MoQKit 0.2.0's PlayerEvent model makes pause/end session-level; fold them onto
+  // the trackPlaying/trackPaused/allTracksStopped/trackSwitched types usePlayer acts
+  // on, and forward remaining diagnostics under their own names (JS ignores unknown).
   fun startObservingEvents() {
     eventJob?.cancel()
     eventJob = moduleScope.launch {
@@ -129,8 +122,6 @@ class PlayerHandle(
     onEvent?.invoke("playerEvent", map)
   }
 
-  // MARK: - Stats polling
-
   fun startStatsPolling() {
     stopStatsPolling()
     val runnable = object : Runnable {
@@ -150,8 +141,6 @@ class PlayerHandle(
     statsRunnable?.let { mainHandler.removeCallbacks(it) }
     statsRunnable = null
   }
-
-  // MARK: - Cleanup
 
   fun close() {
     eventJob?.cancel()

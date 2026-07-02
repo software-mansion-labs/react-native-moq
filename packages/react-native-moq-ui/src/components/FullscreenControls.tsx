@@ -6,18 +6,12 @@ import { useFullscreenControls } from '../contexts/FullscreenContext';
 import { usePlayPause } from '../usePlayPause';
 import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
 
-// Default fullscreen chrome. Mirrors the platform conventions: a close
-// button positioned per-platform (top-left on iOS like AVPlayerViewController,
-// top-right on Android like Media3 PlayerView), a centered play/pause, and
-// a volume row along the bottom.
-//
-// Visibility and exit are read from FullscreenContext; this component only
-// renders the chrome itself.
+// Default fullscreen chrome, mirroring platform conventions: close button
+// top-left on iOS / top-right on Android, centered play/pause, bottom volume
+// row. Visibility and exit come from FullscreenContext.
 export function FullscreenControls() {
   const { player, exit, show } = useFullscreenControls();
-  // The Modal can put the top button behind notches / the dynamic island in
-  // landscape too (where insets show up on left/right). We respect all four
-  // edges so the layout stays correct in any orientation.
+  // Respect all four edges: insets can appear on left/right in landscape.
   const insets = useSafeAreaInsets();
   const { isPlaying, onTogglePlay } = usePlayPause(player, show);
 
@@ -55,10 +49,6 @@ type EdgeInsets = {
   right: number;
 };
 
-// ---------------------------------------------------------------------------
-// iOS
-// ---------------------------------------------------------------------------
-
 function IOSChrome({
   player,
   isPlaying,
@@ -72,10 +62,7 @@ function IOSChrome({
   onTogglePlay: () => void;
   onExit: () => void;
 }) {
-  // AVPlayerViewController sits its close pill a comfortable distance below
-  // the dynamic island / notch and slightly inside the safe area on the
-  // sides. We add a small extra margin on top of the inset so the pill
-  // doesn't visually butt up against the island.
+  // Extra margin over the inset so the pill doesn't butt up against the island.
   const topBarStyle = {
     paddingTop: insets.top + 8,
     paddingLeft: insets.left + 16,
@@ -137,10 +124,6 @@ function IOSChrome({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Android
-// ---------------------------------------------------------------------------
-
 function AndroidChrome({
   player,
   isPlaying,
@@ -154,9 +137,8 @@ function AndroidChrome({
   onTogglePlay: () => void;
   onExit: () => void;
 }) {
-  // Media3 PlayerView places its close button inside the cutout-safe area
-  // and pads horizontally so the icon sits flush with the system gesture
-  // exclusion zones (which appear on the sides in landscape).
+  // Pad horizontally to clear the system gesture exclusion zones (sides in
+  // landscape).
   const topBarStyle = {
     paddingTop: insets.top + 4,
     paddingLeft: insets.left + 8,
@@ -164,9 +146,7 @@ function AndroidChrome({
   };
   return (
     <View style={styles.fill} pointerEvents="box-none">
-      {/* Soft scrim: Media3's default PlayerView dims the video slightly when
-          controls are showing so light text stays legible. The center scrim
-          is intentionally light — too dark would feel heavier than native. */}
+      {/* Soft scrim so icons stay legible over light video frames. */}
       <View
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, styles.androidScrim]}
@@ -190,13 +170,8 @@ function AndroidChrome({
       </View>
 
       <View style={styles.center} pointerEvents="box-none">
-        {/* The android_ripple below is `borderless: false` on purpose:
-            `borderless: true` swaps the View's background drawable for
-            ?attr/selectableItemBackgroundBorderless, which has no
-            background, so the dark circle from `androidPlayButton` would
-            disappear and the button would look invisible against a dark
-            video frame. Bounded ripple keeps the bg and lets the ripple
-            ride on top of it, clipped to the border radius. */}
+        {/* `borderless: false` on purpose: borderless swaps out the bg
+            drawable, so the dark circle would disappear over a dark frame. */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
@@ -239,10 +214,6 @@ function AndroidChrome({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
 const styles = StyleSheet.create({
   fill: { ...StyleSheet.absoluteFill },
   flexFill: { flex: 1 },
@@ -281,8 +252,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // iOS uses a soft translucent black circle (mimicking the system blur
-  // material — we'd need a native blur view for the real thing).
   iosCircleButton: {
     width: 36,
     height: 36,
@@ -300,8 +269,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Material uses borderless ripples on icon buttons; the background sits
-  // a hair lighter than the iOS pill to read against the slight scrim.
   androidIconButton: {
     width: 44,
     height: 44,

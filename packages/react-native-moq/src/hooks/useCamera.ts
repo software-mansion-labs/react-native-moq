@@ -8,10 +8,9 @@ const cameraEmitter = new NativeEventEmitter(NativeMoQCamera);
 export type CameraPosition = 'front' | 'back';
 export type VideoCodec = 'h264' | 'h265';
 
-// Which native capture backs a camera track. 'single' is the shared
-// front-or-back camera owned by useCamera; the 'multi-*' values are the two
-// concurrent sources of a useMultiCamera session. usePublisher reads this to
-// route each track to the correct native frame source.
+// Which native capture backs a track. 'single' is useCamera's shared camera;
+// 'multi-*' are the two concurrent sources of a useMultiCamera session.
+// usePublisher routes each track to the matching native frame source.
 export type CameraSource = 'single' | 'multi-front' | 'multi-back';
 
 export type CameraCaptureState =
@@ -33,19 +32,16 @@ export interface CameraOptions {
   width?: number;
   height?: number;
   framerate?: number;
-  // When false the camera isn't started (state stays 'idle'). Toggling it
-  // starts/stops the shared capture. Lets an app conditionally run the camera
-  // without conditionally calling the hook — useful when switching between
-  // single and multi-camera modes so only one capture is ever live.
+  // When false the camera isn't started (state stays 'idle'); toggling it
+  // starts/stops the shared capture. Lets an app run the camera conditionally
+  // without conditionally calling the hook.
   enabled?: boolean;
 }
 
 export interface CameraTrack {
-  // Discriminator used by usePublisher to route tracks to addVideoTrack on
-  // the native side. Don't read it from app code.
+  // Internal discriminator: usePublisher routes tracks to addVideoTrack.
   readonly __type: 'camera';
-  // Published track name and the native capture source backing it. Internal —
-  // usePublisher serializes these and PublisherView branches on __source.
+  // Internal: published track name and the native capture source backing it.
   readonly __name: string;
   readonly __source: CameraSource;
   readonly state: CameraCaptureState;
@@ -61,11 +57,9 @@ export function getSupportedVideoCodecs(): VideoCodec[] {
   return NativeMoQCamera.getSupportedCodecs() as VideoCodec[];
 }
 
-// Starts the camera capture on mount and keeps it alive until unmount. The
-// camera is a device singleton — multiple hook instances share one capture
-// session and ref-count it natively, so mounting two useCamera hooks costs no
-// extra hardware. Position changes are applied to the shared session, so
-// they're visible to every consumer (preview, publish).
+// Starts capture on mount, keeps it alive until unmount. The camera is a device
+// singleton: hook instances share one native, ref-counted capture session, and
+// position changes apply to the shared session (visible to every consumer).
 export function useCamera(options: CameraOptions = {}): CameraTrack {
   const initialPosition = options.position ?? 'front';
   const codec = options.videoCodec ?? 'h264';
@@ -82,9 +76,8 @@ export function useCamera(options: CameraOptions = {}): CameraTrack {
     ['active', 'starting']
   );
 
-  // Read the latest position inside the mount effect without re-running it —
-  // the effect intentionally fires once per hook instance to bump the native
-  // refcount exactly once.
+  // Read latest position in the mount effect without re-running it — the effect
+  // fires once per instance to bump the native refcount exactly once.
   const positionRef = useRef(initialPosition);
   positionRef.current = position;
 

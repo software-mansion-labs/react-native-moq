@@ -11,8 +11,8 @@ export function useAudioPlayer(
   const { sessionId } = broadcastInfo;
   const audioKey = broadcastInfo.path + AUDIO_PLAYER_KEY_SUFFIX;
 
-  // Bridge-only handle: audio-only players don't use JSI since the native
-  // player is created asynchronously after createAudioOnlyPlayer is called.
+  // Bridge-only handle: the native player is created async after
+  // createAudioOnlyPlayer, so there's no JSI object yet.
   const audioHandle = useMemo(
     () =>
       new PlayerHandle(

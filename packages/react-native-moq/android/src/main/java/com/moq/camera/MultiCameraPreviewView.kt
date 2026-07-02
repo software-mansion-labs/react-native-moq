@@ -5,11 +5,10 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.swmansion.moqkit.publish.source.VideoFrameSource
 
-// Previews a single stream (front or back) of the shared multi-camera capture.
-// Mirrors CameraPreviewView but selects its source from the `source` prop.
+// Previews one stream (front or back) of the shared multi-camera capture,
+// selected by the `source` prop.
 class MultiCameraPreviewView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
-  // 'front' or 'back', set by the view manager. Re-attaches when it changes.
   var source: String = "front"
     set(value) {
       if (field == value) return

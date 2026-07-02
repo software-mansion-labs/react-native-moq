@@ -14,20 +14,18 @@ import { useBoyCommands } from '../boy/useBoyCommands';
 import type { BoyControl, BoyGame } from '../boy/types';
 import { sortVideoTracksByResolution } from '../videoTracks';
 
-// Props shared by both the idle console and the live game session — everything
-// except the player/controller wiring that only exists while a game is running.
+// Props shared by the idle console and the live game session (everything except
+// the player/controller wiring that only exists while a game runs).
 type SharedConsoleProps = Omit<
   BoyConsoleProps,
   'player' | 'controlsEnabled' | 'onButton' | 'lastError'
 >;
 
-// MoQBoy — a cloud-gaming client ported from moq-kit's iOS demo
-// (MoQDemo/Features/Boy). Discovers game broadcasts under the `boy` prefix,
-// plays the selected game's video/audio as the console screen, and publishes a
-// `command` data track to `viewer/boy/<game>/<viewerId>` carrying button input.
+// MoQBoy cloud-gaming client. Discovers game broadcasts under `boy`, plays the
+// selected game as the console screen, and publishes a `command` data track to
+// `viewer/boy/<game>/<viewerId>` carrying button input.
 const SUBSCRIBE_PREFIX = 'boy';
 const VIEWER_PREFIX = 'viewer/boy';
-// Dedicated Boy relay, hardcoded like MoQDemo's MoQDemoRelayURLs.boyDemoURL.
 const BOY_RELAY_URL = 'https://cdn.moq.dev/demo';
 
 function lastComponent(path: string): string {
@@ -56,19 +54,18 @@ export function MoQBoyScreen() {
     [broadcasts]
   );
 
-  // `selectedGamePath` tracks the user's choice (drives the flip + cartridge
-  // highlight immediately); `activeGamePath` is the game actually mounted and
-  // playing — it only updates once the console settles facing front, so a
-  // VideoView never initializes behind a hidden / 3D-rotated face (the
-  // AVSampleBufferDisplayLayer freezes on a stale frame if it does).
+  // `selectedGamePath` is the user's choice (drives the flip immediately);
+  // `activeGamePath` is the mounted/playing game, updated only once the console
+  // settles facing front so a VideoView never initializes behind a rotated face
+  // (AVSampleBufferDisplayLayer would freeze on a stale frame).
   const [selectedGamePath, setSelectedGamePath] = useState<string | null>(null);
   const [activeGamePath, setActiveGamePath] = useState<string | null>(null);
   const [latency, setLatency] = useState(200);
   const [showsBack, setShowsBack] = useState(false);
   const toggleFlip = useCallback(() => setShowsBack((b) => !b), []);
 
-  // Insert: flip to the front; the game mounts when the flip lands (below).
-  // Eject (null): drop the game immediately and stay on the back to pick again.
+  // Insert: flip to front (the game mounts once the flip lands). Eject: drop it
+  // immediately and stay on the back to pick again.
   const onSelectGame = useCallback((path: string | null) => {
     setSelectedGamePath(path);
     if (path === null) setActiveGamePath(null);
@@ -176,8 +173,7 @@ export function MoQBoyScreen() {
 }
 
 // Mounted only while a cartridge is inserted (keyed on broadcast path). Owns the
-// video player and the controller publisher for the selected game — mirrors
-// moq-kit's startSelectedGame / startCommandPublishing.
+// video player and the controller publisher for the selected game.
 function BoyGameSession({
   broadcast,
   session,
@@ -191,9 +187,8 @@ function BoyGameSession({
 }) {
   const player = useVideoPlayer(broadcast, (p) => p.play());
 
-  // Prefer the highest-resolution rendition (moq-kit's preferredTracks), but
-  // only once playback has actually started — switching synchronously with
-  // play() races the initial subscription and can freeze the stream.
+  // Switch to the highest-resolution rendition, but only once playback started —
+  // switching synchronously with play() races the subscription and can freeze.
   const { addListener, switchVideoTrack } = player;
   useEffect(() => {
     let switched = false;
@@ -217,17 +212,11 @@ function BoyGameSession({
   const publisher = usePublisher(session);
   const dataTrack = useDataTrack({ name: 'command' });
 
-  // Lazily publish the controller on the FIRST button press, not on every game
-  // mount. Browsing/switching cartridges then does no publishing at all — and
-  // publishing the controller is exactly what the relay reacts to by closing the
-  // whole transport (the console "powers off"). So we only announce a controller
-  // once you actually start playing. dataTrack.send() is a safe no-op until the
-  // publisher is live, so the very first press may be dropped while it connects;
-  // the held-button repeat loop re-sends it once publishing.
-  //
-  // Use the stable publish/stop callbacks, NOT the `publisher` object: usePublisher
-  // returns a fresh memoized object on every state change, so keying teardown on
-  // `publisher` would re-run its cleanup — stop() — on each change.
+  // Publish the controller lazily on the first button press: announcing it is
+  // what makes the relay close the transport on some setups, so browsing
+  // cartridges must not publish. The first press may drop while connecting; the
+  // repeat loop re-sends. Use the stable publish/stop callbacks, not the fresh
+  // `publisher` object, or teardown would re-run stop() on every state change.
   const { publish: publishController, stop: stopController } = publisher;
   const viewerPath = useMemo(
     () => `${VIEWER_PREFIX}/${lastComponent(broadcast.path)}/${makeViewerId()}`,
@@ -243,18 +232,14 @@ function BoyGameSession({
   // Stop the controller on unmount (cartridge ejected / swapped / powered off).
   useEffect(() => () => stopController(), [stopController]);
 
-  // Apply the screen's latency control to the live player.
   const { updateTargetLatency, stop: stopPlayer } = player;
   useEffect(() => {
     updateTargetLatency(latency);
   }, [latency, updateTargetLatency]);
 
-  // Tear the player down when the cartridge is ejected or swapped, freeing the
-  // native subscription (mirrors moq-kit's BroadcastEntry.stop()).
+  // Tear the player down on eject/swap, freeing the native subscription.
   useEffect(() => stopPlayer, [stopPlayer]);
 
-  // Controls stay live the whole time a cartridge is inserted; the first press
-  // lazily publishes the controller (above).
   const { setButton } = useBoyCommands(dataTrack, true);
   const onButton = useCallback(
     (control: BoyControl, isPressed: boolean) => {

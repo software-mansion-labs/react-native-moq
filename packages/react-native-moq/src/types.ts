@@ -39,57 +39,35 @@ export type AudioChunkFormat = 'encoded' | 'pcm-f32' | 'pcm-i16';
 
 export interface AudioChunk {
   /**
-   * The audio bytes for one chunk. For `format: 'encoded'` this is one Opus/AAC
-   * object exactly as published — decode downstream (e.g. react-native-audio-api)
-   * before playback or ML inference. For the `pcm-*` formats this is already
-   * decoded, interleaved PCM (Float32 or Int16) ready to feed to playback or an
-   * ML model.
+   * The audio bytes for one chunk. For `'encoded'` this is one Opus/AAC object
+   * as published; for the `pcm-*` formats it is decoded interleaved PCM.
    */
   data: ArrayBuffer;
-  /** Delivery format of `data` — encoded object vs decoded PCM. */
   format: AudioChunkFormat;
-  /** Name of the audio track this chunk came from. */
   trackName: string;
-  /** Codec advertised in the broadcast catalog, e.g. 'opus' | 'aac'. */
+  /** Codec from the broadcast catalog, e.g. 'opus' | 'aac'. */
   codec: string;
-  /**
-   * Sample rate of `data` in Hz. For `'encoded'` this is the catalog's source
-   * rate (0 if unknown); for the `pcm-*` formats it is the decoded PCM rate.
-   */
+  /** Sample rate of `data` in Hz (0 if unknown for `'encoded'`). */
   sampleRate: number;
-  /** Channel count of `data`, when known. */
   channelCount?: number;
-  /**
-   * Number of PCM frames in `data`. Only set for the `pcm-*` formats — undefined
-   * for `'encoded'` chunks.
-   */
+  /** PCM frame count. Only set for the `pcm-*` formats. */
   frameCount?: number;
-  /**
-   * Presentation timestamp in microseconds, relative to the stream origin. Only
-   * set for the `pcm-*` formats — undefined for `'encoded'` chunks.
-   */
+  /** Presentation timestamp in microseconds. Only set for the `pcm-*` formats. */
   timestampUs?: number;
-  /**
-   * MoQ group sequence — lets consumers detect gaps / ordering. Only set for
-   * `'encoded'` chunks; undefined for the `pcm-*` formats (the decoder emits
-   * timestamped PCM rather than raw objects).
-   */
+  /** MoQ group sequence for gap/ordering detection. Only set for `'encoded'`. */
   groupSequence?: number;
-  /** Object index within the group. Only set for `'encoded'` chunks. */
+  /** Object index within the group. Only set for `'encoded'`. */
   objectIndex?: number;
 }
 
 /**
- * Handle to a running audio-chunk subscription. Returned by both
- * `subscribeAudioChunks` (imperative) and `useAudioChunks` (hook). `stop()`
- * releases the underlying native track subscription, which stops pulling that
- * track over the network — so stop whenever you aren't consuming.
+ * Handle to a running audio-chunk subscription. `stop()` releases the native
+ * track subscription (stops pulling it over the network), so stop when idle.
  */
 export interface ChunkSubscription {
   readonly sessionId: string;
   readonly broadcastPath: string;
   readonly trackName: string;
-  /** Whether the subscription is currently receiving chunks. */
   readonly isActive: boolean;
   /** (Re)start receiving. Idempotent. */
   start(): void;
@@ -97,11 +75,9 @@ export interface ChunkSubscription {
   stop(): void;
 }
 
-// Opaque handle returned in broadcastAvailable events.
-// On iOS the native field is a JSI HostObject with direct methods;
-// on Android it falls back to bridge calls keyed by (sessionId, broadcastPath).
-// Two sessions can surface the same broadcastPath, so the session id is part
-// of the routing key.
+// Opaque handle from broadcastAvailable events. iOS uses a JSI HostObject;
+// Android falls back to bridge calls keyed by (sessionId, broadcastPath) —
+// sessionId is in the key because two sessions can share a broadcastPath.
 export class PlayerHandle {
   readonly sessionId: string;
   readonly broadcastPath: string;

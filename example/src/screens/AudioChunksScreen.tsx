@@ -23,14 +23,10 @@ import { useAudioApiPlayback } from '../hooks/useAudioApiPlayback';
 const BAR_COUNT = 56;
 
 /**
- * Showcase tab for `useAudioChunks`. Connect to a relay, pick a broadcast, and
- * watch its audio track arrive as raw chunks:
- *  - `encoded` (cross-platform): we can only *inspect* the Opus/AAC objects —
- *    codec, chunk rate, bitrate — since decoding them needs a codec we don't ship
- *    in JS.
- *  - `pcm-f32`: the chunks are already decoded PCM, so we feed them straight into
- *    react-native-audio-api for live playback and draw a level meter from the
- *    samples.
+ * Showcase tab for `useAudioChunks`. Pick a broadcast and watch its audio track
+ * arrive as raw chunks: `encoded` objects can only be inspected (decoding needs
+ * a codec we don't ship in JS); `pcm-f32` chunks are fed into
+ * react-native-audio-api for live playback + a level meter.
  */
 export function AudioChunksScreen({
   url,
@@ -158,9 +154,7 @@ const EMPTY_STATS: ChunkStats = {
 
 type DemoMode = 'playback' | 'transcribe';
 
-// Decoded-PCM chunks drive the playback / meter demo, and can also be run
-// through on-device Whisper — the mode switch toggles between the two. Both run
-// on iOS and Android (react-native-executorch ships native libs for both).
+// Mode switch between the playback/meter demo and on-device Whisper transcription.
 function AudioChunksDemo({ broadcast }: { broadcast: BroadcastInfo }) {
   const [mode, setMode] = useState<DemoMode>('playback');
 
@@ -194,14 +188,13 @@ function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
   const playback = useAudioApiPlayback();
 
   // Per-chunk data lands in refs (chunks arrive at frame rate); a timer flushes
-  // a snapshot to state for display.
+  // a snapshot to state.
   const levelsRef = useRef<number[]>(new Array(BAR_COUNT).fill(0));
   const tally = useRef({ count: 0, bytes: 0, last: 0, rate: 0 });
   const windowRef = useRef({ bytes: 0, t0: Date.now() });
   const [stats, setStats] = useState<ChunkStats>(EMPTY_STATS);
 
-  // Reset everything when the delivery format changes so numbers/meter reflect
-  // only the current stream.
+  // Reset on format change so numbers/meter reflect only the current stream.
   useEffect(() => {
     tally.current = { count: 0, bytes: 0, last: 0, rate: 0 };
     levelsRef.current = new Array(BAR_COUNT).fill(0);

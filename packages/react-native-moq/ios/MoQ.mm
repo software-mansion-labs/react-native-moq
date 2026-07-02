@@ -2,9 +2,8 @@
 #import "PlayerHostObject.h"
 #import <MoQ/MoQ-Swift.h>
 
-// C++ subclass of the codegen-generated TurboModule that adds the `getPlayer`
-// JSI method.  All other methods fall through to NativeMoQSpecJSI's dispatch
-// table, which bridges them to the ObjC @implementation below.
+// TurboModule subclass adding the `getPlayer` JSI method; other methods fall
+// through to NativeMoQSpecJSI.
 namespace {
 
 class MoQJSIModule : public facebook::react::NativeMoQSpecJSI {

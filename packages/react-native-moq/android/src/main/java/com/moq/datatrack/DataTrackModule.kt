@@ -6,15 +6,8 @@ import com.swmansion.moqkit.publish.DataTrackEmitter
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 
-// Owns the app-side DataTrackEmitters created by useDataTrack, keyed by the id
-// the hook assigns. Mirrors MoQKit's model where an emitter is a standalone
-// object handed to Publisher.addDataTrack — PublisherModule looks the emitter up
-// by id when wiring a data track into a broadcast, and send() pushes payloads
-// straight to it.
-//
-// Unlike the camera/mic modules there is no hardware or refcount; emitters are
-// cheap and the map is read from both the JS thread (send) and the publisher
-// coroutine, so it's a ConcurrentHashMap.
+// Owns the app-side DataTrackEmitters, keyed by id. The map is read from both
+// the JS thread (send) and the publisher coroutine, hence ConcurrentHashMap.
 class DataTrackModule(reactContext: ReactApplicationContext) :
   NativeMoQDataTrackSpec(reactContext) {
 
@@ -47,7 +40,6 @@ class DataTrackModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  // Accessed by PublisherModule when wiring the data track into a Publisher.
   internal fun emitter(trackId: String): DataTrackEmitter? = emitters[trackId]
 
   override fun invalidate() {

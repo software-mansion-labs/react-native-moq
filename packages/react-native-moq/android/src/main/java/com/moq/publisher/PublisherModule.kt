@@ -37,9 +37,6 @@ class PublisherModule(reactContext: ReactApplicationContext) :
 
   private val moduleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-  // Per-session publisher context. Camera and microphone are owned by
-  // CameraModule / MicrophoneModule respectively; the publisher just
-  // references them and lets the underlying modules handle refcounting.
   private class PublisherContext(
     val sessionId: String,
     val path: String,
@@ -50,8 +47,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
 
   private val publishers = ConcurrentHashMap<String, PublisherContext>()
 
-  // In-flight stop jobs, keyed by session. A new publish() joins any pending
-  // teardown so publish()/start() never runs concurrently with the previous
+  // A new publish() joins any pending teardown so it never races the previous
   // publisher's stop()/unpublish() on the same Session (which can drop it).
   private val teardowns = ConcurrentHashMap<String, Job>()
 
@@ -62,17 +58,12 @@ class PublisherModule(reactContext: ReactApplicationContext) :
   override fun addListener(eventName: String) {}
   override fun removeListeners(count: Double) {}
 
-  // MARK: - Publish
-
   override fun publish(sessionId: String, path: String, tracksJson: String) {
     val tracks = parseTracks(tracksJson)
 
     moduleScope.launch {
-      // Replacing a publisher on this session (e.g. switching games): tear the
-      // old one down and WAIT before starting the new one, so publish()/start()
-      // never runs concurrently with the previous publisher's stop()/unpublish()
-      // on the same Session — that race could drop the whole session, which is
-      // what made cartridge swaps sometimes kill the console.
+      // Tear down and WAIT before starting the replacement, so it never races
+      // the old publisher's stop()/unpublish() on the same Session (drops it).
       publishers.remove(sessionId)?.let { existing ->
         existing.jobs.forEach { it.cancel() }
         existing.jobs.clear()
@@ -141,8 +132,7 @@ class PublisherModule(reactContext: ReactApplicationContext) :
   }
 
   override fun stop(sessionId: String) {
-    // Remember the teardown so a follow-up publish() on this session can join it
-    // instead of racing it.
+    // Remember the teardown so a follow-up publish() can join it, not race it.
     teardowns[sessionId] = moduleScope.launch { stopInternal(sessionId) }
   }
 
@@ -152,9 +142,9 @@ class PublisherModule(reactContext: ReactApplicationContext) :
     ctx.jobs.forEach { it.cancel() }
     ctx.jobs.clear()
 
-    // Unpublish through the session so it clears its activePublishers entry for
-    // this path; otherwise a subsequent publish() at the same path throws
-    // "Already publishing". unpublish() also calls Publisher.stop() internally.
+    // Unpublish through the session to clear its path entry, else a later
+    // publish() at the same path throws "Already publishing". This also stops
+    // the publisher.
     val session = MoQModule.connectedSession(sessionId)
     if (session != null) {
       try { session.unpublish(ctx.path) } catch (_: Exception) {}
@@ -174,8 +164,6 @@ class PublisherModule(reactContext: ReactApplicationContext) :
     moduleScope.launch { stopAllInternal() }
     moduleScope.cancel()
   }
-
-  // MARK: - Observers
 
   private fun observePublisher(ctx: PublisherContext, tracks: List<PublishedTrack>) {
     val pub = ctx.publisher
@@ -216,8 +204,6 @@ class PublisherModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  // MARK: - Helpers
-
   private fun emitState(sessionId: String, state: String) {
     val map = Arguments.createMap()
     map.putString("sessionId", sessionId)
@@ -239,8 +225,6 @@ class PublisherModule(reactContext: ReactApplicationContext) :
       is PublisherEvent.TrackStopped -> name
       is PublisherEvent.TrackError -> name
     }
-
-  // MARK: - Track parsing
 
   private sealed interface TrackDescriptor {
     val name: String

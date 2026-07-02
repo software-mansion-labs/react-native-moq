@@ -10,8 +10,6 @@ interface PadProps {
   onPressChange: PressHandler;
 }
 
-// Directional pad: four chevron keys around a recessed hub, matching
-// BoyDirectionPad in moq-kit's BoyControlPadView.
 export function BoyDirectionPad({ enabled, onPressChange }: PadProps) {
   return (
     <View style={styles.dpad}>
@@ -52,7 +50,6 @@ export function BoyDirectionPad({ enabled, onPressChange }: PadProps) {
   );
 }
 
-// A / B action cluster, rotated like the real console (BoyActionCluster).
 export function BoyActionCluster({ enabled, onPressChange }: PadProps) {
   return (
     <View style={styles.actionCluster}>
@@ -78,7 +75,6 @@ export function BoyActionCluster({ enabled, onPressChange }: PadProps) {
   );
 }
 
-// SELECT / START capsules (BoyStartSelectCluster).
 export function BoyStartSelectCluster({ enabled, onPressChange }: PadProps) {
   return (
     <View style={styles.startSelect}>

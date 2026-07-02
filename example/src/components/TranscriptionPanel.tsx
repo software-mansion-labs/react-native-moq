@@ -9,36 +9,30 @@ import { useAudioChunks, type BroadcastInfo } from 'react-native-moq';
 import { createMonoResampler } from '../resamplePcm';
 
 const TARGET_RATE = 16000;
-// Rolling transcription window: transcribe at most this many seconds of recent
-// audio, no sooner than we have a little, on this cadence.
+// Rolling transcription window bounds and cadence.
 const MAX_SAMPLES = TARGET_RATE * 12;
 const MIN_SAMPLES = TARGET_RATE * 1;
 const TRANSCRIBE_EVERY_MS = 1500;
 
-// WHISPER_TINY_EN points its iOS modelSource at a CoreML .pte that isn't
-// published (404s on HuggingFace as of executorch 0.9.2). Pin the XNNPACK
-// build, which exists and runs cross-platform (incl. the simulator).
+// WHISPER_TINY_EN's iOS CoreML .pte 404s on HuggingFace (executorch 0.9.2); pin
+// the cross-platform XNNPACK build instead.
 const WHISPER_MODEL = {
   ...WHISPER_TINY_EN,
   modelSource: WHISPER_TINY_EN_MODEL_XNNPACK,
 };
 
-// transcribe() returns a TranscriptionResult; be tolerant of a bare string too.
+// transcribe() returns a TranscriptionResult, or sometimes a bare string.
 function textOf(result: unknown): string {
   if (typeof result === 'string') return result;
   return (result as { text?: string } | undefined)?.text ?? '';
 }
 
 /**
- * Live on-device transcription of a broadcast's audio — the "decoded → ML" half
- * of the audio-chunks demo. Decoded `pcm-f32` chunks from `useAudioChunks` are
- * downmixed + resampled to the 16 kHz mono waveform Whisper wants, buffered into
- * a rolling window, and transcribed on a timer with react-native-executorch. The
- * Whisper model (~tens of MB) downloads on first use, gated behind a button.
- *
- * Uses the one-shot `transcribe()` over the rolling buffer rather than the
- * streaming generator — far more predictable, and the transcript naturally
- * reflects the last ~12s of audio.
+ * Live on-device transcription of a broadcast's audio. Decoded `pcm-f32` chunks
+ * are downmixed + resampled to 16 kHz mono, buffered into a rolling window, and
+ * transcribed on a timer with react-native-executorch (Whisper downloads on
+ * first use). Uses one-shot `transcribe()` over the buffer, not the streaming
+ * generator — more predictable, and reflects the last ~12s of audio.
  */
 export function TranscriptionPanel({
   broadcast,
@@ -47,9 +41,8 @@ export function TranscriptionPanel({
 }) {
   const [load, setLoad] = useState(false);
   const stt = useSpeechToText({ model: WHISPER_MODEL, preventLoad: !load });
-  // `stt` is a fresh object every render; hold the latest in a ref so the
-  // transcription interval can call it without depending on its identity (which
-  // would otherwise tear the interval down mid-inference).
+  // `stt` is fresh every render; hold the latest in a ref so the interval can
+  // call it without depending on its identity (which would tear it down mid-run).
   const sttRef = useRef(stt);
   sttRef.current = stt;
 
@@ -70,8 +63,7 @@ export function TranscriptionPanel({
     };
   }, []);
 
-  // Catalog values are the fallback if a chunk arrives with sampleRate/channels
-  // unset (the decoded path can send 0).
+  // Catalog fallback for chunks that arrive with sampleRate/channels unset (0).
   const catalogTrack = broadcast.audioTracks[0];
   const fallbackRate =
     catalogTrack?.sampleRate && catalogTrack.sampleRate > 0
@@ -82,8 +74,7 @@ export function TranscriptionPanel({
       ? catalogTrack.channelCount
       : 1;
 
-  // Always subscribed (autoStart), like PlaybackPanel; we only accumulate audio
-  // into the rolling buffer while capturing.
+  // Always subscribed; only accumulate into the buffer while capturing.
   useAudioChunks(
     broadcast,
     (chunk) => {
@@ -122,16 +113,15 @@ export function TranscriptionPanel({
     setCapturing(true);
   }, [stt.isReady]);
 
-  // Transcribe the rolling buffer on a timer while capturing. transcribe() is a
-  // one-shot; the guard keeps calls from overlapping, and depending only on
-  // `capturing` keeps the interval alive across the renders inference triggers.
+  // Transcribe the buffer on a timer while capturing. The guard prevents
+  // overlapping calls; depending only on `capturing` keeps the interval alive.
   useEffect(() => {
     if (!capturing) return;
     let cancelled = false;
     const id = setInterval(async () => {
       if (transcribing.current || bufferLen.current < MIN_SAMPLES) return;
 
-      // Atomic snapshot of the current window (sync, no await before it's built).
+      // Snapshot the window synchronously, before any await.
       const snapshot = windows.current.slice();
       const total = snapshot.reduce((s, w) => s + w.length, 0);
       const merged = new Float32Array(total);
@@ -146,8 +136,7 @@ export function TranscriptionPanel({
         const result = await sttRef.current.transcribe(merged);
         if (!cancelled && mounted.current) setTranscript(textOf(result));
       } catch {
-        // transcribe() can reject if the model is mid-teardown — ignore and
-        // retry on the next tick.
+        // transcribe() can reject mid-teardown; retry next tick.
       } finally {
         transcribing.current = false;
       }
@@ -158,8 +147,7 @@ export function TranscriptionPanel({
     };
   }, [capturing]);
 
-  // Stop capturing if the panel unmounts mid-session. The audio subscription is
-  // torn down by useAudioChunks' own cleanup.
+  // Stop capturing if the panel unmounts mid-session.
   useEffect(
     () => () => {
       capturingRef.current = false;

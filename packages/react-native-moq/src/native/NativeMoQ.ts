@@ -1,26 +1,17 @@
 import { TurboModuleRegistry, type TurboModule } from 'react-native';
 
-// All methods take a `sessionId` so multiple useSession instances can coexist.
-// JS generates the id in useSession and threads it through subscribe / player
-// methods; the native side keeps per-session maps of Session, subscriptions,
-// and players.
+// Every method takes a `sessionId` so multiple useSession instances can coexist.
 export interface Spec extends TurboModule {
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 
-  // Session
   connect(sessionId: string, url: string, targetLatencyMs: number): void;
   disconnect(sessionId: string): void;
 
-  // Broadcast subscription. The native side maintains one BroadcastSubscription
-  // per (sessionId, prefix); subscribe/unsubscribe are matched by both.
-  // Calling subscribe twice with the same key is idempotent — JS-side
-  // ref-counting in useBroadcasts ensures the underlying subscription is
-  // shared across hooks.
+  // subscribe/unsubscribe are matched by (sessionId, prefix); idempotent.
   subscribe(sessionId: string, prefix: string): void;
   unsubscribe(sessionId: string, prefix: string): void;
 
-  // Player controls (per session + broadcast)
   play(sessionId: string, broadcastPath: string): void;
   pause(sessionId: string, broadcastPath: string): void;
   stopPlayer(sessionId: string, broadcastPath: string): void;
@@ -41,14 +32,11 @@ export interface Spec extends TurboModule {
   ): void;
   setVolume(sessionId: string, broadcastPath: string, volume: number): void;
 
-  // Audio-only player (keyed as broadcastPath + "_audio" in native, scoped by session)
   createAudioOnlyPlayer(sessionId: string, broadcastPath: string): void;
 
-  // Raw track-object streaming. The native side keeps one moq-kit
-  // TrackSubscription per (sessionId, broadcastPath, trackName) and ref-counts
-  // these calls, so two JS subscribers to the same track share one underlying
-  // subscription. Each received object is forwarded as a `trackObject` event
-  // with a base64 `data` payload plus `groupSequence` / `objectIndex`.
+  // Ref-counted per (sessionId, broadcastPath, trackName). Each object is
+  // forwarded as a `trackObject` event with base64 `data`, `groupSequence`,
+  // `objectIndex`.
   subscribeTrackObjects(
     sessionId: string,
     broadcastPath: string,
@@ -60,11 +48,10 @@ export interface Spec extends TurboModule {
     trackName: string
   ): void;
 
-  // Decoded-PCM audio streaming. The native side creates one
-  // moq-kit `AudioDataStream` per (sessionId, broadcastPath, trackName,
-  // sampleFormat) and ref-counts these calls. Each decoded chunk is forwarded as
-  // an `audioData` event with base64 interleaved PCM plus frameCount /
-  // timestampUs / sampleRate / channelCount. `sampleFormat` is 'f32' | 'i16'.
+  // Decoded-PCM streaming, ref-counted per (sessionId, broadcastPath,
+  // trackName, sampleFormat). Each chunk is forwarded as an `audioData` event
+  // with base64 interleaved PCM, frameCount, timestampUs, sampleRate,
+  // channelCount. `sampleFormat` is 'f32' | 'i16'.
   subscribeAudioData(
     sessionId: string,
     broadcastPath: string,

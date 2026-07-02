@@ -16,8 +16,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 // Owns the device microphone as a refcounted singleton (see RefcountedCapture).
-// Multiple consumers (useMicrophone hooks, live publishers) call start/stop
-// independently — the physical mic only stops when the refcount drops to zero.
 class MicrophoneModule(reactContext: ReactApplicationContext) :
   NativeMoQMicrophoneSpec(reactContext) {
 

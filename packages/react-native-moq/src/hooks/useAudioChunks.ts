@@ -48,10 +48,8 @@ export function useAudioChunks(
   const onChunkRef = useRef(onChunk);
   onChunkRef.current = onChunk;
 
-  // Re-create only when the identity of the target track (or format) changes —
-  // `broadcast` may be a fresh object every render, but codec/sampleRate are
-  // stable per (path, track), so keying on primitives is enough (mirrors
-  // useAudioPlayer).
+  // Key on primitives: `broadcast` may be a fresh object each render, but
+  // codec/sampleRate are stable per (path, track).
   const subscription = useMemo(
     () =>
       subscribeAudioChunks(

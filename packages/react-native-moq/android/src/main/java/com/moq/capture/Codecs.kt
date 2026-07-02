@@ -3,9 +3,6 @@ package com.moq.capture
 import com.swmansion.moqkit.publish.encoder.AudioCodec
 import com.swmansion.moqkit.publish.encoder.VideoCodec
 
-// Single source of truth for the codec <-> JS-string mapping shared by the
-// camera / microphone / publisher / screen-broadcast paths.
-
 fun VideoCodec.toJsString(): String = when (this) {
   VideoCodec.H264 -> "h264"
   VideoCodec.H265 -> "h265"

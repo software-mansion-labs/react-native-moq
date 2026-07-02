@@ -32,9 +32,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-// Foreground service that runs the MediaProjection-backed screen broadcast.
-// Same process as the host app, so it talks back to PublisherModule via
-// the stateListener callback (set by the module right before starting us).
+// Foreground service running the MediaProjection-backed screen broadcast. Same
+// process as the host app, so it reports back via the static stateListener.
 class ScreenBroadcastService : Service() {
 
   companion object {
@@ -48,8 +47,7 @@ class ScreenBroadcastService : Service() {
     private const val CHANNEL_ID = "moq_screen_broadcast"
     private const val NOTIFICATION_ID = 0xCA51
 
-    // Single listener — only one broadcast in flight at a time. The module
-    // sets this right before starting the service and clears it on stop.
+    // Single listener — only one broadcast in flight at a time.
     @Volatile var stateListener: ((state: String) -> Unit)? = null
     @Volatile var trackListener: ((name: String, state: String, error: String?) -> Unit)? = null
   }
@@ -81,7 +79,7 @@ class ScreenBroadcastService : Service() {
         startBroadcast(intent)
       }
       else -> {
-        // Service restarted with null intent; just shut down.
+        // Restarted with a null intent; just shut down.
         stopSelf()
       }
     }
@@ -274,10 +272,8 @@ class ScreenBroadcastService : Service() {
     val audioSampleRate: Int,
   )
 
-  // Phone screens are commonly 1080x2400 or larger — at H264's default
-  // profile-level many MediaCodec encoders refuse those dimensions and
-  // findEncoderForFormat() returns null. Scale to fit a 1920x1080 envelope
-  // (long edge ≤ 1920, short edge ≤ 1080), preserve aspect, ensure even.
+  // Many MediaCodec encoders reject large phone dimensions (findEncoderForFormat
+  // returns null). Scale to fit 1920x1080, preserving aspect, keeping edges even.
   private fun fitEncoderEnvelope(width: Int, height: Int): Pair<Int, Int> {
     val maxLong = 1920
     val maxShort = 1080

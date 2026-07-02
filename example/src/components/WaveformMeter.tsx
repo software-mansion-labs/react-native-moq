@@ -4,10 +4,9 @@ import { StyleSheet, View } from 'react-native';
 const MAX_BAR_HEIGHT = 56;
 
 /**
- * A lightweight live level meter. The parent keeps a fixed-length ring buffer of
- * recent per-chunk peak levels (0..1) in `levelsRef` and we just repaint it on a
- * timer — chunks arrive far too fast to drive React state per chunk, so the ref
- * absorbs them and the meter samples it.
+ * A live level meter. The parent keeps a ring buffer of recent peak levels
+ * (0..1) in `levelsRef`; we repaint on a timer since chunks arrive too fast to
+ * drive React state per chunk.
  */
 export function WaveformMeter({
   levelsRef,

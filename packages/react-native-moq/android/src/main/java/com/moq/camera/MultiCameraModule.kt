@@ -18,12 +18,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-// Owns the concurrent front+back capture as a refcounted singleton (see
-// RefcountedCapture), mirroring CameraModule. Multiple consumers (useMultiCamera
-// hooks, live publishers, the on-screen <PublisherView/>s) call start/stop
-// independently — the cameras only stop when the refcount drops to zero. Unlike
-// CameraModule there's no position switching; the two cameras are fixed
-// front/back.
+// Refcounted singleton owning the concurrent front+back capture, mirroring
+// CameraModule. Cameras are fixed front/back with no position switching.
 class MultiCameraModule(reactContext: ReactApplicationContext) :
   NativeMoQMultiCameraSpec(reactContext) {
 
@@ -51,8 +47,7 @@ class MultiCameraModule(reactContext: ReactApplicationContext) :
     @Volatile var instance: MultiCameraModule? = null
       private set
 
-    // Static listener list for the preview views — they talk to the capture
-    // through the singleton because views can't easily hold a module reference.
+    // Preview views reach the capture via the singleton; they can't hold a module ref.
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
 
     fun addListener(listener: () -> Unit) { listeners.add(listener) }
@@ -87,8 +82,7 @@ class MultiCameraModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  // Awaits any in-flight start so publish() can grab the capture right after the
-  // useMultiCamera hook calls startCapture.
+  // Awaits any in-flight start so publish() can grab the capture after startCapture.
   internal suspend fun waitForCapture(): MultiCameraCapture = manager.waitForCapture()
 
   override fun startCapture(width: Double, height: Double, framerate: Double) {
