@@ -4,6 +4,7 @@ import com.facebook.react.bridge.Arguments
 import com.moq.NativeMoQPublisherSpec
 import com.facebook.react.bridge.ReactApplicationContext
 import com.moq.MoQModule
+import com.moq.audiosource.AudioSourceModule
 import com.moq.camera.CameraModule
 import com.moq.camera.MultiCameraModule
 import com.moq.capture.audioCodecFromJs
@@ -107,6 +108,13 @@ class PublisherModule(reactContext: ReactApplicationContext) :
                 ?: error("microphone module is not available")
               publishedTracks += pub.addAudioTrack(
                 name = descriptor.name, source = mic, config = descriptor.config
+              )
+            }
+            is TrackDescriptor.AudioSource -> {
+              val source = AudioSourceModule.instance?.source(descriptor.id)
+                ?: error("audio source '${descriptor.id}' not created")
+              publishedTracks += pub.addAudioTrack(
+                name = descriptor.name, source = source, config = descriptor.config
               )
             }
             is TrackDescriptor.Data -> {
@@ -234,6 +242,11 @@ class PublisherModule(reactContext: ReactApplicationContext) :
       val config: VideoEncoderConfig,
     ) : TrackDescriptor
     data class Microphone(override val name: String, val config: AudioEncoderConfig) : TrackDescriptor
+    data class AudioSource(
+      override val name: String,
+      val id: String,
+      val config: AudioEncoderConfig,
+    ) : TrackDescriptor
     data class Data(override val name: String, val id: String) : TrackDescriptor
   }
 
@@ -266,6 +279,18 @@ class PublisherModule(reactContext: ReactApplicationContext) :
             config = AudioEncoderConfig(
               codec = codec,
               sampleRate = enc.optInt("sampleRate", 48_000),
+            )
+          )
+        }
+        "audioSource" -> {
+          val codec = audioCodecFromJs(enc.optString("codec"), AudioCodec.OPUS)
+          out += TrackDescriptor.AudioSource(
+            name = name,
+            id = entry.optString("id"),
+            config = AudioEncoderConfig(
+              codec = codec,
+              sampleRate = enc.optInt("sampleRate", 48_000),
+              channels = enc.optInt("channels", 1),
             )
           )
         }

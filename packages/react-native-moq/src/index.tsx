@@ -13,6 +13,12 @@ export type {
 } from './hooks/usePublisher';
 export { useDataTrack } from './hooks/useDataTrack';
 export type { DataTrack, DataTrackOptions } from './hooks/useDataTrack';
+export { useAudioSource } from './hooks/useAudioSource';
+export type {
+  AudioSourceOptions,
+  AudioSourceTrack,
+  PcmData,
+} from './hooks/useAudioSource';
 export { useScreenBroadcast } from './hooks/useScreenBroadcast';
 export type {
   ScreenBroadcast,

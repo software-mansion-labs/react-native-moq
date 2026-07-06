@@ -17,6 +17,7 @@ import {
   getSupportedAudioCodecs,
   getSupportedVideoCodecs,
   isMultiCameraSupported,
+  useAudioSource,
   useCamera,
   useMicrophone,
   useMultiCamera,
@@ -27,6 +28,7 @@ import {
   type PublishTrack,
   type VideoCodec,
 } from 'react-native-moq';
+import { TtsAudioSection } from '../components/TtsAudioSection';
 
 const SUPPORTED_VIDEO = getSupportedVideoCodecs();
 const SUPPORTED_AUDIO = getSupportedAudioCodecs();
@@ -71,6 +73,7 @@ export function PublishScreen({
   const [path, setPath] = useState('live/test');
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
   const [screenEnabled, setScreenEnabled] = useState(false);
 
   // Dual-camera is device-dependent; probe support before offering the mode.
@@ -115,6 +118,14 @@ export function PublishScreen({
   const camera = useCamera({ ...cameraConfig, enabled: !dualCamera });
   const multiCamera = useMultiCamera({ ...cameraConfig, enabled: dualCamera });
   const microphone = useMicrophone({ audioCodec, audioSampleRate });
+  // Custom audio track fed by synthesized speech. Always 48 kHz mono; TTS output
+  // is resampled to match in TtsAudioSection.
+  const ttsAudio = useAudioSource({
+    name: 'tts',
+    audioCodec,
+    sampleRate: 48000,
+    channels: 1,
+  });
 
   const encoderOpts = useMemo(
     () => ({
@@ -155,7 +166,9 @@ export function PublishScreen({
   const isPublishing =
     publisher.state === 'publishing' || publisher.state === 'connecting';
   const canPublish =
-    !isPublishing && (cameraEnabled || micEnabled) && path.length > 0;
+    !isPublishing &&
+    (cameraEnabled || micEnabled || ttsEnabled) &&
+    path.length > 0;
 
   // Android: the toggle drives the foreground service directly. iOS: the toggle
   // is only intent — the user taps the system picker, which reports state back.
@@ -249,6 +262,23 @@ export function PublishScreen({
           disabled={isPublishing}
         />
       </Row>
+      <Row label="Text-to-speech audio">
+        <Switch
+          value={ttsEnabled}
+          onValueChange={setTtsEnabled}
+          disabled={isPublishing}
+        />
+      </Row>
+
+      {ttsEnabled && (
+        <TtsAudioSection
+          audioSource={ttsAudio}
+          enabled={ttsEnabled}
+          publishing={isPublishing}
+          trackState={publisher.trackStates.tts}
+        />
+      )}
+
       <Row label="Screen">
         {Platform.OS === 'ios' ? (
           // On iOS the picker itself is the toggle.
@@ -347,6 +377,7 @@ export function PublishScreen({
               }
             }
             if (micEnabled) tracks.push(microphone);
+            if (ttsEnabled) tracks.push(ttsAudio);
             publisher.publish({ path, tracks });
           }
         }}

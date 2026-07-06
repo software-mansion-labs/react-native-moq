@@ -96,6 +96,12 @@ import MoQKit
           let mic = try await MicrophoneImpl.shared.waitForMicrophone()
           publishedTracks.append(
             pub.addAudioTrack(name: name, source: mic, config: config))
+        case .audioSource(let name, let id, let config):
+          guard let source = AudioSourceImpl.shared.source(forId: id) else {
+            throw MoQCaptureError.notStarted("audio source '\(id)' not created")
+          }
+          publishedTracks.append(
+            pub.addAudioTrack(name: name, source: source, config: config))
         case .data(let name, let id):
           guard let emitter = DataTrackImpl.shared.emitter(forId: id) else {
             throw MoQCaptureError.notStarted("data track '\(id)' not created")
@@ -217,6 +223,7 @@ import MoQKit
   private enum TrackDescriptor {
     case camera(name: String, source: String, config: VideoEncoderConfig)
     case microphone(name: String, config: AudioEncoderConfig)
+    case audioSource(name: String, id: String, config: AudioEncoderConfig)
     case data(name: String, id: String)
   }
 
@@ -253,6 +260,16 @@ import MoQKit
         out.append(.microphone(
           name: name,
           config: AudioEncoderConfig(codec: codec, sampleRate: sampleRate)))
+      case "audioSource":
+        let codec = (enc["codec"] as? String)
+          .flatMap(MoQKit.AudioCodec.init(rawValue:)) ?? .opus
+        let sampleRate = (enc["sampleRate"] as? NSNumber)?.doubleValue ?? 48_000
+        let channels = (enc["channels"] as? NSNumber)?.uint32Value ?? 1
+        let id = (entry["id"] as? String) ?? ""
+        out.append(.audioSource(
+          name: name, id: id,
+          config: AudioEncoderConfig(
+            codec: codec, sampleRate: sampleRate, channels: channels)))
       case "data":
         let id = (entry["id"] as? String) ?? ""
         out.append(.data(name: name, id: id))

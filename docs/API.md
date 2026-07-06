@@ -526,7 +526,7 @@ The publisher captures audio + video from the device camera + microphone and pus
 
 The pieces:
 
-- **Sources** — `useCamera`, `useMicrophone`, and `useDataTrack` each own a native capture and are refcounted singletons (see [Conventions](#conventions)).
+- **Sources** — `useCamera` / `useMicrophone` own refcounted device captures (see [Conventions](#conventions)); `useDataTrack` / `useAudioSource` are per-instance sources you feed yourself (string payloads, or your own PCM audio).
 - **`usePublisher`** — consumes those sources: `publish({ path, tracks })` starts a broadcast; a single broadcast can mix video, audio, and data tracks.
 - **Screen sharing** runs out-of-process with its own MoQ connection, so it has a separate hook, [`useScreenBroadcast`](#screen-broadcasting).
 
@@ -776,6 +776,58 @@ interface DataTrackOptions {
 ```
 
 > Payloads are UTF-8 strings; for binary data, encode it (e.g. base64) before `send()`.
+
+---
+
+### `useAudioSource(options?)`
+
+A publishable **audio source** you feed with your own PCM — the custom-audio counterpart of [`useMicrophone`](#usemicrophoneoptions). Use it to broadcast synthesized speech (TTS), music, sound effects, or any audio your app produces instead of the device mic. It owns a native push source for the hook's lifetime and is consumed by [`usePublisher`](#usepublishersession): pass it in `tracks` and it becomes an audio track in the broadcast, alongside any camera/mic/data tracks.
+
+```tsx
+import { useAudioSource } from 'react-native-moq';
+
+const speech = useAudioSource({ name: 'tts', audioCodec: 'opus', sampleRate: 48000 });
+```
+
+Returns an `AudioSourceTrack`:
+
+| Property / Method | Type | Description |
+|---|---|---|
+| `__type` | `'audioSource'` | Discriminator `usePublisher` uses to route to an audio track |
+| `__name` | `string` | Track name in the broadcast catalog (the `name` option) |
+| `encoder` | `AudioEncoderOptions` | `{ codec, sampleRate }` — snapshotted by `publish()` |
+| `channels` | `number` | Channel count of the PCM you push |
+| `send(pcm)` | `(pcm: PcmData) => void` | Push audio. No-op until the publisher is `publishing` |
+
+Include it in a publish, then push audio once `publisher.state === 'publishing'`:
+
+```tsx
+const session = useSession('http://relay.example.com:4443', (s) => s.connect());
+const speech = useAudioSource({ name: 'tts', sampleRate: 48000 });
+const publisher = usePublisher(session);
+
+publisher.publish({ path: 'live/narration', tracks: [speech] }); // audio-only broadcast
+
+// `pcm` is a Float32Array in [-1, 1], or interleaved 16-bit (Int16Array / ArrayBuffer).
+speech.send(pcm);
+```
+
+`send()` takes a `Float32Array` (converted to 16-bit for you) or interleaved 16-bit PCM (`Int16Array` / `ArrayBuffer`) at the source's `sampleRate` / `channels`. The native side paces your pushes out in real time, so you can hand it a whole utterance at once — gaps between pushes play as silence. Subscribers get an ordinary audio track (same `name`), playable via [`useAudioPlayer`](#useaudioplayerbroadcast-setup) or [`useAudioChunks`](#useaudiochunksbroadcast-onchunk-options).
+
+**`AudioSourceOptions`**
+
+```ts
+interface AudioSourceOptions {
+  name?: string;           // Track name subscribers read from. Default: 'audio'
+  audioCodec?: AudioCodec; // 'opus' | 'aac'. Default: 'opus'
+  sampleRate?: number;     // Hz of the PCM you push. Default: 48000
+  channels?: number;       // 1 = mono, 2 = interleaved stereo. Default: 1
+}
+```
+
+> `sampleRate` / `channels` are fixed for the source's lifetime — change them by remounting the hook (e.g. with a `key` prop). Push PCM at that same rate; resample first if your generator (e.g. a 24 kHz TTS model) produces another rate.
+
+The example app's **Publish** tab wires this to on-device text-to-speech: [`example/src/components/TtsAudioSection.tsx`](../example/src/components/TtsAudioSection.tsx) runs Kokoro via [react-native-executorch](https://github.com/software-mansion/react-native-executorch), resamples its 24 kHz output to 48 kHz, and streams it into the broadcast.
 
 ---
 

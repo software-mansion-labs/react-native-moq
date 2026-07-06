@@ -1,5 +1,6 @@
 import { NativeEventEmitter } from 'react-native';
 import NativeMoQ from './native/NativeMoQ';
+import { base64ToArrayBuffer } from './base64';
 import type {
   AudioChunk,
   AudioChunkFormat,
@@ -40,39 +41,6 @@ const PCM_SAMPLE_FORMAT: Record<
   'pcm-f32': 'f32',
   'pcm-i16': 'i16',
 };
-
-const BASE64_CHARS =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-const BASE64_LOOKUP = /* @__PURE__ */ (() => {
-  const table = new Uint8Array(256);
-  for (let i = 0; i < BASE64_CHARS.length; i++) {
-    table[BASE64_CHARS.charCodeAt(i)] = i;
-  }
-  return table;
-})();
-
-// Chunks cross the RN bridge as base64 (JSON can't carry binary); decode here.
-/* eslint-disable no-bitwise */
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const len = base64.length;
-  let pad = 0;
-  if (len > 0 && base64[len - 1] === '=') pad++;
-  if (len > 1 && base64[len - 2] === '=') pad++;
-  const byteLength = (len * 3) / 4 - pad;
-  const bytes = new Uint8Array(byteLength);
-  let p = 0;
-  for (let i = 0; i < len; i += 4) {
-    const e1 = BASE64_LOOKUP[base64.charCodeAt(i)] ?? 0;
-    const e2 = BASE64_LOOKUP[base64.charCodeAt(i + 1)] ?? 0;
-    const e3 = BASE64_LOOKUP[base64.charCodeAt(i + 2)] ?? 0;
-    const e4 = BASE64_LOOKUP[base64.charCodeAt(i + 3)] ?? 0;
-    bytes[p++] = (e1 << 2) | (e2 >> 4);
-    if (p < byteLength) bytes[p++] = ((e2 & 15) << 4) | (e3 >> 2);
-    if (p < byteLength) bytes[p++] = ((e3 & 3) << 6) | e4;
-  }
-  return bytes.buffer;
-}
-/* eslint-enable no-bitwise */
 
 // Shared lifecycle for both subscriptions: `open` wires up the native
 // subscription + listener and returns its teardown; guards start/stop as idempotent.

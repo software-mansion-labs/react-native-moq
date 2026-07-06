@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfo
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
+import com.moq.audiosource.AudioSourceModule
 import com.moq.camera.CameraModule
 import com.moq.camera.CameraPreviewViewManager
 import com.moq.camera.MultiCameraModule
@@ -22,6 +23,7 @@ class MoQPackage : BaseReactPackage() {
       MoQModule.NAME -> MoQModule(reactContext)
       PublisherModule.NAME -> PublisherModule(reactContext)
       DataTrackModule.NAME -> DataTrackModule(reactContext)
+      AudioSourceModule.NAME -> AudioSourceModule(reactContext)
       CameraModule.NAME -> CameraModule(reactContext)
       MultiCameraModule.NAME -> MultiCameraModule(reactContext)
       MicrophoneModule.NAME -> MicrophoneModule(reactContext)
@@ -51,6 +53,14 @@ class MoQPackage : BaseReactPackage() {
       DataTrackModule.NAME to ReactModuleInfo(
         name = DataTrackModule.NAME,
         className = DataTrackModule.NAME,
+        canOverrideExistingModule = false,
+        needsEagerInit = false,
+        isCxxModule = false,
+        isTurboModule = true,
+      ),
+      AudioSourceModule.NAME to ReactModuleInfo(
+        name = AudioSourceModule.NAME,
+        className = AudioSourceModule.NAME,
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,
