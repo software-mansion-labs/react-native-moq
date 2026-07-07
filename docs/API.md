@@ -27,6 +27,8 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
   - [`<PublisherView />`](#publisherview-)
   - [`getSupportedVideoCodecs()` / `getSupportedAudioCodecs()`](#getsupportedvideocodecs--getsupportedaudiocodecs)
   - [`useDataTrack(options?)`](#usedatatrackoptions)
+  - [`useAudioSource(options?)`](#useaudiosourceoptions)
+  - [`useVideoSource(options)`](#usevideosourceoptions)
   - [Screen broadcasting](#screen-broadcasting)
   - [Publisher events](#publisher-events)
   - [Types](#types-1)
@@ -828,6 +830,69 @@ interface AudioSourceOptions {
 > `sampleRate` / `channels` are fixed for the source's lifetime — change them by remounting the hook (e.g. with a `key` prop). Push PCM at that same rate; resample first if your generator (e.g. a 24 kHz TTS model) produces another rate.
 
 The example app's **Publish** tab wires this to on-device text-to-speech: [`example/src/components/TtsAudioSection.tsx`](../example/src/components/TtsAudioSection.tsx) runs Kokoro via [react-native-executorch](https://github.com/software-mansion/react-native-executorch), resamples its 24 kHz output to 48 kHz, and streams it into the broadcast.
+
+---
+
+### `useVideoSource(options)`
+
+A publishable **video source** you feed with your own rendered frames — the custom-video counterpart of [`useCamera`](#usecameraoptions). Use it to broadcast anything your app draws (a game / emulator screen, a WebGPU or Skia scene, processed camera frames) instead of the device camera. **iOS only for now.**
+
+It's **zero-copy**: on mount the native side allocates a fixed pool of IOSurface-backed buffers and hands you their handles. You render into a slot with your own GPU engine, then push just the *slot index* (and an optional GPU fence) — pixels never cross the bridge.
+
+```tsx
+import { useVideoSource } from 'react-native-moq';
+
+const video = useVideoSource({ width: 720, height: 1280, poolSize: 3 });
+```
+
+Returns a `VideoSourceTrack`:
+
+| Property / Method | Type | Description |
+|---|---|---|
+| `__type` | `'videoSource'` | Discriminator `usePublisher` uses to route to a video track |
+| `__name` | `string` | Track name in the broadcast catalog (the `name` option) |
+| `encoder` | `VideoEncoderOptions` | `{ codec, width, height, framerate }` — snapshotted by `publish()` |
+| `buffers` | `CustomVideoBuffer[]` | Pool slots to render into; empty until the native pool is allocated |
+| `pushFrame(frame)` | `(frame: PushVideoFrameArgs) => void` | Submit a rendered slot. No-op until `publishing` |
+| `fillTestPattern(bufferIndex, frameIndex)` | `(number, number) => void` | Demo helper — CPU-fills a slot with an animated pattern (no GPU renderer needed) |
+
+Each `CustomVideoBuffer` is `{ index, surfaceHandle, width, height }`. `surfaceHandle` is the `(uintptr_t)IOSurfaceRef` as a **decimal string** (64-bit handles exceed JS's safe integer range) — import it in your native GPU renderer to draw into the surface.
+
+Include it in a publish, then render + push once `publisher.state === 'publishing'`:
+
+```tsx
+const video = useVideoSource({ width: 720, height: 1280, poolSize: 3 });
+const publisher = usePublisher(session);
+
+publisher.publish({ path: 'live/canvas', tracks: [video] });
+
+// Per frame: render into a pool slot with your GPU engine, then submit it.
+video.pushFrame({
+  bufferIndex,                      // the slot you rendered into
+  fence: { handle, signaledValue }, // MTLSharedEvent the GPU signals when done (optional)
+});
+```
+
+Round-robin over the `poolSize` slots so you never redraw one that's still being encoded. `pushFrame` waits for the fence (so the buffer is never sampled mid-render), wraps the pooled buffer, and hands it to the encoder — all off the JS thread. Omit `fence` for CPU-filled frames or when you've already finished GPU work. Subscribers get an ordinary video track (same `name`), rendered like any camera track.
+
+By default frames are timestamped with the device clock at push time, which keeps them aligned with any camera/mic tracks. Pass an explicit `timestampNs` only when you have real capture times — it must be monotonic and advance in real time, or subscribers see a frozen image (frames are scheduled against a live playhead).
+
+**`VideoSourceOptions`**
+
+```ts
+interface VideoSourceOptions {
+  name?: string;           // Track name subscribers read from. Default: 'video'
+  width: number;           // Frame width; baked into the pool + encoder
+  height: number;          // Frame height
+  poolSize?: number;       // In-flight slots to round-robin over. Default: 3
+  videoCodec?: VideoCodec; // 'h264' | 'h265'. Default: 'h264'
+  framerate?: number;      // Default: 30
+}
+```
+
+> `width` / `height` / `poolSize` are fixed for the source's lifetime — change them by remounting the hook (e.g. with a `key` prop).
+
+No GPU renderer handy? `fillTestPattern(bufferIndex, frameIndex)` CPU-fills a slot with an animated pattern so you can exercise the pipeline. The example app's **Publish** tab uses it: [`example/src/components/CustomVideoSection.tsx`](../example/src/components/CustomVideoSection.tsx) calls `fillTestPattern` then `pushFrame` each tick, driving the whole pool → encode → publish path.
 
 ---
 

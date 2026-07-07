@@ -24,11 +24,13 @@ import {
   usePublisher,
   useScreenBroadcast,
   useSession,
+  useVideoSource,
   type AudioCodec,
   type PublishTrack,
   type VideoCodec,
 } from 'react-native-moq';
 import { TtsAudioSection } from '../components/TtsAudioSection';
+import { CustomVideoSection } from '../components/CustomVideoSection';
 
 const SUPPORTED_VIDEO = getSupportedVideoCodecs();
 const SUPPORTED_AUDIO = getSupportedAudioCodecs();
@@ -74,6 +76,8 @@ export function PublishScreen({
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
   const [ttsEnabled, setTtsEnabled] = useState(false);
+  // Custom video is iOS-only for now (see useVideoSource).
+  const [customVideoEnabled, setCustomVideoEnabled] = useState(false);
   const [screenEnabled, setScreenEnabled] = useState(false);
 
   // Dual-camera is device-dependent; probe support before offering the mode.
@@ -126,6 +130,18 @@ export function PublishScreen({
     sampleRate: 48000,
     channels: 1,
   });
+  // Custom video track fed by an app-rendered frame source. Here the example
+  // drives a native BGRA test pattern (see CustomVideoSection); a real app would
+  // render into the pool's IOSurfaces with its own GPU engine. 24 fps matches
+  // CustomVideoSection's push cadence.
+  const customVideo = useVideoSource({
+    name: 'custom',
+    videoCodec,
+    width: RESOLUTIONS[videoResolution].width,
+    height: RESOLUTIONS[videoResolution].height,
+    framerate: 24,
+    poolSize: 3,
+  });
 
   const encoderOpts = useMemo(
     () => ({
@@ -167,7 +183,7 @@ export function PublishScreen({
     publisher.state === 'publishing' || publisher.state === 'connecting';
   const canPublish =
     !isPublishing &&
-    (cameraEnabled || micEnabled || ttsEnabled) &&
+    (cameraEnabled || micEnabled || ttsEnabled || customVideoEnabled) &&
     path.length > 0;
 
   // Android: the toggle drives the foreground service directly. iOS: the toggle
@@ -279,6 +295,25 @@ export function PublishScreen({
         />
       )}
 
+      {Platform.OS === 'ios' && (
+        <Row label="Custom video (test pattern)">
+          <Switch
+            value={customVideoEnabled}
+            onValueChange={setCustomVideoEnabled}
+            disabled={isPublishing}
+          />
+        </Row>
+      )}
+
+      {customVideoEnabled && (
+        <CustomVideoSection
+          videoSource={customVideo}
+          enabled={customVideoEnabled}
+          publishing={isPublishing}
+          trackState={publisher.trackStates.custom}
+        />
+      )}
+
       <Row label="Screen">
         {Platform.OS === 'ios' ? (
           // On iOS the picker itself is the toggle.
@@ -378,6 +413,7 @@ export function PublishScreen({
             }
             if (micEnabled) tracks.push(microphone);
             if (ttsEnabled) tracks.push(ttsAudio);
+            if (customVideoEnabled) tracks.push(customVideo);
             publisher.publish({ path, tracks });
           }
         }}

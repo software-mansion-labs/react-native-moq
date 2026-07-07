@@ -19,6 +19,14 @@ export type {
   AudioSourceTrack,
   PcmData,
 } from './hooks/useAudioSource';
+export { useVideoSource } from './hooks/useVideoSource';
+export type {
+  VideoSourceOptions,
+  VideoSourceTrack,
+  PushVideoFrameArgs,
+  VideoFrameFence,
+} from './hooks/useVideoSource';
+export type { CustomVideoBufferDescriptor } from './native/NativeMoQVideoSource';
 export { useScreenBroadcast } from './hooks/useScreenBroadcast';
 export type {
   ScreenBroadcast,

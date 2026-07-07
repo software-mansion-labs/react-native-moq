@@ -103,6 +103,12 @@ import MoQKit
           }
           publishedTracks.append(
             pub.addAudioTrack(name: name, source: source, config: config))
+        case .videoSource(let name, let id, let config):
+          guard let source = VideoSourceImpl.shared.source(forId: id) else {
+            throw MoQCaptureError.notStarted("video source '\(id)' not created")
+          }
+          publishedTracks.append(
+            pub.addVideoTrack(name: name, source: source, config: config))
         case .data(let name, let id):
           guard let emitter = DataTrackImpl.shared.emitter(forId: id) else {
             throw MoQCaptureError.notStarted("data track '\(id)' not created")
@@ -225,6 +231,7 @@ import MoQKit
     case camera(name: String, source: String, config: VideoEncoderConfig)
     case microphone(name: String, config: AudioEncoderConfig)
     case audioSource(name: String, id: String, config: AudioEncoderConfig)
+    case videoSource(name: String, id: String, config: VideoEncoderConfig)
     case data(name: String, id: String)
   }
 
@@ -271,6 +278,16 @@ import MoQKit
           name: name, id: id,
           config: AudioEncoderConfig(
             codec: codec, sampleRate: sampleRate, channels: channels)))
+      case "videoSource":
+        let codec = (enc["codec"] as? String).flatMap(VideoCodec.init(rawValue:)) ?? .h264
+        let width = (enc["width"] as? NSNumber)?.int32Value ?? 1280
+        let height = (enc["height"] as? NSNumber)?.int32Value ?? 720
+        let framerate = (enc["framerate"] as? NSNumber)?.doubleValue ?? 30
+        let id = (entry["id"] as? String) ?? ""
+        out.append(.videoSource(
+          name: name, id: id,
+          config: VideoEncoderConfig(
+            codec: codec, width: width, height: height, maxFrameRate: framerate)))
       case "data":
         let id = (entry["id"] as? String) ?? ""
         out.append(.data(name: name, id: id))

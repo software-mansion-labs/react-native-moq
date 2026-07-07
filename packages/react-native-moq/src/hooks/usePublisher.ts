@@ -6,6 +6,7 @@ import type { CameraTrack } from './useCamera';
 import type { MicrophoneTrack } from './useMicrophone';
 import type { DataTrack } from './useDataTrack';
 import type { AudioSourceTrack } from './useAudioSource';
+import type { VideoSourceTrack } from './useVideoSource';
 import type { Session } from '../types';
 
 const publisherEmitter = new NativeEventEmitter(NativeMoQPublisher);
@@ -23,7 +24,8 @@ export type PublishTrack =
   | CameraTrack
   | MicrophoneTrack
   | DataTrack
-  | AudioSourceTrack;
+  | AudioSourceTrack
+  | VideoSourceTrack;
 
 export interface PublishOptions {
   path: string;
@@ -54,11 +56,11 @@ export interface Publisher {
 }
 
 interface SerializedTrack {
-  type: 'camera' | 'microphone' | 'data' | 'audioSource';
+  type: 'camera' | 'microphone' | 'data' | 'audioSource' | 'videoSource';
   name: string;
   // Camera-only: which native capture source backs the track (see CameraSource).
   source?: string;
-  // Data / audioSource: id of the native source created by the owning hook.
+  // Data / audioSource / videoSource: id of the native source created by the owning hook.
   id?: string;
   // Absent for data tracks, which carry no encoder.
   encoder?: Record<string, unknown>;
@@ -83,6 +85,14 @@ function serializeTracks(tracks: PublishTrack[]): SerializedTrack[] {
         name: t.__name,
         id: t.__id,
         encoder: { ...t.encoder, channels: t.channels },
+      };
+    }
+    if (t.__type === 'videoSource') {
+      return {
+        type: 'videoSource',
+        name: t.__name,
+        id: t.__id,
+        encoder: { ...t.encoder },
       };
     }
     return { type: 'microphone', name: 'mic', encoder: { ...t.encoder } };
