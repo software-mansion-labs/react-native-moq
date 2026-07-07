@@ -62,5 +62,16 @@ target 'MoQExample' do
         end
       end
     end
+
+    # Some pods hardcode a deployment target (e.g. 13.0) below the iOS 26 SDK's
+    # supported minimum, which Xcode 27 flags. Raise every pod to the platform min.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        current = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f
+        if current < 17.0
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
+        end
+      end
+    end
   end
 end

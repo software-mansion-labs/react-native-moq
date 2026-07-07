@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		05A4443FFAD88909E1529436 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		278319B1EE4F5FB2E1835A3E /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E91A7B148547782A8C59A9 /* SceneDelegate.swift */; };
 		50A47D9C2F92BC860074E548 /* MoQKit in Frameworks */ = {isa = PBXBuildFile; productRef = 50A47D9B2F92BC860074E548 /* MoQKit */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
@@ -57,6 +58,7 @@
 		B01A000000000000B0000003 /* MoQBroadcastUpload.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MoQBroadcastUpload.entitlements; sourceTree = "<group>"; };
 		B01A000000000000B0000004 /* MoQBroadcastUpload.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MoQBroadcastUpload.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B01A000000000000B0000005 /* MoQExample.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = MoQExample.entitlements; path = MoQExample/MoQExample.entitlements; sourceTree = "<group>"; };
+		C0E91A7B148547782A8C59A9 /* SceneDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = MoQExample/SceneDelegate.swift; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -90,6 +92,7 @@
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				B01A000000000000B0000005 /* MoQExample.entitlements */,
+				C0E91A7B148547782A8C59A9 /* SceneDelegate.swift */,
 			);
 			name = MoQExample;
 			sourceTree = "<group>";
@@ -338,6 +341,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				278319B1EE4F5FB2E1835A3E /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
