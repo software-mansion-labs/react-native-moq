@@ -94,6 +94,7 @@ import MoQKit
             pub.addVideoTrack(name: name, source: frameSource, config: config))
         case .microphone(let name, let config):
           let mic = try await MicrophoneImpl.shared.waitForMicrophone()
+          try await mic.resumeOrStart()
           publishedTracks.append(
             pub.addAudioTrack(name: name, source: mic, config: config))
         case .audioSource(let name, let id, let config):

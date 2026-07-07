@@ -70,6 +70,22 @@ import MoQKit
   }
 }
 
+// MicrophoneCapture.stop() (fired when a published track detaches) stops the
+// session but leaves its input attached, and start() isn't re-entrant — re-adding
+// the input throws "Cannot add microphone input". So publish restarts the mic by
+// resuming the stopped session instead of calling start() again.
+extension MicrophoneCapture {
+  func resumeOrStart() async throws {
+    if captureSession.inputs.isEmpty {
+      try await start()
+    } else if !captureSession.isRunning {
+      let session = captureSession
+      // startRunning() blocks; keep it off the main thread.
+      await Task.detached { session.startRunning() }.value
+    }
+  }
+}
+
 // Shared error type letting publish() distinguish "capture not started" from
 // generic moq-kit failures.
 public enum MoQCaptureError: Error, LocalizedError {
