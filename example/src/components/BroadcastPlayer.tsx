@@ -4,7 +4,7 @@ import type {
   VideoTrackInfo,
 } from 'react-native-moq';
 import { useEffect, useState } from 'react';
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useAudioPlayer, useVideoPlayer } from 'react-native-moq';
 import {
   SpeakerGlyph,
@@ -17,6 +17,8 @@ import { sortVideoTracksByResolution } from '../videoTracks';
 import { AudioChunksMeter } from './AudioChunksMeter';
 import { RenditionPicker } from './RenditionPicker';
 import { StatsPanel } from './StatsPanel';
+import { Card, IconButton, Pill, Segmented } from './ui';
+import { useTheme } from '../theme';
 
 type Mode = 'video' | 'audio';
 
@@ -31,25 +33,33 @@ export function BroadcastPlayer({
   onRemove: () => void;
   addEntry: AddEntry;
 }) {
+  const { colors } = useTheme();
   const [mode, setMode] = useState<Mode>(initialMode);
 
-  const switchMode = () => setMode((m) => (m === 'video' ? 'audio' : 'video'));
-
   return (
-    <View style={styles.broadcastCard}>
+    <Card>
       <View style={styles.broadcastHeader}>
-        <Text style={styles.broadcastPath}>{broadcast.path}</Text>
-        {mode === 'audio' && (
-          <View style={styles.audioBadge}>
-            <Text style={styles.audioBadgeText}>AUDIO ONLY</Text>
-          </View>
-        )}
-        <Button title="Disconnect" onPress={onRemove} color="#ef4444" />
+        <Text
+          style={[styles.broadcastPath, { color: colors.label }]}
+          numberOfLines={1}
+        >
+          {broadcast.path}
+        </Text>
+        <IconButton
+          icon="close"
+          size={32}
+          accessibilityLabel={`Stop watching ${broadcast.path}`}
+          onPress={onRemove}
+        />
       </View>
 
-      <Button
-        title={mode === 'video' ? 'Switch to audio only' : 'Switch to video'}
-        onPress={switchMode}
+      <Segmented
+        value={mode}
+        options={[
+          { value: 'video', label: 'Video' },
+          { value: 'audio', label: 'Audio only' },
+        ]}
+        onChange={setMode}
       />
 
       {mode === 'video' ? (
@@ -57,7 +67,7 @@ export function BroadcastPlayer({
       ) : (
         <AudioSection broadcast={broadcast} addEntry={addEntry} />
       )}
-    </View>
+    </Card>
   );
 }
 
@@ -130,6 +140,7 @@ function AudioSection({
   broadcast: BroadcastInfo;
   addEntry: AddEntry;
 }) {
+  const { dark, colors, radius } = useTheme();
   const player = useAudioPlayer(broadcast, (p) => {
     p.play();
   });
@@ -138,11 +149,19 @@ function AudioSection({
 
   return (
     <>
-      <View style={styles.audioStatus}>
-        <Text style={styles.audioStatusIcon}>
-          {player.isPlaying ? '🔊' : '🔇'}
-        </Text>
-        <Text style={styles.audioStatusText}>
+      <View
+        style={[
+          styles.audioRow,
+          { backgroundColor: colors.fill, borderRadius: radius.control },
+        ]}
+      >
+        <IconButton
+          icon={player.isPlaying ? 'pause' : 'play-arrow'}
+          variant="filled"
+          accessibilityLabel={player.isPlaying ? 'Pause' : 'Resume'}
+          onPress={player.isPlaying ? player.pause : player.play}
+        />
+        <Text style={[styles.audioStatusText, { color: colors.label }]}>
           {player.isPlaying ? 'Playing' : 'Paused'}
           {player.currentAudioTrackName
             ? ` · ${player.currentAudioTrackName}`
@@ -150,21 +169,24 @@ function AudioSection({
         </Text>
       </View>
 
+      <View style={styles.volumeRow}>
+        <SpeakerGlyph
+          size={16}
+          color={dark ? '#98989f' : '#6c6c70'}
+          volume={player.volume}
+        />
+        <VolumeSlider
+          player={player}
+          width={200}
+          theme={dark ? 'dark' : 'light'}
+        />
+      </View>
+
       <TrackInfoPills
         audio={broadcast.audioTracks.find(
           (t) => t.name === player.currentAudioTrackName
         )}
       />
-
-      <Button
-        title={player.isPlaying ? 'Pause' : 'Resume'}
-        onPress={player.isPlaying ? player.pause : player.play}
-      />
-
-      <View style={styles.volumeCard}>
-        <SpeakerGlyph size={16} color="#374151" volume={player.volume} />
-        <VolumeSlider player={player} width={200} theme="light" />
-      </View>
 
       <AudioChunksMeter broadcast={broadcast} />
 
@@ -184,35 +206,18 @@ function TrackInfoPills({
   if (!video && !audio) return null;
   return (
     <View style={styles.pillRow}>
-      {video && <InfoPill text={video.codec.toUpperCase()} />}
+      {video && <Pill text={video.codec.toUpperCase()} />}
       {video && video.width && video.height && (
-        <InfoPill text={`${video.width}×${video.height}`} />
+        <Pill text={`${video.width}×${video.height}`} />
       )}
       {audio && (
-        <InfoPill
-          text={`${audio.codec.toUpperCase()} ${audio.sampleRate} Hz`}
-        />
+        <Pill text={`${audio.codec.toUpperCase()} ${audio.sampleRate} Hz`} />
       )}
-    </View>
-  );
-}
-
-function InfoPill({ text }: { text: string }) {
-  return (
-    <View style={styles.pill}>
-      <Text style={styles.pillText}>{text}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  broadcastCard: {
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-  },
   broadcastHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -221,67 +226,34 @@ const styles = StyleSheet.create({
   },
   broadcastPath: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
-  },
-  audioBadge: {
-    backgroundColor: '#dbeafe',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  audioBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#1d4ed8',
-    letterSpacing: 0.5,
   },
   video: {
     width: '100%',
     aspectRatio: 16 / 9,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#000',
   },
-  audioStatus: {
+  audioRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-  },
-  volumeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-  },
-  audioStatusIcon: {
-    fontSize: 24,
+    gap: 12,
+    padding: 10,
   },
   audioStatusText: {
     fontSize: 14,
-    color: '#374151',
+  },
+  volumeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
   },
   pillRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-  },
-  pill: {
-    backgroundColor: '#e5e7eb',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  pillText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#374151',
   },
 });

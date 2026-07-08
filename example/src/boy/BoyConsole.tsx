@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import type { Player } from 'react-native-moq';
+import { Button } from '../components/ui';
 import {
   BoyActionCluster,
   BoyDirectionPad,
@@ -94,11 +95,21 @@ export function BoyConsole({
   return (
     <View style={styles.outer}>
       <View style={styles.topBar}>
-        <PowerSwitch isOn={canStop} isBusy={isConnecting} onPress={onPower} />
-        <Pressable style={styles.flipButton} onPress={onToggleFlip}>
-          <Text style={styles.flipIcon}>⟲</Text>
-          <Text style={styles.flipLabel}>{showsBack ? 'FRONT' : 'BACK'}</Text>
-        </Pressable>
+        <Button
+          title={
+            isConnecting ? 'Starting…' : canStop ? 'Power off' : 'Power on'
+          }
+          icon="power-settings-new"
+          variant={canStop ? 'tonal' : 'filled'}
+          destructive={canStop && !isConnecting}
+          onPress={onPower}
+        />
+        <Button
+          title={showsBack ? 'Front' : 'Back'}
+          icon="autorenew"
+          variant="tonal"
+          onPress={onToggleFlip}
+        />
       </View>
 
       <View style={styles.flipArea}>
@@ -180,31 +191,6 @@ export function BoyConsole({
   );
 }
 
-function PowerSwitch({
-  isOn,
-  isBusy,
-  onPress,
-}: {
-  isOn: boolean;
-  isBusy: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.power} onPress={onPress}>
-      <Text style={styles.powerLabel}>POWER</Text>
-      <View style={styles.powerTrack}>
-        <View
-          style={[
-            styles.powerKnob,
-            isOn ? styles.powerKnobOn : styles.powerKnobOff,
-            isBusy && styles.powerKnobBusy,
-          ]}
-        />
-      </View>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   outer: { flex: 1, gap: 16 },
   topBar: {
@@ -212,54 +198,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  flipButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: boyColors.flipButton,
-    borderRadius: 999,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-  },
-  flipIcon: { color: '#fff', fontSize: 22, fontWeight: '900', lineHeight: 24 },
-  flipLabel: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-  },
   flipArea: { flex: 1 },
   face: { flex: 1, backfaceVisibility: 'hidden' },
   faceAbsolute: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  power: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    borderRadius: 999,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-  },
-  powerLabel: {
-    color: boyColors.label,
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-  },
-  powerTrack: {
-    width: 64,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    padding: 3,
-    justifyContent: 'center',
-  },
-  powerKnob: { width: 32, height: 20, borderRadius: 10 },
-  powerKnobOff: { alignSelf: 'flex-start', backgroundColor: '#f4f1e8' },
-  powerKnobOn: { alignSelf: 'flex-end', backgroundColor: boyColors.batteryOn },
-  powerKnobBusy: { backgroundColor: boyColors.shellEdge },
   shell: {
     flex: 1,
     backgroundColor: boyColors.shellTop,

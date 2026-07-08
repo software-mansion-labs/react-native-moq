@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Button, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import {
   KOKORO_AMERICAN_ENGLISH_FEMALE_HEART,
   useTextToSpeech,
 } from 'react-native-executorch';
 import type { AudioSourceTrack, PublishedTrackState } from 'react-native-moq';
 import { createMonoResampler } from '../resamplePcm';
+import { Button, Input } from './ui';
+import { useTheme } from '../theme';
 
 // Kokoro synthesizes 24 kHz mono; resample to the 48 kHz the source publishes.
 const KOKORO_SAMPLE_RATE = 24000;
@@ -75,9 +77,8 @@ export function TtsAudioSection({
         : 'loading model…';
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.sectionLabel}>TEXT-TO-SPEECH</Text>
-      <TextInput
+    <>
+      <Input
         style={styles.input}
         value={text}
         onChangeText={setText}
@@ -91,44 +92,42 @@ export function TtsAudioSection({
             ? 'Synthesizing…'
             : 'Speak into broadcast'
         }
+        icon="record-voice-over"
+        variant="tonal"
         onPress={speak}
         disabled={!canSpeak}
       />
-      <Text style={styles.status}>{status}</Text>
+      <Status text={status} />
       {publishing && !trackActive && (
-        <Text style={styles.status}>Waiting for the audio track to start…</Text>
+        <Status text="Waiting for the audio track to start…" />
       )}
-      {!publishing && (
-        <Text style={styles.status}>Publish first, then speak.</Text>
-      )}
-      {error && <Text style={styles.error}>{error}</Text>}
-    </View>
+      {!publishing && <Status text="Publish first, then speak." />}
+      {error && <ErrorText text={error} />}
+    </>
+  );
+}
+
+function Status({ text }: { text: string }) {
+  const { colors } = useTheme();
+  return (
+    <Text style={[styles.status, { color: colors.secondaryLabel }]}>
+      {text}
+    </Text>
+  );
+}
+
+function ErrorText({ text }: { text: string }) {
+  const { colors } = useTheme();
+  return (
+    <Text style={[styles.error, { color: colors.destructive }]}>{text}</Text>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#f3f4f6',
-    gap: 8,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
   input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
     minHeight: 60,
-    backgroundColor: '#fff',
     textAlignVertical: 'top',
   },
-  status: { fontSize: 12, color: '#6b7280' },
-  error: { fontSize: 13, color: '#dc2626' },
+  status: { fontSize: 12 },
+  error: { fontSize: 13 },
 });

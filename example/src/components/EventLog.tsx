@@ -63,10 +63,11 @@ export function EventLog({ entries }: { entries: LogEntry[] }) {
 }
 
 const styles = StyleSheet.create({
+  // Intentionally console-dark in both color schemes.
   logContainer: {
-    borderRadius: 8,
+    borderRadius: 16,
     backgroundColor: '#0f172a',
-    padding: 10,
+    padding: 12,
     gap: 6,
   },
   logTitle: {

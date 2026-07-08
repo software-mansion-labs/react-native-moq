@@ -1,10 +1,18 @@
 import type { PlaybackStats } from 'react-native-moq';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import { SectionHeader } from './ui';
+import { useTheme } from '../theme';
 
 export function StatsPanel({ stats }: { stats: PlaybackStats }) {
+  const { colors, radius } = useTheme();
   return (
-    <View style={styles.stats}>
-      <Text style={styles.statsTitle}>Playback stats</Text>
+    <View
+      style={[
+        styles.stats,
+        { backgroundColor: colors.fill, borderRadius: radius.control },
+      ]}
+    >
+      <SectionHeader title="Playback stats" />
       {stats.videoLatencyMs != null && (
         <StatRow
           label="Video latency"
@@ -44,27 +52,21 @@ export function StatsPanel({ stats }: { stats: PlaybackStats }) {
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.statRow}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
+      <Text style={[styles.statLabel, { color: colors.secondaryLabel }]}>
+        {label}
+      </Text>
+      <Text style={[styles.statValue, { color: colors.label }]}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   stats: {
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
     padding: 12,
     gap: 6,
-  },
-  statsTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6b7280',
-    textTransform: 'uppercase',
-    marginBottom: 4,
   },
   statRow: {
     flexDirection: 'row',
@@ -72,11 +74,9 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 13,
-    color: '#6b7280',
   },
   statValue: {
     fontSize: 13,
-    fontFamily: 'Menlo',
-    color: '#111827',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
 });

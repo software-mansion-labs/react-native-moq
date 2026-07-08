@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import {
   useAudioChunks,
   type AudioChunkFormat,
   type BroadcastInfo,
 } from 'react-native-moq';
+import { Button } from './ui';
+import { useTheme } from '../theme';
 
 // Decoded PCM is iOS-only for now; Android falls back to encoded objects.
 const DEFAULT_FORMAT: AudioChunkFormat =
@@ -16,6 +18,7 @@ const DEFAULT_FORMAT: AudioChunkFormat =
  * toggle to encoded); Android always gets encoded.
  */
 export function AudioChunksMeter({ broadcast }: { broadcast: BroadcastInfo }) {
+  const { colors, radius } = useTheme();
   const [format, setFormat] = useState<AudioChunkFormat>(DEFAULT_FORMAT);
   // Chunks arrive at frame rate; accumulate in a ref, flush to state on a timer.
   const tally = useRef({ count: 0, bytes: 0, last: 0, frames: 0, rate: 0 });
@@ -55,9 +58,14 @@ export function AudioChunksMeter({ broadcast }: { broadcast: BroadcastInfo }) {
   const canToggle = Platform.OS === 'ios';
 
   return (
-    <View style={styles.card}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: colors.fill, borderRadius: radius.control },
+      ]}
+    >
       <Text
-        style={styles.title}
+        style={[styles.title, { color: colors.label }]}
         onPress={
           canToggle
             ? () => setFormat((f) => (f === 'encoded' ? 'pcm-f32' : 'encoded'))
@@ -67,18 +75,16 @@ export function AudioChunksMeter({ broadcast }: { broadcast: BroadcastInfo }) {
         Audio chunks · {isPcm ? 'PCM f32' : (track?.codec.toUpperCase() ?? '—')}
         {canToggle ? ' (tap to switch)' : ''}
       </Text>
-      <Text style={styles.stat}>received: {display.count}</Text>
-      <Text style={styles.stat}>
-        total: {(display.bytes / 1024).toFixed(1)} KiB
-      </Text>
-      <Text style={styles.stat}>last: {display.last} B</Text>
+      <Stat text={`received: ${display.count}`} />
+      <Stat text={`total: ${(display.bytes / 1024).toFixed(1)} KiB`} />
+      <Stat text={`last: ${display.last} B`} />
       {isPcm && (
-        <Text style={styles.stat}>
-          frames: {display.frames} @ {display.rate} Hz
-        </Text>
+        <Stat text={`frames: ${display.frames} @ ${display.rate} Hz`} />
       )}
       <Button
         title={running ? 'Stop chunks' : 'Start chunks'}
+        icon={running ? 'stop' : 'play-arrow'}
+        variant="tonal"
         onPress={() => {
           if (running) chunks.stop();
           else chunks.start();
@@ -89,23 +95,25 @@ export function AudioChunksMeter({ broadcast }: { broadcast: BroadcastInfo }) {
   );
 }
 
+function Stat({ text }: { text: string }) {
+  const { colors } = useTheme();
+  return (
+    <Text style={[styles.stat, { color: colors.secondaryLabel }]}>{text}</Text>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
-    gap: 4,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
+    gap: 6,
+    padding: 12,
   },
   title: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   stat: {
     fontSize: 13,
-    color: '#374151',
     fontVariant: ['tabular-nums'],
   },
 });

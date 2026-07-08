@@ -1,6 +1,6 @@
 import './executorchSetup';
 import { useRef, useState } from 'react';
-import { Platform, type NativeSyntheticEvent } from 'react-native';
+import { Platform, StatusBar, type NativeSyntheticEvent } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Tabs, type TabSelectedEvent } from 'react-native-screens';
 import { SafeAreaView } from 'react-native-screens/experimental';
@@ -9,6 +9,7 @@ import { SubscribeScreen } from './screens/SubscribeScreen';
 import { PublishScreen } from './screens/PublishScreen';
 import { MoQBoyScreen } from './screens/MoQBoyScreen';
 import { AudioChunksScreen } from './screens/AudioChunksScreen';
+import { useTheme } from './theme';
 
 const edges =
   Platform.OS === 'android'
@@ -20,9 +21,9 @@ const publishIcon = MaterialIcons.getImageSourceSync('videocam', 24);
 const boyIcon = MaterialIcons.getImageSourceSync('videogame-asset', 24);
 const audioIcon = MaterialIcons.getImageSourceSync('graphic-eq', 24);
 
-function iosTab(image: any) {
+function iosTab(sfSymbol: string) {
   return {
-    icon: { type: 'templateSource', templateSource: image },
+    icon: { type: 'sfSymbol', name: sfSymbol },
   } as const;
 }
 
@@ -32,13 +33,27 @@ function androidTab(image: any) {
   } as const;
 }
 
+function TabContent({
+  children,
+  edges: edgesOverride,
+}: {
+  children: React.ReactNode;
+  edges?: typeof edges;
+}) {
+  return <SafeAreaView edges={edgesOverride ?? edges}>{children}</SafeAreaView>;
+}
+
 export default function App() {
+  const { dark } = useTheme();
   const [selectedScreenKey, setSelectedScreenKey] = useState('subscribe');
   const provenance = useRef(0);
   const [url, setUrl] = useState('http://192.168.1.48:4443');
 
   return (
     <SafeAreaProvider>
+      {/* Android edge-to-edge doesn't infer icon appearance from the app theme;
+          without this the icons stay light and the system may scrim them dark. */}
+      <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
       <Tabs.Host
         navStateRequest={{
           selectedScreenKey,
@@ -53,47 +68,47 @@ export default function App() {
           screenKey="subscribe"
           title="Subscribe"
           activityState={2}
-          ios={iosTab(subscribeIcon)}
+          ios={iosTab('play.rectangle.fill')}
           android={androidTab(subscribeIcon)}
         >
-          <SafeAreaView edges={edges}>
+          <TabContent>
             <SubscribeScreen url={url} setUrl={setUrl} />
-          </SafeAreaView>
+          </TabContent>
         </Tabs.Screen>
         <Tabs.Screen
           screenKey="publish"
           title="Publish"
           activityState={0}
-          ios={iosTab(publishIcon)}
+          ios={iosTab('dot.radiowaves.left.and.right')}
           android={androidTab(publishIcon)}
         >
-          <SafeAreaView edges={edges}>
+          <TabContent>
             <PublishScreen url={url} setUrl={setUrl} />
-          </SafeAreaView>
+          </TabContent>
         </Tabs.Screen>
         <Tabs.Screen
           screenKey="audio"
           title="Audio"
           activityState={0}
-          ios={iosTab(audioIcon)}
+          ios={iosTab('waveform')}
           android={androidTab(audioIcon)}
         >
-          <SafeAreaView edges={edges}>
+          <TabContent>
             <AudioChunksScreen url={url} setUrl={setUrl} />
-          </SafeAreaView>
+          </TabContent>
         </Tabs.Screen>
         <Tabs.Screen
           screenKey="boy"
           title="Boy"
           activityState={0}
-          ios={iosTab(boyIcon)}
+          ios={iosTab('gamecontroller.fill')}
           android={androidTab(boyIcon)}
         >
-          <SafeAreaView
+          <TabContent
             edges={{ top: true, bottom: true, left: true, right: true }}
           >
             <MoQBoyScreen />
-          </SafeAreaView>
+          </TabContent>
         </Tabs.Screen>
       </Tabs.Host>
     </SafeAreaProvider>

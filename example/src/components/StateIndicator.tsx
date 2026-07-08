@@ -1,22 +1,30 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type ColorValue } from 'react-native';
+import { useTheme, type Theme } from '../theme';
 
-const STATE_COLOR: Record<string, string> = {
-  idle: '#9ca3af',
-  connecting: '#f59e0b',
-  connected: '#3b82f6',
-  closed: '#9ca3af',
-};
-
-function stateColor(state: string) {
-  if (state.startsWith('error:')) return '#ef4444';
-  return STATE_COLOR[state] ?? '#9ca3af';
+function stateColor(state: string, colors: Theme['colors']): ColorValue {
+  if (state.startsWith('error')) return colors.destructive;
+  switch (state) {
+    case 'connecting':
+      return colors.warning;
+    case 'connected':
+    case 'publishing':
+    case 'broadcasting':
+      return colors.tint;
+    default:
+      return colors.tertiaryLabel;
+  }
 }
 
 export function StateIndicator({ state }: { state: string }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.stateRow}>
-      <View style={[styles.dot, { backgroundColor: stateColor(state) }]} />
-      <Text style={styles.stateText}>{state}</Text>
+      <View
+        style={[styles.dot, { backgroundColor: stateColor(state, colors) }]}
+      />
+      <Text style={[styles.stateText, { color: colors.secondaryLabel }]}>
+        {state}
+      </Text>
     </View>
   );
 }
@@ -26,6 +34,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 1,
   },
   dot: {
     width: 10,
@@ -34,6 +43,6 @@ const styles = StyleSheet.create({
   },
   stateText: {
     fontSize: 14,
-    color: '#374151',
+    flexShrink: 1,
   },
 });

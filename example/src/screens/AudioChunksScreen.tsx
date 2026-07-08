@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Button,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   useAudioChunks,
   useBroadcasts,
@@ -19,6 +12,16 @@ import { StateIndicator } from '../components/StateIndicator';
 import { WaveformMeter } from '../components/WaveformMeter';
 import { TranscriptionPanel } from '../components/TranscriptionPanel';
 import { useAudioApiPlayback } from '../hooks/useAudioApiPlayback';
+import {
+  Button,
+  Card,
+  IconButton,
+  Input,
+  ScreenTitle,
+  SectionHeader,
+  Segmented,
+} from '../components/ui';
+import { useTheme } from '../theme';
 
 const BAR_COUNT = 56;
 
@@ -35,6 +38,7 @@ export function AudioChunksScreen({
   url: string;
   setUrl: (url: string) => void;
 }) {
+  const { colors } = useTheme();
   const session = useSession(url);
   const canConnect = session.state === 'idle' || session.state === 'closed';
   const isConnected = session.state === 'connected';
@@ -46,28 +50,39 @@ export function AudioChunksScreen({
   }, [isConnected]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.intro}>
-        Subscribe to a broadcast&apos;s audio track as raw chunks with{' '}
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={styles.container}
+      contentInsetAdjustmentBehavior="automatic"
+    >
+      <ScreenTitle title="Audio" />
+
+      <Text style={[styles.intro, { color: colors.secondaryLabel }]}>
+        Subscribe to a broadcast&apos;s audio track as raw chunks with
         useAudioChunks, then play decoded PCM through react-native-audio-api.
       </Text>
 
-      <TextInput
-        style={styles.input}
-        value={url}
-        onChangeText={setUrl}
-        placeholder="Relay URL"
-        autoCapitalize="none"
-        autoCorrect={false}
-        editable={canConnect}
-      />
-
-      <Button
-        title={canConnect ? 'Connect' : 'Disconnect'}
-        onPress={canConnect ? () => session.connect() : session.disconnect}
-      />
-
-      <StateIndicator state={session.state} />
+      <Card>
+        <SectionHeader title="Connection" />
+        <Input
+          value={url}
+          onChangeText={setUrl}
+          placeholder="Relay URL"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={canConnect}
+        />
+        <View style={styles.connectRow}>
+          <StateIndicator state={session.state} />
+          <Button
+            title={canConnect ? 'Connect' : 'Disconnect'}
+            icon={canConnect ? 'link' : 'link-off'}
+            variant={canConnect ? 'filled' : 'tonal'}
+            destructive={!canConnect}
+            onPress={canConnect ? () => session.connect() : session.disconnect}
+          />
+        </View>
+      </Card>
 
       {isConnected && (
         <AudioBroadcasts
@@ -89,20 +104,35 @@ function AudioBroadcasts({
   selectedPath: string | null;
   onSelect: (path: string | null) => void;
 }) {
+  const { colors } = useTheme();
   const broadcasts = useBroadcasts(session, '');
 
   const selected = broadcasts.find((b) => b.path === selectedPath);
 
   if (broadcasts.length === 0) {
-    return <Text style={styles.muted}>No broadcasts available yet…</Text>;
+    return (
+      <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
+        No broadcasts available yet…
+      </Text>
+    );
   }
 
   if (selected) {
     return (
       <View style={styles.demoWrap}>
         <View style={styles.demoHeader}>
-          <Text style={styles.demoPath}>{selected.path}</Text>
-          <Button title="Back" onPress={() => onSelect(null)} color="#6b7280" />
+          <IconButton
+            icon="arrow-back"
+            size={32}
+            accessibilityLabel="Back to broadcast list"
+            onPress={() => onSelect(null)}
+          />
+          <Text
+            style={[styles.demoPath, { color: colors.label }]}
+            numberOfLines={1}
+          >
+            {selected.path}
+          </Text>
         </View>
         <AudioChunksDemo broadcast={selected} />
       </View>
@@ -111,25 +141,32 @@ function AudioBroadcasts({
 
   return (
     <View style={styles.list}>
-      <Text style={styles.muted}>Pick a broadcast:</Text>
+      <SectionHeader title="Pick a broadcast" />
       {broadcasts.map((b) => {
         const audio = b.audioTracks[0];
         return (
-          <View key={b.path} style={styles.pickCard}>
+          <Card key={b.path} style={styles.pickCard}>
             <View style={styles.pickInfo}>
-              <Text style={styles.pickPath}>{b.path}</Text>
-              <Text style={styles.muted}>
+              <Text
+                style={[styles.pickPath, { color: colors.label }]}
+                numberOfLines={1}
+              >
+                {b.path}
+              </Text>
+              <Text style={[styles.muted, { color: colors.secondaryLabel }]}>
                 {audio
                   ? `${audio.codec.toUpperCase()} · ${audio.sampleRate} Hz`
                   : 'no audio track'}
               </Text>
             </View>
-            <Button
-              title="Open"
+            <IconButton
+              icon="graphic-eq"
+              variant="filled"
+              accessibilityLabel={`Open ${b.path}`}
               onPress={() => onSelect(b.path)}
               disabled={!audio}
             />
-          </View>
+          </Card>
         );
       })}
     </View>
@@ -160,18 +197,14 @@ function AudioChunksDemo({ broadcast }: { broadcast: BroadcastInfo }) {
 
   return (
     <View style={styles.modeWrap}>
-      <View style={styles.formatRow}>
-        <FormatTab
-          label="Playback"
-          active={mode === 'playback'}
-          onPress={() => setMode('playback')}
-        />
-        <FormatTab
-          label="Transcribe"
-          active={mode === 'transcribe'}
-          onPress={() => setMode('transcribe')}
-        />
-      </View>
+      <Segmented
+        value={mode}
+        options={[
+          { value: 'playback', label: 'Playback' },
+          { value: 'transcribe', label: 'Transcribe' },
+        ]}
+        onChange={setMode}
+      />
       {mode === 'playback' ? (
         <PlaybackPanel broadcast={broadcast} />
       ) : (
@@ -182,6 +215,7 @@ function AudioChunksDemo({ broadcast }: { broadcast: BroadcastInfo }) {
 }
 
 function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
+  const { colors } = useTheme();
   const [format, setFormat] = useState<AudioChunkFormat>('pcm-f32');
   const isPcm = format !== 'encoded';
 
@@ -251,39 +285,37 @@ function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
   const track = broadcast.audioTracks[0];
 
   return (
-    <View style={styles.demo}>
-      <View style={styles.formatRow}>
-        <FormatTab
-          label="Decoded PCM"
-          active={isPcm}
-          onPress={() => setFormat('pcm-f32')}
-        />
-        <FormatTab
-          label="Encoded"
-          active={!isPcm}
-          onPress={() => {
-            playback.stop();
-            setFormat('encoded');
-          }}
-        />
-      </View>
+    <Card>
+      <Segmented
+        value={format}
+        options={[
+          { value: 'pcm-f32' as AudioChunkFormat, label: 'Decoded PCM' },
+          { value: 'encoded' as AudioChunkFormat, label: 'Encoded' },
+        ]}
+        onChange={(next) => {
+          if (next === 'encoded') playback.stop();
+          setFormat(next);
+        }}
+      />
 
       {isPcm ? (
         <>
           <WaveformMeter levelsRef={levelsRef} active={playback.isPlaying} />
           <Button
             title={playback.isPlaying ? 'Stop playback' : 'Play audio'}
+            icon={playback.isPlaying ? 'stop' : 'play-arrow'}
+            variant={playback.isPlaying ? 'tonal' : 'filled'}
             onPress={playback.isPlaying ? playback.stop : playback.start}
           />
           {!playback.isPlaying && (
-            <Text style={styles.muted}>
+            <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
               Chunks are decoding live — press play to hear them and animate the
               meter.
             </Text>
           )}
         </>
       ) : (
-        <Text style={styles.muted}>
+        <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
           Encoded objects are delivered exactly as published — decode them (e.g.
           with a codec) before playback. Inspect their stats below.
         </Text>
@@ -300,98 +332,49 @@ function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
           value={stats.rate ? `${stats.rate} Hz` : '—'}
         />
       </View>
-    </View>
-  );
-}
-
-function FormatTab({
-  label,
-  active,
-  disabled,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Text
-      onPress={disabled ? undefined : onPress}
-      style={[
-        styles.formatTab,
-        active && styles.formatTabActive,
-        disabled && styles.formatTabDisabled,
-      ]}
-    >
-      {label}
-    </Text>
+    </Card>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.statCell}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statValue, { color: colors.label }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: colors.tertiaryLabel }]}>
+        {label}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, padding: 16, gap: 12 },
-  intro: { fontSize: 13, color: '#6b7280', lineHeight: 18 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
+  intro: { fontSize: 13, lineHeight: 18 },
+  connectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  muted: { fontSize: 13, color: '#9ca3af', lineHeight: 18 },
+  muted: { fontSize: 13, lineHeight: 18 },
   list: { gap: 8 },
   pickCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-    gap: 8,
+    gap: 10,
   },
   pickInfo: { flex: 1, gap: 2 },
-  pickPath: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  pickPath: { fontSize: 14, fontWeight: '600' },
   demoWrap: { gap: 12 },
   demoHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 10,
   },
-  demoPath: { flex: 1, fontSize: 13, fontWeight: '600', color: '#374151' },
+  demoPath: { flex: 1, fontSize: 14, fontWeight: '600' },
   modeWrap: { gap: 12 },
-  demo: {
-    gap: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-  },
-  formatRow: { flexDirection: 'row', gap: 8 },
-  formatTab: {
-    flex: 1,
-    textAlign: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
-    color: '#6b7280',
-    fontSize: 13,
-    fontWeight: '600',
-    overflow: 'hidden',
-  },
-  formatTabActive: { backgroundColor: '#2563eb', color: '#fff' },
-  formatTabDisabled: { opacity: 0.4 },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -400,8 +383,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#111827',
     fontVariant: ['tabular-nums'],
   },
-  statLabel: { fontSize: 11, color: '#9ca3af', textTransform: 'uppercase' },
+  statLabel: { fontSize: 11, textTransform: 'uppercase' },
 });

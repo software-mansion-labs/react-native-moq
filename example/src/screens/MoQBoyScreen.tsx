@@ -36,6 +36,10 @@ function makeViewerId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// Note: this screen's container must stay transparent. An opaque background on
+// it makes iOS composite the header buttons into the same layer as the 3D flip
+// animation, which corrupts them mid-flip. The native screen behind already
+// follows light/dark.
 export function MoQBoyScreen() {
   const session = useSession(BOY_RELAY_URL);
   const isConnected = session.state === 'connected';
@@ -116,7 +120,7 @@ export function MoQBoyScreen() {
     if (!isConnected) {
       return {
         title: 'Power is off',
-        subtitle: 'Slide the switch at the top to connect this console.',
+        subtitle: 'Tap the power button at the top to connect this console.',
       };
     }
     if (selectedGameName) {

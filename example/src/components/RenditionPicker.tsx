@@ -1,5 +1,6 @@
 import type { VideoTrackInfo } from 'react-native-moq';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../theme';
 
 function trackLabel(track: VideoTrackInfo): string {
   if (track.height) return `${track.height}p`;
@@ -15,25 +16,33 @@ export function RenditionPicker({
   currentTrackName: string | undefined;
   onSelect: (name: string) => void;
 }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.renditionRow}>
       {tracks.map((track) => {
         const isActive = track.name === currentTrackName;
         return (
-          <TouchableOpacity
+          <Pressable
             key={track.name}
-            style={[styles.renditionBtn, isActive && styles.renditionBtnActive]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isActive }}
+            style={({ pressed }) => [
+              styles.renditionBtn,
+              { backgroundColor: isActive ? colors.tint : colors.fill },
+              pressed && styles.pressed,
+            ]}
             onPress={() => onSelect(track.name)}
           >
             <Text
               style={[
                 styles.renditionBtnText,
+                { color: isActive ? colors.onTint : colors.secondaryLabel },
                 isActive && styles.renditionBtnTextActive,
               ]}
             >
               {trackLabel(track)}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
     </View>
@@ -47,20 +56,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   renditionBtn: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#e5e7eb',
+    borderRadius: 999,
   },
-  renditionBtnActive: {
-    backgroundColor: '#3b82f6',
-  },
+  pressed: { opacity: 0.55 },
   renditionBtnText: {
     fontSize: 13,
-    color: '#374151',
   },
   renditionBtnTextActive: {
-    color: '#ffffff',
     fontWeight: '600',
   },
 });

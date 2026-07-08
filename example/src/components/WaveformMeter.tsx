@@ -1,5 +1,6 @@
 import { useEffect, useReducer, type RefObject } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useTheme } from '../theme';
 
 const MAX_BAR_HEIGHT = 56;
 
@@ -15,6 +16,7 @@ export function WaveformMeter({
   levelsRef: RefObject<number[]>;
   active: boolean;
 }) {
+  const { colors } = useTheme();
   const [, repaint] = useReducer((x: number) => x + 1, 0);
 
   useEffect(() => {
@@ -32,7 +34,10 @@ export function WaveformMeter({
           key={i}
           style={[
             styles.bar,
-            { height: 2 + Math.min(1, level) * MAX_BAR_HEIGHT },
+            {
+              height: 2 + Math.min(1, level) * MAX_BAR_HEIGHT,
+              backgroundColor: colors.tint,
+            },
           ]}
         />
       ))}
@@ -52,6 +57,5 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 0.5,
     borderRadius: 1,
-    backgroundColor: '#2563eb',
   },
 });

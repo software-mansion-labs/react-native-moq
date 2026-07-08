@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Button } from './ui';
+import { useTheme } from '../theme';
 import {
   useSpeechToText,
   WHISPER_TINY_EN,
@@ -39,6 +41,7 @@ export function TranscriptionPanel({
 }: {
   broadcast: BroadcastInfo;
 }) {
+  const { colors, radius } = useTheme();
   const [load, setLoad] = useState(false);
   const stt = useSpeechToText({ model: WHISPER_MODEL, preventLoad: !load });
   // `stt` is fresh every render; hold the latest in a ref so the interval can
@@ -158,7 +161,9 @@ export function TranscriptionPanel({
   if (stt.error) {
     return (
       <View style={styles.panel}>
-        <Text style={styles.error}>Model error: {String(stt.error)}</Text>
+        <Text style={[styles.error, { color: colors.destructive }]}>
+          Model error: {String(stt.error)}
+        </Text>
       </View>
     );
   }
@@ -166,11 +171,15 @@ export function TranscriptionPanel({
   if (!load) {
     return (
       <View style={styles.panel}>
-        <Text style={styles.muted}>
+        <Text style={[styles.muted, { color: colors.secondaryLabel }]}>
           Transcribe this broadcast on-device with Whisper. The model downloads
           once (~tens of MB) and runs locally — no audio leaves the device.
         </Text>
-        <Button title="Load Whisper model" onPress={() => setLoad(true)} />
+        <Button
+          title="Load Whisper model"
+          icon="download"
+          onPress={() => setLoad(true)}
+        />
       </View>
     );
   }
@@ -178,15 +187,18 @@ export function TranscriptionPanel({
   if (!stt.isReady) {
     return (
       <View style={styles.panel}>
-        <Text style={styles.muted}>
+        <Text style={[styles.muted, { color: colors.secondaryLabel }]}>
           Downloading & loading Whisper…{' '}
           {Math.round(stt.downloadProgress * 100)}%
         </Text>
-        <View style={styles.progressTrack}>
+        <View style={[styles.progressTrack, { backgroundColor: colors.fill }]}>
           <View
             style={[
               styles.progressFill,
-              { width: `${Math.round(stt.downloadProgress * 100)}%` },
+              {
+                backgroundColor: colors.tint,
+                width: `${Math.round(stt.downloadProgress * 100)}%`,
+              },
             ]}
           />
         </View>
@@ -198,17 +210,26 @@ export function TranscriptionPanel({
     <View style={styles.panel}>
       <Button
         title={capturing ? 'Stop transcription' : 'Start transcription'}
+        icon={capturing ? 'stop' : 'closed-caption'}
+        variant={capturing ? 'tonal' : 'filled'}
         onPress={capturing ? stop : start}
       />
-      <View style={styles.transcriptBox}>
+      <View
+        style={[
+          styles.transcriptBox,
+          { backgroundColor: colors.fill, borderRadius: radius.control },
+        ]}
+      >
         {transcript === '' ? (
-          <Text style={styles.muted}>
+          <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
             {capturing
               ? 'Listening…'
               : 'Press start to caption the live audio.'}
           </Text>
         ) : (
-          <Text style={styles.transcript}>{transcript}</Text>
+          <Text style={[styles.transcript, { color: colors.label }]}>
+            {transcript}
+          </Text>
         )}
       </View>
     </View>
@@ -217,22 +238,17 @@ export function TranscriptionPanel({
 
 const styles = StyleSheet.create({
   panel: { gap: 12 },
-  muted: { fontSize: 13, color: '#9ca3af', lineHeight: 18 },
-  error: { fontSize: 13, color: '#ef4444', lineHeight: 18 },
+  muted: { fontSize: 13, lineHeight: 18 },
+  error: { fontSize: 13, lineHeight: 18 },
   progressTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#e5e7eb',
     overflow: 'hidden',
   },
-  progressFill: { height: 6, backgroundColor: '#2563eb' },
+  progressFill: { height: 6 },
   transcriptBox: {
     minHeight: 96,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
     padding: 12,
-    backgroundColor: '#f9fafb',
   },
-  transcript: { fontSize: 15, color: '#111827', lineHeight: 22 },
+  transcript: { fontSize: 15, lineHeight: 22 },
 });

@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Button,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   useBroadcasts,
   useEventListener,
@@ -16,6 +9,15 @@ import {
 import { BroadcastPlayer } from '../components/BroadcastPlayer';
 import { EventLog, useEventLog, type AddEntry } from '../components/EventLog';
 import { StateIndicator } from '../components/StateIndicator';
+import {
+  Button,
+  Card,
+  IconButton,
+  Input,
+  ScreenTitle,
+  SectionHeader,
+} from '../components/ui';
+import { useTheme } from '../theme';
 
 type Mode = 'video' | 'audio';
 type ActivePlayer = { path: string; initialMode: Mode };
@@ -27,6 +29,7 @@ export function SubscribeScreen({
   url: string;
   setUrl: (url: string) => void;
 }) {
+  const { colors } = useTheme();
   const [activePlayers, setActivePlayers] = useState<ActivePlayer[]>([]);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
@@ -58,42 +61,54 @@ export function SubscribeScreen({
   });
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <TextInput
-        style={styles.input}
-        value={url}
-        onChangeText={setUrl}
-        placeholder="Relay URL"
-        autoCapitalize="none"
-        autoCorrect={false}
-        editable={canConnect}
-      />
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={styles.container}
+      contentInsetAdjustmentBehavior="automatic"
+    >
+      <ScreenTitle title="Subscribe" />
 
-      <Button
-        title={canConnect ? 'Connect' : 'Disconnect'}
-        onPress={canConnect ? () => session.connect() : session.disconnect}
-      />
-
-      <StateIndicator state={session.state} />
-
-      {isConnected && (
-        <Button
-          title={isSubscribed ? 'Unsubscribe' : 'Subscribe'}
-          onPress={() => {
-            if (isSubscribed) {
-              setIsSubscribed(false);
-              setActivePlayers([]);
-            } else {
-              setIsSubscribed(true);
-            }
-          }}
+      <Card>
+        <SectionHeader title="Connection" />
+        <Input
+          value={url}
+          onChangeText={setUrl}
+          placeholder="Relay URL"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={canConnect}
         />
-      )}
+        <View style={styles.connectRow}>
+          <StateIndicator state={session.state} />
+          <Button
+            title={canConnect ? 'Connect' : 'Disconnect'}
+            icon={canConnect ? 'link' : 'link-off'}
+            variant={canConnect ? 'filled' : 'tonal'}
+            destructive={!canConnect}
+            onPress={canConnect ? () => session.connect() : session.disconnect}
+          />
+        </View>
+        {isConnected && (
+          <Button
+            title={isSubscribed ? 'Unsubscribe' : 'Subscribe'}
+            icon={isSubscribed ? 'visibility-off' : 'visibility'}
+            variant="tonal"
+            onPress={() => {
+              if (isSubscribed) {
+                setIsSubscribed(false);
+                setActivePlayers([]);
+              } else {
+                setIsSubscribed(true);
+              }
+            }}
+          />
+        )}
+      </Card>
 
       <EventLog entries={log} />
 
       {isConnected && !isSubscribed && (
-        <Text style={styles.noBroadcasts}>
+        <Text style={[styles.emptyText, { color: colors.tertiaryLabel }]}>
           Subscribe to discover broadcasts
         </Text>
       )}
@@ -124,6 +139,7 @@ function BroadcastsList({
   removePlayer: (path: string) => void;
   addEntry: AddEntry;
 }) {
+  const { colors } = useTheme();
   const broadcasts = useBroadcasts(session, '');
 
   const seenPaths = useRef<Set<string>>(new Set());
@@ -139,11 +155,16 @@ function BroadcastsList({
   }, [broadcasts, addEntry]);
 
   if (broadcasts.length === 0) {
-    return <Text style={styles.noBroadcasts}>No broadcasts available</Text>;
+    return (
+      <Text style={[styles.emptyText, { color: colors.tertiaryLabel }]}>
+        No broadcasts available
+      </Text>
+    );
   }
 
   return (
     <>
+      <SectionHeader title="Broadcasts" />
       {broadcasts.map((broadcast) => {
         const active = activePlayers.find((p) => p.path === broadcast.path);
         if (active) {
@@ -158,19 +179,27 @@ function BroadcastsList({
           );
         }
         return (
-          <View key={broadcast.path} style={styles.availableCard}>
-            <Text style={styles.broadcastPath}>{broadcast.path}</Text>
+          <Card key={broadcast.path} style={styles.availableCard}>
+            <Text
+              style={[styles.broadcastPath, { color: colors.label }]}
+              numberOfLines={1}
+            >
+              {broadcast.path}
+            </Text>
             <View style={styles.availableButtons}>
-              <Button
-                title="Video"
+              <IconButton
+                icon="play-arrow"
+                accessibilityLabel={`Watch ${broadcast.path}`}
+                variant="filled"
                 onPress={() => addPlayer(broadcast.path, 'video')}
               />
-              <Button
-                title="Audio only"
+              <IconButton
+                icon="headphones"
+                accessibilityLabel={`Listen to ${broadcast.path} (audio only)`}
                 onPress={() => addPlayer(broadcast.path, 'audio')}
               />
             </View>
-          </View>
+          </Card>
         );
       })}
     </>
@@ -179,17 +208,14 @@ function BroadcastsList({
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, padding: 16, gap: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
+  connectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  noBroadcasts: {
+  emptyText: {
     fontSize: 14,
-    color: '#9ca3af',
     textAlign: 'center',
     paddingVertical: 8,
   },
@@ -197,12 +223,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-    gap: 8,
+    gap: 10,
   },
+  broadcastPath: { flex: 1, fontSize: 14, fontWeight: '600' },
   availableButtons: { flexDirection: 'row', gap: 8 },
-  broadcastPath: { flex: 1, fontSize: 13, fontWeight: '600', color: '#374151' },
 });
