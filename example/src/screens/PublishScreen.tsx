@@ -35,7 +35,6 @@ import {
   IconButton,
   Input,
   Pill,
-  ScreenTitle,
   SectionHeader,
   Segmented,
   TwoColumn,
@@ -224,8 +223,6 @@ export function PublishScreen({
       contentContainerStyle={styles.container}
       contentInsetAdjustmentBehavior="automatic"
     >
-      <ScreenTitle title="Publish" />
-
       <TwoColumn
         left={
           <>
@@ -695,7 +692,6 @@ function PreviewBadge({ label }: { label: string }) {
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
     padding: 16,
     gap: 12,
     width: '100%',

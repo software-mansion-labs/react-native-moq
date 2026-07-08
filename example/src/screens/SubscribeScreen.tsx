@@ -14,7 +14,6 @@ import {
   Card,
   IconButton,
   Input,
-  ScreenTitle,
   SectionHeader,
   TwoColumn,
 } from '../components/ui';
@@ -67,8 +66,6 @@ export function SubscribeScreen({
       contentContainerStyle={styles.container}
       contentInsetAdjustmentBehavior="automatic"
     >
-      <ScreenTitle title="Subscribe" />
-
       <TwoColumn
         left={
           <>
@@ -220,7 +217,6 @@ function BroadcastsList({
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
     padding: 16,
     gap: 12,
     width: '100%',

@@ -17,7 +17,6 @@ import {
   Card,
   IconButton,
   Input,
-  ScreenTitle,
   SectionHeader,
   Segmented,
   TwoColumn,
@@ -56,8 +55,6 @@ export function AudioChunksScreen({
       contentContainerStyle={styles.container}
       contentInsetAdjustmentBehavior="automatic"
     >
-      <ScreenTitle title="Audio" />
-
       <TwoColumn
         left={
           <>
@@ -361,7 +358,6 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
     padding: 16,
     gap: 12,
     width: '100%',

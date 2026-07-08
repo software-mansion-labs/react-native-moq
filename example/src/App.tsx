@@ -2,7 +2,12 @@ import './executorchSetup';
 import { useRef, useState } from 'react';
 import { Platform, StatusBar, type NativeSyntheticEvent } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Tabs, type TabSelectedEvent } from 'react-native-screens';
+import {
+  ScreenStack,
+  ScreenStackItem,
+  Tabs,
+  type TabSelectedEvent,
+} from 'react-native-screens';
 import { SafeAreaView } from 'react-native-screens/experimental';
 import MaterialIcons from '@react-native-vector-icons/material-icons';
 import { SubscribeScreen } from './screens/SubscribeScreen';
@@ -43,6 +48,46 @@ function TabContent({
   return <SafeAreaView edges={edgesOverride ?? edges}>{children}</SafeAreaView>;
 }
 
+// Native navigation bar (UINavigationBar / Material toolbar) via a
+// single-item native stack per tab.
+function StackedTab({
+  screenKey,
+  title,
+  children,
+}: {
+  screenKey: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  const { colors } = useTheme();
+  return (
+    <ScreenStack style={styles.stack}>
+      <ScreenStackItem
+        screenId={screenKey}
+        headerConfig={{
+          title,
+          largeTitle: true,
+          ...(Platform.OS === 'ios'
+            ? {
+                backgroundColor: 'transparent',
+                blurEffect: 'none',
+                translucent: true,
+              }
+            : {
+                backgroundColor: colors.background,
+                titleColor: colors.label,
+                hideShadow: true,
+              }),
+        }}
+      >
+        <TabContent edges={{ ...edges, top: false }}>{children}</TabContent>
+      </ScreenStackItem>
+    </ScreenStack>
+  );
+}
+
+const styles = { stack: { flex: 1 } } as const;
+
 export default function App() {
   const { dark } = useTheme();
   const [selectedScreenKey, setSelectedScreenKey] = useState('subscribe');
@@ -71,9 +116,9 @@ export default function App() {
           ios={iosTab('play.rectangle.fill')}
           android={androidTab(subscribeIcon)}
         >
-          <TabContent>
+          <StackedTab screenKey="subscribe" title="Subscribe">
             <SubscribeScreen url={url} setUrl={setUrl} />
-          </TabContent>
+          </StackedTab>
         </Tabs.Screen>
         <Tabs.Screen
           screenKey="publish"
@@ -82,9 +127,9 @@ export default function App() {
           ios={iosTab('dot.radiowaves.left.and.right')}
           android={androidTab(publishIcon)}
         >
-          <TabContent>
+          <StackedTab screenKey="publish" title="Publish">
             <PublishScreen url={url} setUrl={setUrl} />
-          </TabContent>
+          </StackedTab>
         </Tabs.Screen>
         <Tabs.Screen
           screenKey="audio"
@@ -93,9 +138,9 @@ export default function App() {
           ios={iosTab('waveform')}
           android={androidTab(audioIcon)}
         >
-          <TabContent>
+          <StackedTab screenKey="audio" title="Audio">
             <AudioChunksScreen url={url} setUrl={setUrl} />
-          </TabContent>
+          </StackedTab>
         </Tabs.Screen>
         <Tabs.Screen
           screenKey="boy"

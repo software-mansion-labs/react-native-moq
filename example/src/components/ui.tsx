@@ -300,13 +300,6 @@ export function TwoColumn({
   );
 }
 
-export function ScreenTitle({ title }: { title: string }) {
-  const { colors } = useTheme();
-  return (
-    <Text style={[styles.screenTitle, { color: colors.label }]}>{title}</Text>
-  );
-}
-
 const styles = StyleSheet.create({
   button: {
     flexDirection: 'row',
@@ -383,12 +376,6 @@ const styles = StyleSheet.create({
       : {},
   segmentLabel: { fontSize: 13 },
   segmentLabelSelected: { fontWeight: '600' },
-  screenTitle: {
-    fontSize: Platform.OS === 'ios' ? 34 : 28,
-    fontWeight: Platform.OS === 'ios' ? '700' : '600',
-    letterSpacing: Platform.OS === 'ios' ? 0.4 : 0,
-    marginTop: 4,
-  },
   columns: { gap: 12 },
   columnsWide: { flexDirection: 'row', alignItems: 'flex-start' },
   column: { gap: 12 },
