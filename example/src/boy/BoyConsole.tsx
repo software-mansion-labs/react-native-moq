@@ -1,5 +1,11 @@
-import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
 import type { Player } from 'react-native-moq';
 import { Button } from '../components/ui';
 import {
@@ -35,6 +41,11 @@ export interface BoyConsoleProps {
   onFlipSettled?: () => void;
 }
 
+// Original DMG shell proportions (90 × 148 mm).
+const CONSOLE_ASPECT = 90 / 148;
+// Below this the fixed-size control clusters no longer fit side by side.
+const MIN_CONSOLE_WIDTH = 340;
+
 export function BoyConsole({
   isConnected,
   isConnecting,
@@ -57,6 +68,21 @@ export function BoyConsole({
 }: BoyConsoleProps) {
   // 0 = front, 1 = back. Init to the current side so remounts don't spin.
   const flip = useRef(new Animated.Value(showsBack ? 1 : 0)).current;
+
+  const [frame, setFrame] = useState({ width: 0, height: 0 });
+  const onFlipAreaLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setFrame((f) =>
+      f.width === width && f.height === height ? f : { width, height }
+    );
+  };
+  // Keep DMG proportions and center in the available space; when that would
+  // shrink below MIN_CONSOLE_WIDTH (e.g. phone landscape), fill instead.
+  const consoleWidth = Math.min(
+    frame.width,
+    Math.max(frame.height * CONSOLE_ASPECT, MIN_CONSOLE_WIDTH)
+  );
+  const consoleHeight = Math.min(frame.height, consoleWidth / CONSOLE_ASPECT);
 
   const onFlipSettledRef = useRef(onFlipSettled);
   onFlipSettledRef.current = onFlipSettled;
@@ -112,93 +138,103 @@ export function BoyConsole({
         />
       </View>
 
-      <View style={styles.flipArea}>
-        <Animated.View
-          style={[
-            styles.face,
-            {
-              opacity: frontOpacity,
-              transform: [{ perspective: 1200 }, { rotateY: frontRotate }],
-            },
-          ]}
-          pointerEvents={showsBack ? 'none' : 'auto'}
-        >
-          <View style={styles.shell}>
-            <BoyScreenPanel
-              player={player}
-              isConnected={isConnected}
-              isConnecting={isConnecting}
-              selectedGameName={selectedGameName}
-              placeholder={placeholder}
-              lastError={lastError}
-            />
+      <View style={styles.flipArea} onLayout={onFlipAreaLayout}>
+        {frame.height > 0 && (
+          <View style={{ width: consoleWidth, height: consoleHeight }}>
+            <Animated.View
+              style={[
+                styles.face,
+                {
+                  opacity: frontOpacity,
+                  transform: [{ perspective: 1200 }, { rotateY: frontRotate }],
+                },
+              ]}
+              pointerEvents={showsBack ? 'none' : 'auto'}
+            >
+              <View style={styles.shell}>
+                <BoyScreenPanel
+                  player={player}
+                  isConnected={isConnected}
+                  isConnecting={isConnecting}
+                  selectedGameName={selectedGameName}
+                  placeholder={placeholder}
+                  lastError={lastError}
+                />
 
-            <View style={styles.deck}>
-              <View style={styles.deckRow}>
-                <BoyDirectionPad
-                  enabled={controlsEnabled}
-                  onPressChange={onButton}
-                />
-                <BoyActionCluster
-                  enabled={controlsEnabled}
-                  onPressChange={onButton}
-                />
-              </View>
-              <View style={styles.startSelectWrap}>
-                <BoyStartSelectCluster
-                  enabled={controlsEnabled}
-                  onPressChange={onButton}
-                />
-              </View>
-            </View>
+                <View style={styles.deck}>
+                  <View style={styles.deckRow}>
+                    <BoyDirectionPad
+                      enabled={controlsEnabled}
+                      onPressChange={onButton}
+                    />
+                    <BoyActionCluster
+                      enabled={controlsEnabled}
+                      onPressChange={onButton}
+                    />
+                  </View>
+                  <View style={styles.startSelectWrap}>
+                    <BoyStartSelectCluster
+                      enabled={controlsEnabled}
+                      onPressChange={onButton}
+                    />
+                  </View>
+                </View>
 
-            <View style={styles.brandRow}>
-              <Text style={styles.brand}>BOY</Text>
-              <View style={styles.grille}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <View key={i} style={styles.grilleBar} />
-                ))}
+                <View style={styles.brandRow}>
+                  <Text style={styles.brand}>BOY</Text>
+                  <View style={styles.grille}>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <View key={i} style={styles.grilleBar} />
+                    ))}
+                  </View>
+                </View>
               </View>
-            </View>
+            </Animated.View>
+
+            <Animated.View
+              style={[
+                styles.face,
+                styles.faceAbsolute,
+                {
+                  opacity: backOpacity,
+                  transform: [{ perspective: 1200 }, { rotateY: backRotate }],
+                },
+              ]}
+              pointerEvents={showsBack ? 'auto' : 'none'}
+            >
+              <View style={styles.shell}>
+                <BoyBackFace
+                  games={games}
+                  selectedGamePath={selectedGamePath}
+                  selectedGameName={selectedGameName}
+                  isConnected={isConnected}
+                  onSelectGame={onSelectGame}
+                  latency={latency}
+                  onLatencyChange={onLatencyChange}
+                />
+              </View>
+            </Animated.View>
           </View>
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.face,
-            styles.faceAbsolute,
-            {
-              opacity: backOpacity,
-              transform: [{ perspective: 1200 }, { rotateY: backRotate }],
-            },
-          ]}
-          pointerEvents={showsBack ? 'auto' : 'none'}
-        >
-          <View style={styles.shell}>
-            <BoyBackFace
-              games={games}
-              selectedGamePath={selectedGamePath}
-              selectedGameName={selectedGameName}
-              isConnected={isConnected}
-              onSelectGame={onSelectGame}
-              latency={latency}
-              onLatencyChange={onLatencyChange}
-            />
-          </View>
-        </Animated.View>
+        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  outer: { flex: 1, gap: 16 },
+  outer: {
+    flex: 1,
+    gap: 16,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+  },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  flipArea: { flex: 1 },
+  flipArea: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   face: { flex: 1, backfaceVisibility: 'hidden' },
   faceAbsolute: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   shell: {

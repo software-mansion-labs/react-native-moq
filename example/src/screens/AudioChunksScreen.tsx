@@ -20,6 +20,7 @@ import {
   ScreenTitle,
   SectionHeader,
   Segmented,
+  TwoColumn,
 } from '../components/ui';
 import { useTheme } from '../theme';
 
@@ -57,40 +58,50 @@ export function AudioChunksScreen({
     >
       <ScreenTitle title="Audio" />
 
-      <Text style={[styles.intro, { color: colors.secondaryLabel }]}>
-        Subscribe to a broadcast&apos;s audio track as raw chunks with
-        useAudioChunks, then play decoded PCM through react-native-audio-api.
-      </Text>
+      <TwoColumn
+        left={
+          <>
+            <Text style={[styles.intro, { color: colors.secondaryLabel }]}>
+              Subscribe to a broadcast&apos;s audio track as raw chunks with
+              useAudioChunks, then play decoded PCM through
+              react-native-audio-api.
+            </Text>
 
-      <Card>
-        <SectionHeader title="Connection" />
-        <Input
-          value={url}
-          onChangeText={setUrl}
-          placeholder="Relay URL"
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={canConnect}
-        />
-        <View style={styles.connectRow}>
-          <StateIndicator state={session.state} />
-          <Button
-            title={canConnect ? 'Connect' : 'Disconnect'}
-            icon={canConnect ? 'link' : 'link-off'}
-            variant={canConnect ? 'filled' : 'tonal'}
-            destructive={!canConnect}
-            onPress={canConnect ? () => session.connect() : session.disconnect}
-          />
-        </View>
-      </Card>
-
-      {isConnected && (
-        <AudioBroadcasts
-          session={session}
-          selectedPath={selectedPath}
-          onSelect={setSelectedPath}
-        />
-      )}
+            <Card>
+              <SectionHeader title="Connection" />
+              <Input
+                value={url}
+                onChangeText={setUrl}
+                placeholder="Relay URL"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={canConnect}
+              />
+              <View style={styles.connectRow}>
+                <StateIndicator state={session.state} />
+                <Button
+                  title={canConnect ? 'Connect' : 'Disconnect'}
+                  icon={canConnect ? 'link' : 'link-off'}
+                  variant={canConnect ? 'filled' : 'tonal'}
+                  destructive={!canConnect}
+                  onPress={
+                    canConnect ? () => session.connect() : session.disconnect
+                  }
+                />
+              </View>
+            </Card>
+          </>
+        }
+        right={
+          isConnected && (
+            <AudioBroadcasts
+              session={session}
+              selectedPath={selectedPath}
+              onSelect={setSelectedPath}
+            />
+          )
+        }
+      />
     </ScrollView>
   );
 }
@@ -349,7 +360,14 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 16, gap: 12 },
+  container: {
+    flexGrow: 1,
+    padding: 16,
+    gap: 12,
+    width: '100%',
+    maxWidth: 1080,
+    alignSelf: 'center',
+  },
   intro: { fontSize: 13, lineHeight: 18 },
   connectRow: {
     flexDirection: 'row',

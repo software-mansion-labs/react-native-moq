@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type ColorValue,
   type StyleProp,
@@ -271,6 +272,34 @@ export function Segmented<T extends string | number>({
   );
 }
 
+/** True when the window is wide enough for side-by-side layouts. */
+export function useWide(): boolean {
+  return useWindowDimensions().width >= 700;
+}
+
+/** Two columns on wide windows, a single stack otherwise. */
+export function TwoColumn({
+  left,
+  right,
+}: {
+  left: ReactNode;
+  right: ReactNode;
+}) {
+  const wide = useWide();
+  return (
+    // Keyed remount: restyling the same native views when the fold/unfold
+    // display switch flips the mode leaves stale widths that overflow the
+    // screen.
+    <View
+      key={wide ? 'wide' : 'narrow'}
+      style={[styles.columns, wide && styles.columnsWide]}
+    >
+      <View style={[styles.column, wide && styles.columnWide]}>{left}</View>
+      <View style={[styles.column, wide && styles.columnWide]}>{right}</View>
+    </View>
+  );
+}
+
 export function ScreenTitle({ title }: { title: string }) {
   const { colors } = useTheme();
   return (
@@ -360,4 +389,8 @@ const styles = StyleSheet.create({
     letterSpacing: Platform.OS === 'ios' ? 0.4 : 0,
     marginTop: 4,
   },
+  columns: { gap: 12 },
+  columnsWide: { flexDirection: 'row', alignItems: 'flex-start' },
+  column: { gap: 12 },
+  columnWide: { flex: 1 },
 });

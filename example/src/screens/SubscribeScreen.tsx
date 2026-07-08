@@ -16,6 +16,7 @@ import {
   Input,
   ScreenTitle,
   SectionHeader,
+  TwoColumn,
 } from '../components/ui';
 import { useTheme } from '../theme';
 
@@ -68,60 +69,71 @@ export function SubscribeScreen({
     >
       <ScreenTitle title="Subscribe" />
 
-      <Card>
-        <SectionHeader title="Connection" />
-        <Input
-          value={url}
-          onChangeText={setUrl}
-          placeholder="Relay URL"
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={canConnect}
-        />
-        <View style={styles.connectRow}>
-          <StateIndicator state={session.state} />
-          <Button
-            title={canConnect ? 'Connect' : 'Disconnect'}
-            icon={canConnect ? 'link' : 'link-off'}
-            variant={canConnect ? 'filled' : 'tonal'}
-            destructive={!canConnect}
-            onPress={canConnect ? () => session.connect() : session.disconnect}
-          />
-        </View>
-        {isConnected && (
-          <Button
-            title={isSubscribed ? 'Unsubscribe' : 'Subscribe'}
-            icon={isSubscribed ? 'visibility-off' : 'visibility'}
-            variant="tonal"
-            onPress={() => {
-              if (isSubscribed) {
-                setIsSubscribed(false);
-                setActivePlayers([]);
-              } else {
-                setIsSubscribed(true);
-              }
-            }}
-          />
-        )}
-      </Card>
+      <TwoColumn
+        left={
+          <>
+            <Card>
+              <SectionHeader title="Connection" />
+              <Input
+                value={url}
+                onChangeText={setUrl}
+                placeholder="Relay URL"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={canConnect}
+              />
+              <View style={styles.connectRow}>
+                <StateIndicator state={session.state} />
+                <Button
+                  title={canConnect ? 'Connect' : 'Disconnect'}
+                  icon={canConnect ? 'link' : 'link-off'}
+                  variant={canConnect ? 'filled' : 'tonal'}
+                  destructive={!canConnect}
+                  onPress={
+                    canConnect ? () => session.connect() : session.disconnect
+                  }
+                />
+              </View>
+              {isConnected && (
+                <Button
+                  title={isSubscribed ? 'Unsubscribe' : 'Subscribe'}
+                  icon={isSubscribed ? 'visibility-off' : 'visibility'}
+                  variant="tonal"
+                  onPress={() => {
+                    if (isSubscribed) {
+                      setIsSubscribed(false);
+                      setActivePlayers([]);
+                    } else {
+                      setIsSubscribed(true);
+                    }
+                  }}
+                />
+              )}
+            </Card>
 
-      <EventLog entries={log} />
+            <EventLog entries={log} />
+          </>
+        }
+        right={
+          <>
+            {isConnected && !isSubscribed && (
+              <Text style={[styles.emptyText, { color: colors.tertiaryLabel }]}>
+                Subscribe to discover broadcasts
+              </Text>
+            )}
 
-      {isConnected && !isSubscribed && (
-        <Text style={[styles.emptyText, { color: colors.tertiaryLabel }]}>
-          Subscribe to discover broadcasts
-        </Text>
-      )}
-
-      {isConnected && isSubscribed && (
-        <BroadcastsList
-          session={session}
-          activePlayers={activePlayers}
-          addPlayer={addPlayer}
-          removePlayer={removePlayer}
-          addEntry={addEntry}
-        />
-      )}
+            {isConnected && isSubscribed && (
+              <BroadcastsList
+                session={session}
+                activePlayers={activePlayers}
+                addPlayer={addPlayer}
+                removePlayer={removePlayer}
+                addEntry={addEntry}
+              />
+            )}
+          </>
+        }
+      />
     </ScrollView>
   );
 }
@@ -207,7 +219,14 @@ function BroadcastsList({
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 16, gap: 12 },
+  container: {
+    flexGrow: 1,
+    padding: 16,
+    gap: 12,
+    width: '100%',
+    maxWidth: 1080,
+    alignSelf: 'center',
+  },
   connectRow: {
     flexDirection: 'row',
     alignItems: 'center',

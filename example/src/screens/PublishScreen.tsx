@@ -38,6 +38,7 @@ import {
   ScreenTitle,
   SectionHeader,
   Segmented,
+  TwoColumn,
 } from '../components/ui';
 import { useTheme } from '../theme';
 
@@ -225,345 +226,368 @@ export function PublishScreen({
     >
       <ScreenTitle title="Publish" />
 
-      <Card>
-        <SectionHeader title="Connection" />
-        <Input
-          value={url}
-          onChangeText={setUrl}
-          placeholder="Relay URL"
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!isPublishing}
-        />
-        <Input
-          value={path}
-          onChangeText={setPath}
-          placeholder="Broadcast path (e.g. live/test)"
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!isPublishing && !screenBroadcasting}
-        />
-        <View style={styles.connectRow}>
-          <StateIndicator state={session.state} />
-          <Button
-            title={canConnect ? 'Connect' : 'Disconnect'}
-            icon={canConnect ? 'link' : 'link-off'}
-            variant={canConnect ? 'filled' : 'tonal'}
-            destructive={!canConnect}
-            disabled={isPublishing || screenBroadcasting}
-            onPress={canConnect ? () => session.connect() : session.disconnect}
-          />
-        </View>
-      </Card>
-
-      <Card>
-        <SectionHeader title="Broadcast" />
-        <View style={styles.connectRow}>
-          <StateIndicator state={publisher.state} />
-          <Button
-            title={
-              isPublishing
-                ? publisher.state === 'connecting'
-                  ? 'Starting…'
-                  : 'Stop'
-                : 'Go live'
-            }
-            icon={isPublishing ? 'stop' : 'sensors'}
-            destructive={isPublishing}
-            onPress={() => {
-              if (isPublishing) {
-                publisher.stop();
-              } else if (canPublish) {
-                const tracks: PublishTrack[] = [];
-                if (cameraEnabled) {
-                  if (dualCamera) {
-                    tracks.push(multiCamera.front, multiCamera.back);
-                  } else {
-                    tracks.push(camera);
+      <TwoColumn
+        left={
+          <>
+            <Card>
+              <SectionHeader title="Connection" />
+              <Input
+                value={url}
+                onChangeText={setUrl}
+                placeholder="Relay URL"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isPublishing}
+              />
+              <Input
+                value={path}
+                onChangeText={setPath}
+                placeholder="Broadcast path (e.g. live/test)"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isPublishing && !screenBroadcasting}
+              />
+              <View style={styles.connectRow}>
+                <StateIndicator state={session.state} />
+                <Button
+                  title={canConnect ? 'Connect' : 'Disconnect'}
+                  icon={canConnect ? 'link' : 'link-off'}
+                  variant={canConnect ? 'filled' : 'tonal'}
+                  destructive={!canConnect}
+                  disabled={isPublishing || screenBroadcasting}
+                  onPress={
+                    canConnect ? () => session.connect() : session.disconnect
                   }
-                }
-                if (micEnabled) tracks.push(microphone);
-                if (ttsEnabled) tracks.push(ttsAudio);
-                if (customVideoEnabled) tracks.push(customVideo);
-                publisher.publish({ path, tracks });
-              }
-            }}
-            disabled={!isPublishing && !canPublish}
-          />
-        </View>
-        {publisher.lastError && <ErrorText text={publisher.lastError} />}
-        {Object.entries(publisher.trackStates).map(([name, state]) => (
-          <StatusRow key={name} label={name} value={state} />
-        ))}
-        {!dualCamera && camera.lastError && (
-          <ErrorText text={`Camera: ${camera.lastError}`} />
-        )}
-        {dualCamera && multiCamera.lastError && (
-          <ErrorText text={`Dual camera: ${multiCamera.lastError}`} />
-        )}
-        {microphone.lastError && (
-          <ErrorText text={`Mic: ${microphone.lastError}`} />
-        )}
-      </Card>
+                />
+              </View>
+            </Card>
 
-      <Card>
-        <SectionHeader title="Capture" />
-        <View style={styles.previewRow}>
-          {!cameraEnabled ? (
-            <View
-              style={[styles.preview, { backgroundColor: colors.fill }]}
-              accessibilityLabel="Camera off"
-            >
-              <View style={styles.previewOff}>
-                <MaterialIcons
-                  name="videocam-off"
-                  size={32}
-                  color={colors.tertiaryLabel}
+            <Card>
+              <SectionHeader title="Broadcast" />
+              <View style={styles.connectRow}>
+                <StateIndicator state={publisher.state} />
+                <Button
+                  title={
+                    isPublishing
+                      ? publisher.state === 'connecting'
+                        ? 'Starting…'
+                        : 'Stop'
+                      : 'Go live'
+                  }
+                  icon={isPublishing ? 'stop' : 'sensors'}
+                  destructive={isPublishing}
+                  onPress={() => {
+                    if (isPublishing) {
+                      publisher.stop();
+                    } else if (canPublish) {
+                      const tracks: PublishTrack[] = [];
+                      if (cameraEnabled) {
+                        if (dualCamera) {
+                          tracks.push(multiCamera.front, multiCamera.back);
+                        } else {
+                          tracks.push(camera);
+                        }
+                      }
+                      if (micEnabled) tracks.push(microphone);
+                      if (ttsEnabled) tracks.push(ttsAudio);
+                      if (customVideoEnabled) tracks.push(customVideo);
+                      publisher.publish({ path, tracks });
+                    }
+                  }}
+                  disabled={!isPublishing && !canPublish}
                 />
               </View>
-            </View>
-          ) : dualCamera ? (
-            <>
-              <View style={styles.preview}>
-                <PublisherView
-                  style={StyleSheet.absoluteFill}
-                  camera={multiCamera.front}
-                />
-                <PreviewBadge label="FRONT" />
-              </View>
-              <View style={styles.preview}>
-                <PublisherView
-                  style={StyleSheet.absoluteFill}
-                  camera={multiCamera.back}
-                />
-                <PreviewBadge label="BACK" />
-              </View>
-            </>
-          ) : (
-            <View style={styles.preview}>
-              <PublisherView style={StyleSheet.absoluteFill} camera={camera} />
-            </View>
-          )}
-          <View style={styles.previewSide}>
-            {cameraEnabled && (
-              <>
-                <Pill text={videoCodec === 'h265' ? 'H.265' : 'H.264'} />
-                <Pill text={RESOLUTIONS[videoResolution].label} />
-                <Pill text={`${frameRate} fps`} />
-              </>
-            )}
-            {micEnabled && (
-              <Pill
-                text={`${audioCodec === 'opus' ? 'Opus' : 'AAC'} · ${
-                  audioSampleRate === 44100 ? '44.1' : '48'
-                } kHz`}
-              />
-            )}
-          </View>
-        </View>
-        <View style={styles.captureControls}>
-          <CaptureToggle
-            icon={cameraEnabled ? 'videocam' : 'videocam-off'}
-            label="Camera"
-            active={cameraEnabled}
-            disabled={isPublishing}
-            onPress={() => setCameraEnabled((on) => !on)}
-          />
-          <CaptureToggle
-            icon={micEnabled ? 'mic' : 'mic-off'}
-            label="Mic"
-            active={micEnabled}
-            disabled={isPublishing}
-            onPress={() => setMicEnabled((on) => !on)}
-          />
-          {multiSupported && (
-            <CaptureToggle
-              icon="splitscreen"
-              label="Dual"
-              active={dualCamera}
-              disabled={isPublishing || !cameraEnabled}
-              onPress={() => setDualCamera((on) => !on)}
-            />
-          )}
-          <CaptureToggle
-            icon="cameraswitch"
-            label="Flip"
-            disabled={!cameraEnabled || dualCamera}
-            onPress={camera.flip}
-          />
-        </View>
-      </Card>
-
-      {!isPublishing && (
-        <Card>
-          <SectionHeader title="Encoder" />
-          <ParamRow label="Video codec">
-            <Segmented
-              compact
-              value={videoCodec}
-              options={[
-                {
-                  value: 'h264',
-                  label: 'H.264',
-                  disabled: !SUPPORTED_VIDEO.includes('h264'),
-                },
-                {
-                  value: 'h265',
-                  label: 'H.265',
-                  disabled: !SUPPORTED_VIDEO.includes('h265'),
-                },
-              ]}
-              onChange={setVideoCodec}
-            />
-          </ParamRow>
-          <ParamRow label="Resolution">
-            <Segmented
-              compact
-              value={videoResolution}
-              options={(Object.keys(RESOLUTIONS) as VideoResolution[]).map(
-                (r) => ({ value: r, label: `${RESOLUTIONS[r].width}p` })
+              {publisher.lastError && <ErrorText text={publisher.lastError} />}
+              {Object.entries(publisher.trackStates).map(([name, state]) => (
+                <StatusRow key={name} label={name} value={state} />
+              ))}
+              {!dualCamera && camera.lastError && (
+                <ErrorText text={`Camera: ${camera.lastError}`} />
               )}
-              onChange={setVideoResolution}
-            />
-          </ParamRow>
-          <ParamRow label="Frame rate">
-            <Segmented
-              compact
-              value={frameRate}
-              options={FRAME_RATES.map((r) => ({
-                value: r,
-                label: String(r),
-              }))}
-              onChange={setFrameRate}
-            />
-          </ParamRow>
-          <ParamRow label="Audio codec">
-            <Segmented
-              compact
-              value={audioCodec}
-              options={[
-                {
-                  value: 'opus',
-                  label: 'Opus',
-                  disabled: !SUPPORTED_AUDIO.includes('opus'),
-                },
-                {
-                  value: 'aac',
-                  label: 'AAC',
-                  disabled: !SUPPORTED_AUDIO.includes('aac'),
-                },
-              ]}
-              onChange={setAudioCodec}
-            />
-          </ParamRow>
-          <ParamRow label="Sample rate">
-            <Segmented
-              compact
-              value={audioSampleRate}
-              options={SAMPLE_RATES.map((r) => ({
-                value: r,
-                label: r === 44100 ? '44.1 kHz' : '48 kHz',
-              }))}
-              onChange={setAudioSampleRate}
-              disabled={audioCodec === 'opus'}
-            />
-          </ParamRow>
-        </Card>
-      )}
+              {dualCamera && multiCamera.lastError && (
+                <ErrorText text={`Dual camera: ${multiCamera.lastError}`} />
+              )}
+              {microphone.lastError && (
+                <ErrorText text={`Mic: ${microphone.lastError}`} />
+              )}
+            </Card>
 
-      <SourceCard
-        title="Text to speech"
-        control={
-          <IconButton
-            icon="record-voice-over"
-            variant={ttsEnabled ? 'filled' : 'tonal'}
-            accessibilityLabel="Text to speech"
-            disabled={isPublishing}
-            onPress={() => setTtsEnabled((on) => !on)}
-          />
+            <Card>
+              <SectionHeader title="Capture" />
+              <View style={styles.previewRow}>
+                {!cameraEnabled ? (
+                  <View
+                    style={[styles.preview, { backgroundColor: colors.fill }]}
+                    accessibilityLabel="Camera off"
+                  >
+                    <View style={styles.previewOff}>
+                      <MaterialIcons
+                        name="videocam-off"
+                        size={32}
+                        color={colors.tertiaryLabel}
+                      />
+                    </View>
+                  </View>
+                ) : dualCamera ? (
+                  <>
+                    <View style={styles.preview}>
+                      <PublisherView
+                        style={StyleSheet.absoluteFill}
+                        camera={multiCamera.front}
+                      />
+                      <PreviewBadge label="FRONT" />
+                    </View>
+                    <View style={styles.preview}>
+                      <PublisherView
+                        style={StyleSheet.absoluteFill}
+                        camera={multiCamera.back}
+                      />
+                      <PreviewBadge label="BACK" />
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.preview}>
+                    <PublisherView
+                      style={StyleSheet.absoluteFill}
+                      camera={camera}
+                    />
+                  </View>
+                )}
+                <View style={styles.previewSide}>
+                  {cameraEnabled && (
+                    <>
+                      <Pill text={videoCodec === 'h265' ? 'H.265' : 'H.264'} />
+                      <Pill text={RESOLUTIONS[videoResolution].label} />
+                      <Pill text={`${frameRate} fps`} />
+                    </>
+                  )}
+                  {micEnabled && (
+                    <Pill
+                      text={`${audioCodec === 'opus' ? 'Opus' : 'AAC'} · ${
+                        audioSampleRate === 44100 ? '44.1' : '48'
+                      } kHz`}
+                    />
+                  )}
+                </View>
+              </View>
+              <View style={styles.captureControls}>
+                <CaptureToggle
+                  icon={cameraEnabled ? 'videocam' : 'videocam-off'}
+                  label="Camera"
+                  active={cameraEnabled}
+                  disabled={isPublishing}
+                  onPress={() => setCameraEnabled((on) => !on)}
+                />
+                <CaptureToggle
+                  icon={micEnabled ? 'mic' : 'mic-off'}
+                  label="Mic"
+                  active={micEnabled}
+                  disabled={isPublishing}
+                  onPress={() => setMicEnabled((on) => !on)}
+                />
+                {multiSupported && (
+                  <CaptureToggle
+                    icon="splitscreen"
+                    label="Dual"
+                    active={dualCamera}
+                    disabled={isPublishing || !cameraEnabled}
+                    onPress={() => setDualCamera((on) => !on)}
+                  />
+                )}
+                <CaptureToggle
+                  icon="cameraswitch"
+                  label="Flip"
+                  disabled={!cameraEnabled || dualCamera}
+                  onPress={camera.flip}
+                />
+              </View>
+            </Card>
+          </>
         }
-      >
-        {ttsEnabled && (
-          <TtsAudioSection
-            audioSource={ttsAudio}
-            enabled={ttsEnabled}
-            publishing={isPublishing}
-            trackState={publisher.trackStates.tts}
-          />
-        )}
-      </SourceCard>
+        right={
+          <>
+            {!isPublishing && (
+              <Card>
+                <SectionHeader title="Encoder" />
+                <ParamRow label="Video codec">
+                  <Segmented
+                    compact
+                    value={videoCodec}
+                    options={[
+                      {
+                        value: 'h264',
+                        label: 'H.264',
+                        disabled: !SUPPORTED_VIDEO.includes('h264'),
+                      },
+                      {
+                        value: 'h265',
+                        label: 'H.265',
+                        disabled: !SUPPORTED_VIDEO.includes('h265'),
+                      },
+                    ]}
+                    onChange={setVideoCodec}
+                  />
+                </ParamRow>
+                <ParamRow label="Resolution">
+                  <Segmented
+                    compact
+                    value={videoResolution}
+                    options={(
+                      Object.keys(RESOLUTIONS) as VideoResolution[]
+                    ).map((r) => ({
+                      value: r,
+                      label: `${RESOLUTIONS[r].width}p`,
+                    }))}
+                    onChange={setVideoResolution}
+                  />
+                </ParamRow>
+                <ParamRow label="Frame rate">
+                  <Segmented
+                    compact
+                    value={frameRate}
+                    options={FRAME_RATES.map((r) => ({
+                      value: r,
+                      label: String(r),
+                    }))}
+                    onChange={setFrameRate}
+                  />
+                </ParamRow>
+                <ParamRow label="Audio codec">
+                  <Segmented
+                    compact
+                    value={audioCodec}
+                    options={[
+                      {
+                        value: 'opus',
+                        label: 'Opus',
+                        disabled: !SUPPORTED_AUDIO.includes('opus'),
+                      },
+                      {
+                        value: 'aac',
+                        label: 'AAC',
+                        disabled: !SUPPORTED_AUDIO.includes('aac'),
+                      },
+                    ]}
+                    onChange={setAudioCodec}
+                  />
+                </ParamRow>
+                <ParamRow label="Sample rate">
+                  <Segmented
+                    compact
+                    value={audioSampleRate}
+                    options={SAMPLE_RATES.map((r) => ({
+                      value: r,
+                      label: r === 44100 ? '44.1 kHz' : '48 kHz',
+                    }))}
+                    onChange={setAudioSampleRate}
+                    disabled={audioCodec === 'opus'}
+                  />
+                </ParamRow>
+              </Card>
+            )}
 
-      <SourceCard
-        title="Test video pattern"
-        control={
-          <IconButton
-            icon="texture"
-            variant={customVideoEnabled ? 'filled' : 'tonal'}
-            accessibilityLabel="Test video pattern"
-            disabled={isPublishing}
-            onPress={() => setCustomVideoEnabled((on) => !on)}
-          />
-        }
-      >
-        {customVideoEnabled && (
-          <CustomVideoSection
-            videoSource={customVideo}
-            enabled={customVideoEnabled}
-            publishing={isPublishing}
-            trackState={publisher.trackStates.custom}
-            sourceHeight={RESOLUTIONS[videoResolution].height}
-          />
-        )}
-      </SourceCard>
-
-      <SourceCard
-        title="Screen share"
-        control={
-          Platform.OS === 'ios' ? (
-            // On iOS the system picker itself must be the tap target; dress it
-            // up as one of the circular toggles.
-            <View
-              style={[
-                styles.pickerCircle,
-                {
-                  backgroundColor: screenBroadcasting
-                    ? colors.tint
-                    : colors.fill,
-                },
-              ]}
+            <SourceCard
+              title="Text to speech"
+              control={
+                <IconButton
+                  icon="record-voice-over"
+                  variant={ttsEnabled ? 'filled' : 'tonal'}
+                  accessibilityLabel="Text to speech"
+                  disabled={isPublishing}
+                  onPress={() => setTtsEnabled((on) => !on)}
+                />
+              }
             >
-              <BroadcastPickerView
-                preferredExtension={SCREEN_PREFERRED_EXT}
-                tintColor={
-                  screenBroadcasting ? '#ffffff' : dark ? '#0A84FF' : '#007AFF'
-                }
-                style={styles.broadcastPicker}
-              />
-            </View>
-          ) : (
-            <IconButton
-              icon={screenEnabled ? 'screen-share' : 'stop-screen-share'}
-              variant={screenEnabled ? 'filled' : 'tonal'}
-              accessibilityLabel="Screen share"
-              onPress={() => onToggleScreen(!screenEnabled)}
-            />
-          )
+              {ttsEnabled && (
+                <TtsAudioSection
+                  audioSource={ttsAudio}
+                  enabled={ttsEnabled}
+                  publishing={isPublishing}
+                  trackState={publisher.trackStates.tts}
+                />
+              )}
+            </SourceCard>
+
+            <SourceCard
+              title="Test video pattern"
+              control={
+                <IconButton
+                  icon="texture"
+                  variant={customVideoEnabled ? 'filled' : 'tonal'}
+                  accessibilityLabel="Test video pattern"
+                  disabled={isPublishing}
+                  onPress={() => setCustomVideoEnabled((on) => !on)}
+                />
+              }
+            >
+              {customVideoEnabled && (
+                <CustomVideoSection
+                  videoSource={customVideo}
+                  enabled={customVideoEnabled}
+                  publishing={isPublishing}
+                  trackState={publisher.trackStates.custom}
+                  sourceHeight={RESOLUTIONS[videoResolution].height}
+                />
+              )}
+            </SourceCard>
+
+            <SourceCard
+              title="Screen share"
+              control={
+                Platform.OS === 'ios' ? (
+                  // On iOS the system picker itself must be the tap target; dress it
+                  // up as one of the circular toggles.
+                  <View
+                    style={[
+                      styles.pickerCircle,
+                      {
+                        backgroundColor: screenBroadcasting
+                          ? colors.tint
+                          : colors.fill,
+                      },
+                    ]}
+                  >
+                    <BroadcastPickerView
+                      preferredExtension={SCREEN_PREFERRED_EXT}
+                      tintColor={
+                        screenBroadcasting
+                          ? '#ffffff'
+                          : dark
+                            ? '#0A84FF'
+                            : '#007AFF'
+                      }
+                      style={styles.broadcastPicker}
+                    />
+                  </View>
+                ) : (
+                  <IconButton
+                    icon={screenEnabled ? 'screen-share' : 'stop-screen-share'}
+                    variant={screenEnabled ? 'filled' : 'tonal'}
+                    accessibilityLabel="Screen share"
+                    onPress={() => onToggleScreen(!screenEnabled)}
+                  />
+                )
+              }
+            >
+              <View style={styles.connectRow}>
+                {/* The full message renders below, so the state chip stays short. */}
+                <StateIndicator
+                  state={
+                    screen.state.startsWith('error:') ? 'error' : screen.state
+                  }
+                />
+                <Text
+                  style={[styles.statusValue, { color: colors.secondaryLabel }]}
+                  numberOfLines={1}
+                >
+                  {screenPath}
+                </Text>
+              </View>
+              {screen.lastError && <ErrorText text={screen.lastError} />}
+            </SourceCard>
+          </>
         }
-      >
-        <View style={styles.connectRow}>
-          {/* The full message renders below, so the state chip stays short. */}
-          <StateIndicator
-            state={screen.state.startsWith('error:') ? 'error' : screen.state}
-          />
-          <Text
-            style={[styles.statusValue, { color: colors.secondaryLabel }]}
-            numberOfLines={1}
-          >
-            {screenPath}
-          </Text>
-        </View>
-        {screen.lastError && <ErrorText text={screen.lastError} />}
-      </SourceCard>
+      />
     </ScrollView>
   );
 }
@@ -670,7 +694,14 @@ function PreviewBadge({ label }: { label: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 16, gap: 12 },
+  container: {
+    flexGrow: 1,
+    padding: 16,
+    gap: 12,
+    width: '100%',
+    maxWidth: 1080,
+    alignSelf: 'center',
+  },
   connectRow: {
     flexDirection: 'row',
     alignItems: 'center',
