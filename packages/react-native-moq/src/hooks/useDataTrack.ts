@@ -1,24 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import NativeMoQDataTrack from '../native/NativeMoQDataTrack';
+import { createDataTrackWithId, mintDataTrackId } from '../dataTrack';
+import type { DataTrack, DataTrackOptions } from '../dataTrack';
 
-// Unique id per instance so the native emitter registry can address it
-// independently of the track name (two tracks may share the default "data").
-let nextDataTrackId = 0;
-
-export interface DataTrackOptions {
-  // Track name in the broadcast catalog. Defaults to "data".
-  name?: string;
-}
-
-export interface DataTrack {
-  // Internal discriminator: usePublisher routes to addDataTrack.
-  readonly __type: 'data';
-  readonly __name: string;
-  readonly __id: string;
-  // Sends one UTF-8 string payload on the track. No-op until the owning
-  // publisher has published and started; delivered in call order.
-  send(payload: string): void;
-}
+export type { DataTrack, DataTrackOptions } from '../dataTrack';
 
 /**
  * A publishable data track — the data counterpart of useCamera / useMicrophone.
@@ -29,11 +14,11 @@ export interface DataTrack {
  */
 export function useDataTrack(options: DataTrackOptions = {}): DataTrack {
   const name = options.name ?? 'data';
-  const [id] = useState(() => `data-${nextDataTrackId++}`);
+  const [id] = useState(() => mintDataTrackId());
 
   useEffect(() => {
-    NativeMoQDataTrack.create(id);
-    return () => NativeMoQDataTrack.destroy(id);
+    const track = createDataTrackWithId(id);
+    return () => track.destroy();
   }, [id]);
 
   const send = useCallback(

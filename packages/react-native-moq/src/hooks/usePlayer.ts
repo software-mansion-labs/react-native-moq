@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { NativeEventEmitter } from 'react-native';
 import { EventEmitter } from '../EventEmitter';
-import NativeMoQ from '../native/NativeMoQ';
+import { attachPlayerEvents } from '../player';
 import type { PlaybackStats, Player, PlayerEvents } from '../types';
 import { PlayerHandle } from '../types';
-
-const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
 // Shared event-subscription and state logic for useVideoPlayer and useAudioPlayer.
 export function usePlayer(player: PlayerHandle): Player {
@@ -25,86 +22,34 @@ export function usePlayer(player: PlayerHandle): Player {
   playerRef.current = player;
 
   const emitterRef = useRef(new EventEmitter<PlayerEvents>());
-  const lastPlayingChangeRef = useRef<{ isPlaying: boolean } | null>(null);
 
   const { sessionId, broadcastPath } = player;
 
+  // Keyed on player identity: re-subscribe (and reset the playingChange dedup
+  // inside attachPlayerEvents) only when (sessionId, broadcastPath) changes.
   useEffect(() => {
-    // Reset dedup state when the player identity changes.
-    lastPlayingChangeRef.current = null;
-
     const emitter = emitterRef.current;
-
-    const emitPlayingChange = (next: { isPlaying: boolean }) => {
-      const last = lastPlayingChangeRef.current;
-      if (last?.isPlaying === next.isPlaying) return;
-      lastPlayingChangeRef.current = next;
-      emitter.emit('playingChange', next);
-    };
-
-    const subs = [
-      moqEmitter.addListener('playerEvent', (event) => {
-        const e = event as {
-          sessionId: string;
-          broadcastPath: string;
-          type: string;
-          trackKind?: string;
-          trackName?: string;
-        };
-        if (
-          e.sessionId !== playerRef.current.sessionId ||
-          e.broadcastPath !== playerRef.current.broadcastPath
-        )
-          return;
-        if (e.type === 'trackPlaying') {
-          setIsPlaying(true);
-          emitPlayingChange({ isPlaying: true });
-        } else if (e.type === 'trackPaused') {
-          setIsPlaying(false);
-          emitPlayingChange({ isPlaying: false });
-        } else if (e.type === 'allTracksStopped') {
-          setIsPlaying(false);
-          setPlaybackStats(null);
-          setCurrentVideoTrackName(undefined);
-          setCurrentAudioTrackName(undefined);
-          emitPlayingChange({ isPlaying: false });
-          emitter.emit('trackStopped', {});
-        } else if (e.type === 'trackSwitched') {
-          if (e.trackKind === 'video' && e.trackName !== undefined) {
-            setCurrentVideoTrackName(e.trackName);
-            emitter.emit('trackSwitched', {
-              trackKind: 'video',
-              trackName: e.trackName,
-            });
-          } else if (e.trackKind === 'audio' && e.trackName !== undefined) {
-            setCurrentAudioTrackName(e.trackName);
-            emitter.emit('trackSwitched', {
-              trackKind: 'audio',
-              trackName: e.trackName,
-            });
-          }
-        }
-      }),
-
-      moqEmitter.addListener('playbackStatsUpdated', (event) => {
-        const e = event as PlaybackStats & {
-          sessionId: string;
-          broadcastPath: string;
-        };
-        if (
-          e.sessionId !== playerRef.current.sessionId ||
-          e.broadcastPath !== playerRef.current.broadcastPath
-        )
-          return;
-        setPlaybackStats(e);
-        emitter.emit('statsUpdate', e);
-      }),
-    ];
-
-    return () => {
-      subs.forEach((s) => s.remove());
-    };
-    // Keyed on player identity: re-subscribe only when (sessionId, broadcastPath) changes.
+    return attachPlayerEvents(sessionId, broadcastPath, {
+      playingChange(next) {
+        setIsPlaying(next);
+        emitter.emit('playingChange', { isPlaying: next });
+      },
+      trackStopped() {
+        setPlaybackStats(null);
+        setCurrentVideoTrackName(undefined);
+        setCurrentAudioTrackName(undefined);
+        emitter.emit('trackStopped', {});
+      },
+      trackSwitched(trackKind, trackName) {
+        if (trackKind === 'video') setCurrentVideoTrackName(trackName);
+        else setCurrentAudioTrackName(trackName);
+        emitter.emit('trackSwitched', { trackKind, trackName });
+      },
+      statsUpdate(stats) {
+        setPlaybackStats(stats);
+        emitter.emit('statsUpdate', stats);
+      },
+    });
   }, [sessionId, broadcastPath]);
 
   const play = useCallback(() => {

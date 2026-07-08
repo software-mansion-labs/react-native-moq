@@ -1,5 +1,5 @@
 import { requireNativeComponent, type ViewProps } from 'react-native';
-import type { CameraTrack } from '../hooks/useCamera';
+import type { CameraTrack } from '../camera';
 
 interface NativePublisherViewProps extends ViewProps {}
 

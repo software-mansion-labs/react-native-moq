@@ -32,6 +32,7 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
   - [Screen broadcasting](#screen-broadcasting)
   - [Publisher events](#publisher-events)
   - [Types](#types-1)
+- [Using without React (imperative API)](#using-without-react-imperative-api)
 - [Advanced usage](#advanced-usage)
   - [Quality / rendition switching](#quality--rendition-switching)
   - [Custom target latency](#custom-target-latency)
@@ -51,6 +52,7 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
 A few rules hold across the whole API. They're stated once here instead of repeated on every hook:
 
 - **Mount lifecycle.** Hooks that own a native resource (`useCamera`, `useMicrophone`, `useMultiCamera`, `useDataTrack`, `useBroadcasts`, `useAudioChunks`, `useVideoPlayer`, `useAudioPlayer`) start their work on mount and tear it down on unmount.
+- **Hooks are optional.** Every hook wraps an imperative core you can call from plain JS — see [Using without React](#using-without-react-imperative-api).
 - **`setup` callbacks** run once, on mount. They're where you kick things off (`connect()`, `play()`, latency config).
 - **Refcounted singletons.** Capture hooks share one native instance across all consumers — two `useCamera` calls drive the same physical camera, and `flip()` on one is visible to all. Subscriptions to the same track are ref-counted too, so subscribing more than once is safe.
 - **`state` strings.** Every `state` field is a string union that includes an `` `error:${string}` `` variant carrying the message inline. Objects that also expose `lastError` surface that same message separately.
@@ -102,6 +104,8 @@ Returns a `Session`:
 
 **Multiple sessions.** Each `useSession` call is independent — subscribe to one relay while publishing to another, or open two logical sessions against the same URL. Pass the right `Session` into `useBroadcasts` / `usePublisher`; the library keys all native state by `session.id`.
 
+Hook-free: [`createSession(url)`](#using-without-react-imperative-api).
+
 ---
 
 ### `useBroadcasts(session, prefix?)`
@@ -123,6 +127,8 @@ function CamerasGrid({ session }) {
 ```
 
 To react to broadcasts appearing/disappearing, diff the returned array between renders (e.g. compare path sets in a `useEffect`).
+
+Hook-free: [`subscribeBroadcasts(session, prefix, onChange, options?)`](#using-without-react-imperative-api).
 
 ---
 
@@ -157,6 +163,8 @@ Returns a `Player`:
 | `switchVideoTrack(name)` | `(name: string) => void` | Switch video rendition |
 | `switchAudioTrack(name)` | `(name: string) => void` | Switch audio track |
 | `setVolume(volume)` | `(volume: number) => void` | Set output volume; clamped to `0..1` |
+
+Hook-free: [`createVideoPlayer(broadcast)`](#using-without-react-imperative-api).
 
 ---
 
@@ -194,6 +202,8 @@ return (
 Returns an [`AudioPlayer`](#audioplayer) — the `Player` shape minus the video-only members (`currentVideoTrackName`, `switchVideoTrack`). Its `broadcastPath` carries an `_audio` suffix, and `playbackStats` populates only audio fields. The same `PlayerEvents` apply; `trackSwitched` only fires with `trackKind: 'audio'`.
 
 Passing an `AudioPlayer` to `<VideoView>` / `<VideoPlayerView>` is a type error — audio-only mode has no video output by design.
+
+Hook-free: [`createAudioPlayer(broadcast)`](#using-without-react-imperative-api) — its `destroy()` also releases the native audio-only player.
 
 ---
 
@@ -605,6 +615,8 @@ Returns a `CameraTrack`:
 
 Pass it into `publisher.publish({ tracks: [camera, …] })` to broadcast it, and into `<PublisherView camera={camera} />` for the on-screen preview.
 
+Hook-free: [`createCamera(options?)`](#using-without-react-imperative-api).
+
 ---
 
 ### `useMultiCamera(options?)`
@@ -636,6 +648,8 @@ Returns a `MultiCameraTrack`:
 
 > **Dual encoder support.** Publishing two cameras runs two hardware encoders at once. Two H.264 encoders run on a wide range of devices; two **H.265** encoders are far more limited — on many devices the second HEVC encoder silently produces no frames, so only one track reaches the broadcast. Prefer `videoCodec: 'h264'` for dual-camera publishing unless you've verified H.265 on your target hardware.
 
+Hook-free: [`createMultiCamera(options?)`](#using-without-react-imperative-api).
+
 #### `isMultiCameraSupported()`
 
 ```ts
@@ -661,6 +675,8 @@ Returns a `MicrophoneTrack`:
 | `state` | `MicrophoneCaptureState` | `'idle' \| 'starting' \| 'active' \| `error:${string}`` |
 | `lastError` | `string \| null` | Last capture error, or `null` |
 | `encoder` | `AudioEncoderOptions` | `{ codec, sampleRate }` — snapshotted by `publish()` |
+
+Hook-free: [`createMicrophone(options?)`](#using-without-react-imperative-api).
 
 ---
 
@@ -697,6 +713,8 @@ Returns a `Publisher`:
 **`PublisherState`** — `'idle'` · `'connecting'` · `'publishing'` · `'stopped'` · `` `error:${string}` ``
 
 **`PublishedTrackState`** — `'idle'` · `'starting'` · `'active'` · `'stopped'`
+
+Hook-free: [`createPublisher(session)`](#using-without-react-imperative-api).
 
 ---
 
@@ -779,6 +797,8 @@ interface DataTrackOptions {
 
 > Payloads are UTF-8 strings; for binary data, encode it (e.g. base64) before `send()`.
 
+Hook-free: [`createDataTrack(options?)`](#using-without-react-imperative-api).
+
 ---
 
 ### `useAudioSource(options?)`
@@ -828,6 +848,8 @@ interface AudioSourceOptions {
 ```
 
 > `sampleRate` / `channels` are fixed for the source's lifetime — change them by remounting the hook (e.g. with a `key` prop). Push PCM at that same rate; resample first if your generator (e.g. a 24 kHz TTS model) produces another rate.
+
+Hook-free: [`createAudioSource(options?)`](#using-without-react-imperative-api).
 
 The example app's **Publish** tab wires this to on-device text-to-speech: [`example/src/components/TtsAudioSection.tsx`](../example/src/components/TtsAudioSection.tsx) runs Kokoro via [react-native-executorch](https://github.com/software-mansion/react-native-executorch), resamples its 24 kHz output to 48 kHz, and streams it into the broadcast.
 
@@ -892,6 +914,8 @@ interface VideoSourceOptions {
 
 > `width` / `height` / `poolSize` are fixed for the source's lifetime — change them by remounting the hook (e.g. with a `key` prop).
 
+Hook-free: [`createVideoSource(options)`](#using-without-react-imperative-api) — it adds a `ready` promise that resolves once `buffers` is populated.
+
 No GPU renderer handy? `fillTestPattern(bufferIndex, frameIndex)` CPU-fills a slot with an animated pattern so you can exercise the pipeline. The example app's **Publish** tab uses it: [`example/src/components/CustomVideoSection.tsx`](../example/src/components/CustomVideoSection.tsx) calls `fillTestPattern` then `pushFrame` each tick, driving the whole pool → encode → publish path.
 
 ---
@@ -930,6 +954,8 @@ Returns a `ScreenBroadcast`:
 | `stop()` | `() => void` | Stop the active screen broadcast |
 
 **`ScreenBroadcastState`** — `'idle'` · `'connecting'` · `'broadcasting'` · `'stopped'` · `` `error:${string}` ``
+
+Hook-free: [`createScreenBroadcast(session, options)`](#using-without-react-imperative-api) — configuration is applied once at creation.
 
 #### iOS
 
@@ -1023,6 +1049,82 @@ interface ScreenBroadcastOptions {
   audioCodec?: AudioCodec;
   audioSampleRate?: number;
 }
+```
+
+## Using without React (imperative API)
+
+Every hook has a hook-free counterpart for code that can't follow the rules of hooks — background services, other SDKs, plain JS. In components, prefer the hooks: they tie teardown to unmount, while a factory makes the lifecycle yours — forget `destroy()` and the native resource leaks. Each factory takes the same options as its hook and returns the same object shape plus `destroy()`:
+
+| Hook | Imperative counterpart | Returns |
+|---|---|---|
+| `useSession(url)` | `createSession(url)` | `SessionHandle` |
+| `useBroadcasts(session, prefix?)` | `subscribeBroadcasts(session, prefix, onChange, options?)` | `BroadcastSubscription` |
+| `useVideoPlayer(broadcast)` | `createVideoPlayer(broadcast)` | `VideoPlayerHandle` |
+| `useAudioPlayer(broadcast)` | `createAudioPlayer(broadcast)` | `AudioPlayerHandle` |
+| `useAudioChunks(broadcast, onChunk, options?)` | [`subscribeAudioChunks(broadcast, trackName, onChunk, options?)`](#subscribeaudiochunksbroadcast-trackname-onchunk-options) | `ChunkSubscription` |
+| `usePublisher(session)` | `createPublisher(session)` | `PublisherHandle` |
+| `useCamera(options?)` | `createCamera(options?)` | `CameraHandle` |
+| `useMultiCamera(options?)` | `createMultiCamera(options?)` | `MultiCameraHandle` |
+| `useMicrophone(options?)` | `createMicrophone(options?)` | `MicrophoneHandle` |
+| `useDataTrack(options?)` | `createDataTrack(options?)` | `DataTrackHandle` |
+| `useAudioSource(options?)` | `createAudioSource(options?)` | `AudioSourceHandle` |
+| `useVideoSource(options)` | `createVideoSource(options)` | `VideoSourceHandle` |
+| `useScreenBroadcast(session, options)` | `createScreenBroadcast(session, options)` | `ScreenBroadcastHandle` |
+
+Semantics, relative to the hooks:
+
+- **Lifecycle is yours.** What a hook does on mount happens at `create*()`; what it does on unmount happens at `destroy()`. Nothing is torn down for you.
+- **Live getters instead of re-renders.** `state`, `lastError`, `trackStates`, `isPlaying`, `buffers`, … always read current. Observe changes via `addListener` — capture handles add a `stateChange` event mirroring `{ state, lastError }`; session/publisher/player handles have the same events as their hooks.
+- **Handles are drop-in values.** Pass source handles to `publisher.publish({ tracks })`, `multiCamera.front` to `<PublisherView>`, player handles to `<VideoView>` — anywhere the hook value is accepted.
+- **No `enabled` option.** `createCamera` / `createMultiCamera` always start capture; toggle by destroying and re-creating.
+- `sessionHandle.url` is read at `connect()` time, so it can be reassigned before a reconnect.
+- `subscribeBroadcasts` waits for the session to connect and re-subscribes on reconnect, like the hook. `onChange` gets the full list on every change (`[]` on disconnect); `start()`/`stop()` behave like [`ChunkSubscription`](#chunksubscription)'s.
+- `videoSourceHandle.ready` resolves with the pool descriptors once native allocation completes; `buffers` is `[]` until then.
+- `createVideoPlayer(...).destroy()` only detaches listeners (the underlying player belongs to the broadcast; call `stop()` first if you want playback stopped). `createAudioPlayer(...).destroy()` also releases the native audio-only player it created.
+- If a broadcast disappears and re-announces, its native player is replaced — create a new player from the fresh `BroadcastInfo`.
+
+Publishing app-supplied audio + video, no React involved:
+
+```ts
+import {
+  createAudioSource,
+  createPublisher,
+  createSession,
+  createVideoSource,
+} from 'react-native-moq';
+
+const session = createSession('http://relay.example.com:4443');
+session.connect();
+
+const audio = createAudioSource({ sampleRate: 48000 });
+const video = createVideoSource({ width: 1280, height: 720 });
+await video.ready; // buffers are now populated
+
+const publisher = createPublisher(session);
+publisher.publish({ path: '/my/broadcast', tracks: [audio, video] });
+
+audio.send(pcm); // Float32Array | Int16Array | ArrayBuffer
+video.pushFrame({ bufferIndex: 0 });
+
+// teardown — reverse order of creation
+publisher.destroy();
+video.destroy();
+audio.destroy();
+session.destroy();
+```
+
+Playback:
+
+```ts
+const session = createSession('http://relay.example.com:4443');
+const watcher = subscribeBroadcasts(session, '', (broadcasts) => {
+  const first = broadcasts[0];
+  if (!first) return;
+  const player = createVideoPlayer(first);
+  player.addListener('statsUpdate', (stats) => console.log(stats));
+  player.play();
+});
+session.connect();
 ```
 
 ## Advanced usage

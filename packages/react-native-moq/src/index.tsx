@@ -1,40 +1,60 @@
 export { VideoView } from './views/VideoView';
 export type { VideoViewProps } from './views/VideoView';
 export { useSession } from './hooks/useSession';
+export { createSession } from './session';
+export type { SessionHandle } from './session';
 export { useBroadcasts } from './hooks/useBroadcasts';
+export { subscribeBroadcasts } from './broadcasts';
+export type {
+  BroadcastSubscription,
+  SubscribeBroadcastsOptions,
+} from './broadcasts';
 export { usePublisher } from './hooks/usePublisher';
+export { createPublisher } from './publisher';
 export type {
   Publisher,
   PublisherEvents,
+  PublisherHandle,
   PublisherState,
   PublishOptions,
   PublishTrack,
   PublishedTrackState,
-} from './hooks/usePublisher';
+} from './publisher';
 export { useDataTrack } from './hooks/useDataTrack';
-export type { DataTrack, DataTrackOptions } from './hooks/useDataTrack';
+export { createDataTrack } from './dataTrack';
+export type { DataTrack, DataTrackHandle, DataTrackOptions } from './dataTrack';
 export { useAudioSource } from './hooks/useAudioSource';
+export { createAudioSource } from './audioSource';
 export type {
+  AudioSourceHandle,
   AudioSourceOptions,
   AudioSourceTrack,
   PcmData,
-} from './hooks/useAudioSource';
+} from './audioSource';
 export { useVideoSource } from './hooks/useVideoSource';
+export { createVideoSource } from './videoSource';
 export type {
-  VideoSourceOptions,
-  VideoSourceTrack,
   PushVideoFrameArgs,
   VideoFrameFence,
-} from './hooks/useVideoSource';
+  VideoSourceHandle,
+  VideoSourceOptions,
+  VideoSourceTrack,
+} from './videoSource';
 export type { CustomVideoBufferDescriptor } from './native/NativeMoQVideoSource';
 export { useScreenBroadcast } from './hooks/useScreenBroadcast';
+export { createScreenBroadcast } from './screenBroadcast';
 export type {
   ScreenBroadcast,
+  ScreenBroadcastEvents,
+  ScreenBroadcastHandle,
   ScreenBroadcastOptions,
   ScreenBroadcastState,
-} from './hooks/useScreenBroadcast';
-export { useCamera, getSupportedVideoCodecs } from './hooks/useCamera';
+} from './screenBroadcast';
+export { useCamera } from './hooks/useCamera';
+export { createCamera, getSupportedVideoCodecs } from './camera';
 export type {
+  CameraEvents,
+  CameraHandle,
   CameraOptions,
   CameraPosition,
   CameraSource,
@@ -42,27 +62,35 @@ export type {
   CameraCaptureState,
   VideoCodec,
   VideoEncoderOptions,
-} from './hooks/useCamera';
-export { useMultiCamera, isMultiCameraSupported } from './hooks/useMultiCamera';
+} from './camera';
+export { useMultiCamera } from './hooks/useMultiCamera';
+export { createMultiCamera, isMultiCameraSupported } from './multiCamera';
 export type {
+  MultiCameraEvents,
+  MultiCameraHandle,
   MultiCameraOptions,
   MultiCameraState,
   MultiCameraTrack,
-} from './hooks/useMultiCamera';
-export { useMicrophone, getSupportedAudioCodecs } from './hooks/useMicrophone';
+} from './multiCamera';
+export { useMicrophone } from './hooks/useMicrophone';
+export { createMicrophone, getSupportedAudioCodecs } from './microphone';
 export type {
   AudioCodec,
   AudioEncoderOptions,
+  MicrophoneEvents,
+  MicrophoneHandle,
   MicrophoneOptions,
   MicrophoneTrack,
   MicrophoneCaptureState,
-} from './hooks/useMicrophone';
+} from './microphone';
 export { PublisherView } from './views/PublisherView';
 export type { PublisherViewProps } from './views/PublisherView';
 export { BroadcastPickerView } from './views/BroadcastPickerView';
 export type { BroadcastPickerViewProps } from './views/BroadcastPickerView';
 export { useVideoPlayer } from './hooks/useVideoPlayer';
 export { useAudioPlayer } from './hooks/useAudioPlayer';
+export { createVideoPlayer, createAudioPlayer } from './player';
+export type { AudioPlayerHandle, VideoPlayerHandle } from './player';
 export { useAudioChunks } from './hooks/useAudioChunks';
 export type { UseAudioChunksOptions } from './hooks/useAudioChunks';
 export { subscribeAudioChunks } from './audioChunks';

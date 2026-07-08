@@ -144,6 +144,7 @@ The full API reference — every hook, component, type, and the `react-native-mo
 
 - [Playback API](docs/API.md#playback-api) — `useSession`, `useBroadcasts`, `useVideoPlayer`, `useAudioPlayer`, `useAudioChunks`, events, `<VideoView>`, types
 - [Publishing](docs/API.md#publishing) — `useCamera`, `useMultiCamera`, `useMicrophone`, `usePublisher`, `<PublisherView>`, `useDataTrack`, `useAudioSource`, screen broadcasting
+- [Using without React](docs/API.md#using-without-react-imperative-api) — imperative `createSession` / `createPublisher` / `createAudioSource` / … counterparts of every hook
 - [Advanced usage](docs/API.md#advanced-usage) — rendition switching, custom target latency, live stats
 - [Troubleshooting](docs/API.md#troubleshooting) — empty broadcast lists, playback/publish failures, permissions
 - [Default UI components](docs/API.md#default-ui-components-react-native-moq-ui) — `<VideoPlayerView>`, fullscreen, controls, `<VolumeSlider>`

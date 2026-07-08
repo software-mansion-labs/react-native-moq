@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { NativeEventEmitter } from 'react-native';
 import { EventEmitter } from '../EventEmitter';
-import NativeMoQ from '../native/NativeMoQ';
+import {
+  createSessionWithId,
+  mintSessionId,
+  type SessionHandle,
+} from '../session';
 import type { Session, SessionEvents, SessionState } from '../types';
-
-const moqEmitter = new NativeEventEmitter(NativeMoQ);
-
-let nextSessionId = 1;
-function mintSessionId(): string {
-  // Native maps are keyed by this string.
-  return `s${nextSessionId++}`;
-}
 
 export function useSession(
   url: string,
@@ -26,34 +21,32 @@ export function useSession(
   urlRef.current = url;
 
   const emitterRef = useRef(new EventEmitter<SessionEvents>());
+  const handleRef = useRef<SessionHandle | null>(null);
 
   useEffect(() => {
-    const emitter = emitterRef.current;
-    const sub = moqEmitter.addListener('sessionStateChanged', (event) => {
-      const e = event as { sessionId: string; state: string };
-      if (e.sessionId !== id) return;
-      const typedState = e.state as SessionState;
-      setState(typedState);
-      emitter.emit('stateChange', { state: typedState });
-    });
-
+    const handle = createSessionWithId(id, urlRef.current, emitterRef.current);
+    handleRef.current = handle;
+    const sub = emitterRef.current.addListener('stateChange', (e) =>
+      setState(e.state)
+    );
     return () => {
       sub.remove();
-      NativeMoQ.disconnect(id);
+      handleRef.current = null;
+      handle.destroy();
     };
   }, [id]);
 
-  const connect = useCallback(
-    (targetLatencyMs = 200) => {
-      NativeMoQ.connect(id, urlRef.current, targetLatencyMs);
-    },
-    [id]
-  );
+  const connect = useCallback((targetLatencyMs = 200) => {
+    const handle = handleRef.current;
+    if (!handle) return;
+    handle.url = urlRef.current;
+    handle.connect(targetLatencyMs);
+  }, []);
 
   const disconnect = useCallback(() => {
-    NativeMoQ.disconnect(id);
+    handleRef.current?.disconnect();
     setState('idle');
-  }, [id]);
+  }, []);
 
   const addListener = useCallback(
     <TEventName extends keyof SessionEvents>(

@@ -1,61 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NativeEventEmitter } from 'react-native';
 import NativeMoQCamera from '../native/NativeMoQCamera';
+import {
+  cameraEmitter,
+  type CameraCaptureState,
+  type CameraOptions,
+  type CameraPosition,
+  type CameraTrack,
+} from '../camera';
 import { useNativeState } from './useNativeState';
 
-const cameraEmitter = new NativeEventEmitter(NativeMoQCamera);
-
-export type CameraPosition = 'front' | 'back';
-export type VideoCodec = 'h264' | 'h265';
-
-// Which native capture backs a track. 'single' is useCamera's shared camera;
-// 'multi-*' are the two concurrent sources of a useMultiCamera session.
-// usePublisher routes each track to the matching native frame source.
-export type CameraSource = 'single' | 'multi-front' | 'multi-back';
-
-export type CameraCaptureState =
-  | 'idle'
-  | 'starting'
-  | 'active'
-  | `error:${string}`;
-
-export interface VideoEncoderOptions {
-  codec: VideoCodec;
-  width: number;
-  height: number;
-  framerate: number;
-}
-
-export interface CameraOptions {
-  position?: CameraPosition;
-  videoCodec?: VideoCodec;
-  width?: number;
-  height?: number;
-  framerate?: number;
-  // When false the camera isn't started (state stays 'idle'); toggling it
-  // starts/stops the shared capture. Lets an app run the camera conditionally
-  // without conditionally calling the hook.
-  enabled?: boolean;
-}
-
-export interface CameraTrack {
-  // Internal discriminator: usePublisher routes tracks to addVideoTrack.
-  readonly __type: 'camera';
-  // Internal: published track name and the native capture source backing it.
-  readonly __name: string;
-  readonly __source: CameraSource;
-  readonly state: CameraCaptureState;
-  readonly lastError: string | null;
-  readonly position: CameraPosition;
-  // Snapshotted by usePublisher at publish() time.
-  readonly encoder: VideoEncoderOptions;
-  flip(): void;
-  setPosition(position: CameraPosition): void;
-}
-
-export function getSupportedVideoCodecs(): VideoCodec[] {
-  return NativeMoQCamera.getSupportedCodecs() as VideoCodec[];
-}
+export { getSupportedVideoCodecs } from '../camera';
+export type {
+  CameraCaptureState,
+  CameraOptions,
+  CameraPosition,
+  CameraSource,
+  CameraTrack,
+  VideoCodec,
+  VideoEncoderOptions,
+} from '../camera';
 
 // Starts capture on mount, keeps it alive until unmount. The camera is a device
 // singleton: hook instances share one native, ref-counted capture session, and
