@@ -12,6 +12,7 @@ import com.moq.capture.videoCodecFromJs
 import com.moq.datatrack.DataTrackModule
 import com.moq.emitDeviceEvent
 import com.moq.microphone.MicrophoneModule
+import com.moq.videosource.VideoSourceModule
 import com.swmansion.moqkit.publish.PublishedTrack
 import com.swmansion.moqkit.publish.PublishedTrackState
 import com.swmansion.moqkit.publish.Publisher
@@ -114,6 +115,13 @@ class PublisherModule(reactContext: ReactApplicationContext) :
               val source = AudioSourceModule.instance?.source(descriptor.id)
                 ?: error("audio source '${descriptor.id}' not created")
               publishedTracks += pub.addAudioTrack(
+                name = descriptor.name, source = source, config = descriptor.config
+              )
+            }
+            is TrackDescriptor.VideoSource -> {
+              val source = VideoSourceModule.instance?.source(descriptor.id)
+                ?: error("video source '${descriptor.id}' not created")
+              publishedTracks += pub.addVideoTrack(
                 name = descriptor.name, source = source, config = descriptor.config
               )
             }
@@ -247,6 +255,11 @@ class PublisherModule(reactContext: ReactApplicationContext) :
       val id: String,
       val config: AudioEncoderConfig,
     ) : TrackDescriptor
+    data class VideoSource(
+      override val name: String,
+      val id: String,
+      val config: VideoEncoderConfig,
+    ) : TrackDescriptor
     data class Data(override val name: String, val id: String) : TrackDescriptor
   }
 
@@ -291,6 +304,19 @@ class PublisherModule(reactContext: ReactApplicationContext) :
               codec = codec,
               sampleRate = enc.optInt("sampleRate", 48_000),
               channels = enc.optInt("channels", 1),
+            )
+          )
+        }
+        "videoSource" -> {
+          val codec = videoCodecFromJs(enc.optString("codec"), VideoCodec.H264)
+          out += TrackDescriptor.VideoSource(
+            name = name,
+            id = entry.optString("id"),
+            config = VideoEncoderConfig(
+              codec = codec,
+              width = enc.optInt("width", 1280),
+              height = enc.optInt("height", 720),
+              frameRate = enc.optInt("framerate", 30),
             )
           )
         }

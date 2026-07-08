@@ -11,6 +11,7 @@ let nextVideoSourceId = 0;
 // A GPU fence the app exports after rendering into a slot. On iOS an MTLSharedEvent:
 // `handle` is its (uintptr_t) as a decimal string, `signaledValue` the value the GPU
 // signals when the render completes. Native waits for it before sampling the buffer.
+// Ignored on Android.
 export interface VideoFrameFence {
   handle: string;
   signaledValue: string;
@@ -20,8 +21,9 @@ export interface PushVideoFrameArgs {
   // The pool slot (VideoSourceTrack.buffers) this frame was rendered into.
   bufferIndex: number;
   // Omit (recommended): native stamps the device clock at push time, keeping the
-  // track aligned with camera/mic. If set, it must be monotonic and advance in real
-  // time — a timeline that drifts from the clock renders as a frozen image.
+  // track aligned with camera/mic. If set (iOS only; Android always stamps at push
+  // time), it must be monotonic and advance in real time — a timeline that drifts
+  // from the clock renders as a frozen image.
   timestampNs?: number;
   // Omit for CPU-filled frames or when the app already finished its GPU work.
   fence?: VideoFrameFence;
@@ -54,10 +56,12 @@ export interface VideoSourceTrack {
 
 /**
  * A publishable video track fed by app-rendered frames — the custom-video
- * counterpart of useCamera. The native side allocates a pool of IOSurface-backed
- * buffers (`buffers`); render into slot `i` with your own GPU engine (WebGPU, Skia,
- * Metal…), then `pushFrame({ bufferIndex: i, fence })`. Pixels never cross the
- * bridge — only the slot index and fence do — so publishing is zero-copy.
+ * counterpart of useCamera. On iOS the native side allocates a pool of
+ * IOSurface-backed buffers (`buffers`); render into slot `i` with your own GPU
+ * engine (WebGPU, Skia, Metal…), then `pushFrame({ bufferIndex: i, fence })`.
+ * Pixels never cross the bridge — only the slot index and fence do — so publishing
+ * is zero-copy. On Android the slots are native bitmaps with no JS-importable
+ * handle yet, so only natively-filled frames (e.g. fillTestPattern) can be pushed.
  *
  * `width` / `height` / `poolSize` are fixed for the source's lifetime; change them
  * by re-mounting the hook (e.g. via a React `key`).

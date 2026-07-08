@@ -7,8 +7,9 @@ const DEMO_FPS = 24;
 
 /**
  * Custom video → publish. Each tick fills the next pool slot with an animated CPU
- * test pattern and pushes it, exercising the zero-copy useVideoSource pipeline. A
- * real app would render into the IOSurface with its own GPU engine and pass a fence.
+ * test pattern and pushes it, exercising the useVideoSource pipeline. A real app
+ * would render into the pool buffers itself (on iOS: into the IOSurface with its
+ * own GPU engine, passing a fence).
  */
 export function CustomVideoSection({
   videoSource,

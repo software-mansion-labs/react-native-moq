@@ -16,6 +16,7 @@ import com.moq.microphone.MicrophoneModule
 import com.moq.player.VideoViewManager
 import com.moq.publisher.PublisherModule
 import com.moq.screenbroadcast.ScreenBroadcastModule
+import com.moq.videosource.VideoSourceModule
 
 class MoQPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
@@ -24,6 +25,7 @@ class MoQPackage : BaseReactPackage() {
       PublisherModule.NAME -> PublisherModule(reactContext)
       DataTrackModule.NAME -> DataTrackModule(reactContext)
       AudioSourceModule.NAME -> AudioSourceModule(reactContext)
+      VideoSourceModule.NAME -> VideoSourceModule(reactContext)
       CameraModule.NAME -> CameraModule(reactContext)
       MultiCameraModule.NAME -> MultiCameraModule(reactContext)
       MicrophoneModule.NAME -> MicrophoneModule(reactContext)
@@ -61,6 +63,14 @@ class MoQPackage : BaseReactPackage() {
       AudioSourceModule.NAME to ReactModuleInfo(
         name = AudioSourceModule.NAME,
         className = AudioSourceModule.NAME,
+        canOverrideExistingModule = false,
+        needsEagerInit = false,
+        isCxxModule = false,
+        isTurboModule = true,
+      ),
+      VideoSourceModule.NAME to ReactModuleInfo(
+        name = VideoSourceModule.NAME,
+        className = VideoSourceModule.NAME,
         canOverrideExistingModule = false,
         needsEagerInit = false,
         isCxxModule = false,

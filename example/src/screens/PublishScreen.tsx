@@ -76,7 +76,6 @@ export function PublishScreen({
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
   const [ttsEnabled, setTtsEnabled] = useState(false);
-  // Custom video is iOS-only for now (see useVideoSource).
   const [customVideoEnabled, setCustomVideoEnabled] = useState(false);
   const [screenEnabled, setScreenEnabled] = useState(false);
 
@@ -131,8 +130,8 @@ export function PublishScreen({
     channels: 1,
   });
   // Custom video track fed by an app-rendered frame source. Here the example
-  // drives a native BGRA test pattern (see CustomVideoSection); a real app would
-  // render into the pool's IOSurfaces with its own GPU engine. 24 fps matches
+  // drives a native test pattern (see CustomVideoSection); a real app would
+  // render into the pool's buffers with its own GPU engine. 24 fps matches
   // CustomVideoSection's push cadence.
   const customVideo = useVideoSource({
     name: 'custom',
@@ -295,15 +294,13 @@ export function PublishScreen({
         />
       )}
 
-      {Platform.OS === 'ios' && (
-        <Row label="Custom video (test pattern)">
-          <Switch
-            value={customVideoEnabled}
-            onValueChange={setCustomVideoEnabled}
-            disabled={isPublishing}
-          />
-        </Row>
-      )}
+      <Row label="Custom video (test pattern)">
+        <Switch
+          value={customVideoEnabled}
+          onValueChange={setCustomVideoEnabled}
+          disabled={isPublishing}
+        />
+      </Row>
 
       {customVideoEnabled && (
         <CustomVideoSection

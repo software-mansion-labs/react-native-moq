@@ -1,7 +1,8 @@
 import { TurboModuleRegistry, type TurboModule } from 'react-native';
 
-// surfaceHandle is the (uintptr_t)IOSurfaceRef as a decimal string — 64-bit handles
-// exceed JS's safe integer range, so they cross as strings.
+// On iOS surfaceHandle is the (uintptr_t)IOSurfaceRef as a decimal string — 64-bit
+// handles exceed JS's safe integer range, so they cross as strings. On Android
+// there is no JS-importable GPU handle (slots are native bitmaps), so it's '0'.
 export type CustomVideoBufferDescriptor = {
   index: number;
   surfaceHandle: string;
@@ -10,8 +11,9 @@ export type CustomVideoBufferDescriptor = {
 };
 
 export interface Spec extends TurboModule {
-  // Allocates a pool of `poolSize` BGRA IOSurface-backed buffers and resolves with
-  // their descriptors. width/height must match the publish-time encoder config.
+  // Allocates a pool of `poolSize` buffers (BGRA IOSurfaces on iOS, bitmaps on
+  // Android) and resolves with their descriptors. width/height must match the
+  // publish-time encoder config.
   create(
     trackId: string,
     width: number,
@@ -23,7 +25,8 @@ export interface Spec extends TurboModule {
 
   // timestampNs <= 0 stamps the device clock at push time; fenceHandle/fenceValue
   // are an MTLSharedEvent handle+value as decimal strings ('' or '0' = no fence).
-  // No-op until the track is published and started.
+  // Android always stamps the clock at push time and ignores fences. No-op until
+  // the track is published and started.
   pushFrame(
     trackId: string,
     bufferIndex: number,
@@ -41,6 +44,6 @@ export interface Spec extends TurboModule {
   ): void;
 }
 
-// `get`, not `getEnforcing`: iOS-only for now, so on Android this is null and
-// useVideoSource degrades to a no-op instead of throwing at import.
+// `get`, not `getEnforcing`: on platforms without the module useVideoSource
+// degrades to a no-op instead of throwing at import.
 export default TurboModuleRegistry.get<Spec>('MoQVideoSource');

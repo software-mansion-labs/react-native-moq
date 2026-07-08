@@ -835,9 +835,9 @@ The example app's **Publish** tab wires this to on-device text-to-speech: [`exam
 
 ### `useVideoSource(options)`
 
-A publishable **video source** you feed with your own rendered frames — the custom-video counterpart of [`useCamera`](#usecameraoptions). Use it to broadcast anything your app draws (a game / emulator screen, a WebGPU or Skia scene, processed camera frames) instead of the device camera. **iOS only for now.**
+A publishable **video source** you feed with your own rendered frames — the custom-video counterpart of [`useCamera`](#usecameraoptions). Use it to broadcast anything your app draws (a game / emulator screen, a WebGPU or Skia scene, processed camera frames) instead of the device camera.
 
-It's **zero-copy**: on mount the native side allocates a fixed pool of IOSurface-backed buffers and hands you their handles. You render into a slot with your own GPU engine, then push just the *slot index* (and an optional GPU fence) — pixels never cross the bridge.
+On iOS it's **zero-copy**: on mount the native side allocates a fixed pool of IOSurface-backed buffers and hands you their handles. You render into a slot with your own GPU engine, then push just the *slot index* (and an optional GPU fence) — pixels never cross the bridge. On Android the slots are native bitmaps drawn onto the encoder surface with a hardware canvas; there's no JS-importable handle yet (`surfaceHandle` is `'0'`), so only natively-filled frames — like `fillTestPattern` — can be pushed.
 
 ```tsx
 import { useVideoSource } from 'react-native-moq';
@@ -856,7 +856,7 @@ Returns a `VideoSourceTrack`:
 | `pushFrame(frame)` | `(frame: PushVideoFrameArgs) => void` | Submit a rendered slot. No-op until `publishing` |
 | `fillTestPattern(bufferIndex, frameIndex)` | `(number, number) => void` | Demo helper — CPU-fills a slot with an animated pattern (no GPU renderer needed) |
 
-Each `CustomVideoBuffer` is `{ index, surfaceHandle, width, height }`. `surfaceHandle` is the `(uintptr_t)IOSurfaceRef` as a **decimal string** (64-bit handles exceed JS's safe integer range) — import it in your native GPU renderer to draw into the surface.
+Each `CustomVideoBuffer` is `{ index, surfaceHandle, width, height }`. On iOS `surfaceHandle` is the `(uintptr_t)IOSurfaceRef` as a **decimal string** (64-bit handles exceed JS's safe integer range) — import it in your native GPU renderer to draw into the surface.
 
 Include it in a publish, then render + push once `publisher.state === 'publishing'`:
 
@@ -873,9 +873,9 @@ video.pushFrame({
 });
 ```
 
-Round-robin over the `poolSize` slots so you never redraw one that's still being encoded. `pushFrame` waits for the fence (so the buffer is never sampled mid-render), wraps the pooled buffer, and hands it to the encoder — all off the JS thread. Omit `fence` for CPU-filled frames or when you've already finished GPU work. Subscribers get an ordinary video track (same `name`), rendered like any camera track.
+Round-robin over the `poolSize` slots so you never redraw one that's still being encoded. `pushFrame` waits for the fence (so the buffer is never sampled mid-render), wraps the pooled buffer, and hands it to the encoder — all off the JS thread. Omit `fence` for CPU-filled frames or when you've already finished GPU work (Android ignores fences). Subscribers get an ordinary video track (same `name`), rendered like any camera track.
 
-By default frames are timestamped with the device clock at push time, which keeps them aligned with any camera/mic tracks. Pass an explicit `timestampNs` only when you have real capture times — it must be monotonic and advance in real time, or subscribers see a frozen image (frames are scheduled against a live playhead).
+By default frames are timestamped with the device clock at push time, which keeps them aligned with any camera/mic tracks. Pass an explicit `timestampNs` (iOS only — Android always stamps at push time) only when you have real capture times — it must be monotonic and advance in real time, or subscribers see a frozen image (frames are scheduled against a live playhead).
 
 **`VideoSourceOptions`**
 
