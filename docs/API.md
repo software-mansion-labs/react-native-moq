@@ -13,6 +13,8 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
   - [`useAudioPlayer(broadcast, setup?)`](#useaudioplayerbroadcast-setup)
   - [`useAudioChunks(broadcast, onChunk, options?)`](#useaudiochunksbroadcast-onchunk-options)
   - [`subscribeAudioChunks(broadcast, trackName, onChunk, options?)`](#subscribeaudiochunksbroadcast-trackname-onchunk-options)
+  - [`useDataMessages(broadcast, onMessage, options?)`](#usedatamessagesbroadcast-onmessage-options)
+  - [`subscribeDataMessages(broadcast, trackName, onMessage, options?)`](#subscribedatamessagesbroadcast-trackname-onmessage-options)
   - [`useEvent(source, eventName, initialValue?)`](#useeventsource-eventname-initialvalue)
   - [`useEventListener(source, eventName, listener)`](#useeventlistenersource-eventname-listener)
   - [`player.addListener` / `session.addListener`](#playeraddlistenereventname-listener--sessionaddlistenereventname-listener)
@@ -51,7 +53,7 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
 
 A few rules hold across the whole API. They're stated once here instead of repeated on every hook:
 
-- **Mount lifecycle.** Hooks that own a native resource (`useCamera`, `useMicrophone`, `useMultiCamera`, `useDataTrack`, `useBroadcasts`, `useAudioChunks`, `useVideoPlayer`, `useAudioPlayer`) start their work on mount and tear it down on unmount.
+- **Mount lifecycle.** Hooks that own a native resource (`useCamera`, `useMicrophone`, `useMultiCamera`, `useDataTrack`, `useBroadcasts`, `useAudioChunks`, `useDataMessages`, `useVideoPlayer`, `useAudioPlayer`) start their work on mount and tear it down on unmount.
 - **Hooks are optional.** Every hook wraps an imperative core you can call from plain JS — see [Using without React](#using-without-react-imperative-api).
 - **`setup` callbacks** run once, on mount. They're where you kick things off (`connect()`, `play()`, latency config).
 - **Refcounted singletons.** Capture hooks share one native instance across all consumers — two `useCamera` calls drive the same physical camera, and `flip()` on one is visible to all. Subscriptions to the same track are ref-counted too, so subscribing more than once is safe.
@@ -117,7 +119,7 @@ const all = useBroadcasts(session);              // everything the relay exposes
 const streams = useBroadcasts(session, '/streams'); // just this prefix
 ```
 
-The array is empty until `session.state === 'connected'`, and re-populates automatically on reconnect. Different prefixes produce independent lists; overlapping prefixes that match the same broadcast path are not supported.
+The array is empty until `session.state === 'connected'`, and re-populates automatically on reconnect. Different prefixes produce independent lists; overlapping prefixes that match the same broadcast path are not supported. Each `BroadcastInfo.path` is **relative to the prefix** — a broadcast published at `live/test` appears as `path: 'test'` under prefix `'live'`, and as `path: ''` under prefix `'live/test'`. To look up one broadcast by its full path, subscribe with `''` and match on `path`.
 
 ```tsx
 function CamerasGrid({ session }) {
@@ -295,6 +297,59 @@ useEffect(() => {
   return () => subs.forEach((s) => s.stop());
 }, [broadcast, trackNames]);
 ```
+
+---
+
+### `useDataMessages(broadcast, onMessage, options?)`
+
+Receives a broadcast's **data track** — the subscribe counterpart of [`useDataTrack`](#usedatatrackoptions). Each payload the publisher passes to `send()` arrives as one `DataMessage` callback, in order. Use it for captions, chat, telemetry — anything published as strings alongside (or instead of) media. The example app's **Subscribe** tab uses it to render live subtitles over the video.
+
+```tsx
+import { useDataMessages } from 'react-native-moq';
+
+const sub = useDataMessages(
+  broadcast,
+  (message) => setCaption(message.payload),
+  { trackName: 'subtitles' }
+);
+```
+
+Data tracks don't appear in the broadcast catalog (`BroadcastInfo` lists only video/audio tracks), so publisher and subscriber must agree on the track name out of band.
+
+**Options:**
+
+| Option | Type | Description |
+|---|---|---|
+| `trackName` | `string` | Data track to listen to. Default `'data'` (the `useDataTrack` default) |
+| `autoStart` | `boolean` | Start on mount. Default `true`; pass `false` to defer until `.start()` |
+
+Returns a [`ChunkSubscription`](#chunksubscription); `stop()` releases the native track subscription, and `onMessage` is kept in a ref so changing it doesn't re-subscribe (same semantics as [`useAudioChunks`](#useaudiochunksbroadcast-onchunk-options)).
+
+**`DataMessage`**
+
+```ts
+interface DataMessage {
+  payload: string; // exactly what the publisher passed to send()
+  trackName: string;
+  groupSequence: number; // MoQ group sequence, for gap/ordering detection
+  objectIndex: number; // object index within the group
+}
+```
+
+---
+
+### `subscribeDataMessages(broadcast, trackName, onMessage, options?)`
+
+The framework-agnostic core that `useDataMessages` wraps — works with or without React, mirroring [`subscribeAudioChunks`](#subscribeaudiochunksbroadcast-trackname-onchunk-options). Returns a [`ChunkSubscription`](#chunksubscription); subscriptions to the same `(session, path, track)` share one native subscription (ref-counted).
+
+```ts
+import { subscribeDataMessages } from 'react-native-moq';
+
+const sub = subscribeDataMessages(broadcast, 'subtitles', (m) => handle(m.payload));
+sub.stop();
+```
+
+**Options:** `autoStart` (`boolean`, default `true`).
 
 ---
 
@@ -785,7 +840,7 @@ publisher.publish({ path: 'live/game-1', tracks: [camera, command] });
 command.send(JSON.stringify({ type: 'buttons', buttons: ['a', 'up'] }));
 ```
 
-Subscribers read these objects from a track of the same `name`. For a data-only broadcast, pass a single data track: `publisher.publish({ path, tracks: [command] })`. Pair it with [`useBroadcasts`](#usebroadcastssession-prefix) to discover peers and exchange data over one connection — the pattern behind chat- and cloud-gaming demos. The example app's **MoQBoy** tab ([`example/src/screens/MoQBoyScreen.tsx`](../example/src/screens/MoQBoyScreen.tsx)) is a worked cloud-gaming controller built on this hook.
+Subscribers read these payloads with [`useDataMessages`](#usedatamessagesbroadcast-onmessage-options) from a track of the same `name`. For a data-only broadcast, pass a single data track: `publisher.publish({ path, tracks: [command] })`. Pair it with [`useBroadcasts`](#usebroadcastssession-prefix) to discover peers and exchange data over one connection — the pattern behind chat- and cloud-gaming demos. The example app's **MoQBoy** tab ([`example/src/screens/MoQBoyScreen.tsx`](../example/src/screens/MoQBoyScreen.tsx)) is a worked cloud-gaming controller built on this hook.
 
 **`DataTrackOptions`**
 
@@ -1062,6 +1117,7 @@ Every hook has a hook-free counterpart for code that can't follow the rules of h
 | `useVideoPlayer(broadcast)` | `createVideoPlayer(broadcast)` | `VideoPlayerHandle` |
 | `useAudioPlayer(broadcast)` | `createAudioPlayer(broadcast)` | `AudioPlayerHandle` |
 | `useAudioChunks(broadcast, onChunk, options?)` | [`subscribeAudioChunks(broadcast, trackName, onChunk, options?)`](#subscribeaudiochunksbroadcast-trackname-onchunk-options) | `ChunkSubscription` |
+| `useDataMessages(broadcast, onMessage, options?)` | [`subscribeDataMessages(broadcast, trackName, onMessage, options?)`](#subscribedatamessagesbroadcast-trackname-onmessage-options) | `ChunkSubscription` |
 | `usePublisher(session)` | `createPublisher(session)` | `PublisherHandle` |
 | `useCamera(options?)` | `createCamera(options?)` | `CameraHandle` |
 | `useMultiCamera(options?)` | `createMultiCamera(options?)` | `MultiCameraHandle` |

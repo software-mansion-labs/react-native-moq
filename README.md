@@ -142,7 +142,7 @@ The host app is responsible for camera/microphone runtime permissions. Screen sh
 
 The full API reference — every hook, component, type, and the `react-native-moq-ui` package — lives in [**docs/API.md**](docs/API.md):
 
-- [Playback API](docs/API.md#playback-api) — `useSession`, `useBroadcasts`, `useVideoPlayer`, `useAudioPlayer`, `useAudioChunks`, events, `<VideoView>`, types
+- [Playback API](docs/API.md#playback-api) — `useSession`, `useBroadcasts`, `useVideoPlayer`, `useAudioPlayer`, `useAudioChunks`, `useDataMessages`, events, `<VideoView>`, types
 - [Publishing](docs/API.md#publishing) — `useCamera`, `useMultiCamera`, `useMicrophone`, `usePublisher`, `<PublisherView>`, `useDataTrack`, `useAudioSource`, screen broadcasting
 - [Using without React](docs/API.md#using-without-react-imperative-api) — imperative `createSession` / `createPublisher` / `createAudioSource` / … counterparts of every hook
 - [Advanced usage](docs/API.md#advanced-usage) — rendition switching, custom target latency, live stats
@@ -151,7 +151,7 @@ The full API reference — every hook, component, type, and the `react-native-mo
 
 ## Example app
 
-The [`example/`](example/) directory contains a full demo app with four tabs: **Subscribe** (discover and play broadcasts), **Publish** (camera/mic/screen broadcasting, plus publishing on-device text-to-speech through [`useAudioSource`](docs/API.md#useaudiosourceoptions)), **Audio** (consume a broadcast's audio as raw chunks via [`useAudioChunks`](docs/API.md#useaudiochunksbroadcast-onchunk-options) — decoded-PCM playback through [react-native-audio-api](https://github.com/software-mansion/react-native-audio-api) and on-device Whisper transcription through [react-native-executorch](https://github.com/software-mansion/react-native-executorch)), and **MoQBoy** (a cloud-gaming controller built on data tracks). To run it:
+The [`example/`](example/) directory contains a full demo app with four tabs: **Subscribe** (discover and play broadcasts, with toggleable live subtitles read from a data track via [`useDataMessages`](docs/API.md#usedatamessagesbroadcast-onmessage-options)), **Publish** (camera/mic/screen broadcasting, publishing on-device text-to-speech through [`useAudioSource`](docs/API.md#useaudiosourceoptions), plus live subtitles transcribed on-device with Whisper and published on a data track), **Audio** (consume a broadcast's audio as raw chunks via [`useAudioChunks`](docs/API.md#useaudiochunksbroadcast-onchunk-options) — decoded-PCM playback through [react-native-audio-api](https://github.com/software-mansion/react-native-audio-api) and on-device Whisper transcription through [react-native-executorch](https://github.com/software-mansion/react-native-executorch)), and **MoQBoy** (a cloud-gaming controller built on data tracks). To run it:
 
 ```sh
 yarn

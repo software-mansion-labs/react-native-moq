@@ -23,6 +23,10 @@ export type {
 export { useDataTrack } from './hooks/useDataTrack';
 export { createDataTrack } from './dataTrack';
 export type { DataTrack, DataTrackHandle, DataTrackOptions } from './dataTrack';
+export { useDataMessages } from './hooks/useDataMessages';
+export type { UseDataMessagesOptions } from './hooks/useDataMessages';
+export { subscribeDataMessages } from './dataMessages';
+export type { DataMessage, SubscribeDataMessagesOptions } from './dataMessages';
 export { useAudioSource } from './hooks/useAudioSource';
 export { createAudioSource } from './audioSource';
 export type {

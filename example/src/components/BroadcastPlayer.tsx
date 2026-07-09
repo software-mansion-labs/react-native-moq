@@ -3,9 +3,13 @@ import type {
   BroadcastInfo,
   VideoTrackInfo,
 } from 'react-native-moq';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useAudioPlayer, useVideoPlayer } from 'react-native-moq';
+import {
+  useAudioPlayer,
+  useDataMessages,
+  useVideoPlayer,
+} from 'react-native-moq';
 import {
   SpeakerGlyph,
   VideoPlayerView,
@@ -78,6 +82,7 @@ function VideoSection({
   broadcast: BroadcastInfo;
   addEntry: AddEntry;
 }) {
+  const { colors } = useTheme();
   const player = useVideoPlayer(broadcast, (p) => {
     p.play();
   });
@@ -103,15 +108,25 @@ function VideoSection({
 
   usePlayerEventLog(player, 'video', addEntry, broadcast.path);
 
+  const [captionsOn, setCaptionsOn] = useState(false);
+  const caption = useSubtitles(broadcast, captionsOn);
+
   return (
     <>
       {/* Renders its own inline + fullscreen chrome; pass
           `miniControls`/`controls` (false or a ReactNode) to opt out or replace. */}
-      <VideoPlayerView
-        player={player}
-        style={styles.video}
-        videoAspectRatio={videoAspectRatio}
-      />
+      <View style={styles.videoWrap}>
+        <VideoPlayerView
+          player={player}
+          style={styles.video}
+          videoAspectRatio={videoAspectRatio}
+        />
+        {captionsOn && caption !== '' && (
+          <View style={styles.captionOverlay} pointerEvents="none">
+            <Text style={styles.captionText}>{caption}</Text>
+          </View>
+        )}
+      </View>
 
       <TrackInfoPills
         video={activeTrack}
@@ -119,6 +134,19 @@ function VideoSection({
           (t) => t.name === player.currentAudioTrackName
         )}
       />
+
+      <View style={styles.captionRow}>
+        <Text style={[styles.captionHint, { color: colors.secondaryLabel }]}>
+          Subtitles — shown if the broadcast publishes them
+        </Text>
+        <IconButton
+          icon="closed-caption"
+          size={32}
+          variant={captionsOn ? 'filled' : 'tonal'}
+          accessibilityLabel={captionsOn ? 'Hide subtitles' : 'Show subtitles'}
+          onPress={() => setCaptionsOn((on) => !on)}
+        />
+      </View>
 
       {sortedVideoTracks.length > 1 && (
         <RenditionPicker
@@ -131,6 +159,48 @@ function VideoSection({
       {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
     </>
   );
+}
+
+// Publishers using live captions send the rolling transcript on the
+// `subtitles` data track (see the Publish tab's SubtitlesSection); data tracks
+// aren't in the catalog, so the name is agreed upon here.
+const SUBTITLES_TRACK = 'subtitles';
+// Whisper rewrites a ~12 s window; only its tail fits a caption bar.
+const CAPTION_MAX_CHARS = 160;
+// Clear the caption when the publisher stops sending (e.g. captions stopped).
+const CAPTION_TTL_MS = 8000;
+
+function captionTail(text: string): string {
+  if (text.length <= CAPTION_MAX_CHARS) return text;
+  const cut = text.slice(-CAPTION_MAX_CHARS);
+  const space = cut.indexOf(' ');
+  return space > 0 && space < 40 ? cut.slice(space + 1) : cut;
+}
+
+// Latest caption from the broadcast's subtitles data track; subscribes only
+// while enabled and clears when messages stop arriving.
+function useSubtitles(broadcast: BroadcastInfo, enabled: boolean): string {
+  const [caption, setCaption] = useState('');
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useDataMessages(
+    broadcast,
+    (message) => {
+      setCaption(captionTail(message.payload));
+      if (clearTimer.current) clearTimeout(clearTimer.current);
+      clearTimer.current = setTimeout(() => setCaption(''), CAPTION_TTL_MS);
+    },
+    { trackName: SUBTITLES_TRACK, autoStart: enabled }
+  );
+
+  useEffect(() => {
+    if (!enabled) setCaption('');
+    return () => {
+      if (clearTimer.current) clearTimeout(clearTimer.current);
+    };
+  }, [enabled]);
+
+  return caption;
 }
 
 function AudioSection({
@@ -229,6 +299,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  videoWrap: { width: '100%' },
   video: {
     width: '100%',
     aspectRatio: 16 / 9,
@@ -236,6 +307,31 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#000',
   },
+  captionOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    alignItems: 'center',
+  },
+  captionText: {
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    fontSize: 14,
+    lineHeight: 19,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  captionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  captionHint: { flexShrink: 1, fontSize: 13 },
   audioRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,25 +1,16 @@
-import { NativeEventEmitter } from 'react-native';
 import NativeMoQ from './native/NativeMoQ';
 import { base64ToArrayBuffer } from './base64';
+import {
+  buildSubscription,
+  trackEmitter as emitter,
+  type TrackObjectEvent,
+} from './trackObjects';
 import type {
   AudioChunk,
   AudioChunkFormat,
   BroadcastInfo,
   ChunkSubscription,
 } from './types';
-
-// Shared emitter: native fans every track object out as one `trackObject`
-// event; each subscription filters by (sessionId, broadcastPath, trackName).
-const emitter = new NativeEventEmitter(NativeMoQ);
-
-interface TrackObjectEvent {
-  sessionId: string;
-  broadcastPath: string;
-  trackName: string;
-  data: string; // base64
-  groupSequence: number;
-  objectIndex: number;
-}
 
 interface AudioDataEvent {
   sessionId: string;
@@ -41,42 +32,6 @@ const PCM_SAMPLE_FORMAT: Record<
   'pcm-f32': 'f32',
   'pcm-i16': 'i16',
 };
-
-// Shared lifecycle for both subscriptions: `open` wires up the native
-// subscription + listener and returns its teardown; guards start/stop as idempotent.
-function buildSubscription(
-  sessionId: string,
-  path: string,
-  trackName: string,
-  open: () => () => void,
-  autoStart: boolean
-): ChunkSubscription {
-  let active = false;
-  let close: (() => void) | null = null;
-
-  const subscription: ChunkSubscription = {
-    sessionId,
-    broadcastPath: path,
-    trackName,
-    get isActive() {
-      return active;
-    },
-    start() {
-      if (active) return;
-      active = true;
-      close = open();
-    },
-    stop() {
-      if (!active) return;
-      active = false;
-      close?.();
-      close = null;
-    },
-  };
-
-  if (autoStart) subscription.start();
-  return subscription;
-}
 
 export interface SubscribeAudioChunksOptions {
   /** Start receiving immediately. Defaults to true. */

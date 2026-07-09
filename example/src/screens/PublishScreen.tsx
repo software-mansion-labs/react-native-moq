@@ -15,6 +15,7 @@ import {
   isMultiCameraSupported,
   useAudioSource,
   useCamera,
+  useDataTrack,
   useMicrophone,
   useMultiCamera,
   usePublisher,
@@ -28,6 +29,7 @@ import {
 import MaterialIcons from '@react-native-vector-icons/material-icons';
 import { TtsAudioSection } from '../components/TtsAudioSection';
 import { CustomVideoSection } from '../components/CustomVideoSection';
+import { SubtitlesSection } from '../components/SubtitlesSection';
 import { StateIndicator } from '../components/StateIndicator';
 import {
   Button,
@@ -86,6 +88,7 @@ export function PublishScreen({
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
   const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
   const [customVideoEnabled, setCustomVideoEnabled] = useState(false);
   const [screenEnabled, setScreenEnabled] = useState(false);
 
@@ -151,6 +154,8 @@ export function PublishScreen({
     framerate: 24,
     poolSize: 3,
   });
+  // Live captions generated on-device from the mic audio (see SubtitlesSection).
+  const subtitlesTrack = useDataTrack({ name: 'subtitles' });
 
   const encoderOpts = useMemo(
     () => ({
@@ -287,6 +292,9 @@ export function PublishScreen({
                       }
                       if (micEnabled) tracks.push(microphone);
                       if (ttsEnabled) tracks.push(ttsAudio);
+                      if (subtitlesEnabled && micEnabled) {
+                        tracks.push(subtitlesTrack);
+                      }
                       if (customVideoEnabled) tracks.push(customVideo);
                       publisher.publish({ path, tracks });
                     }
@@ -501,6 +509,29 @@ export function PublishScreen({
                   enabled={ttsEnabled}
                   publishing={isPublishing}
                   trackState={publisher.trackStates.tts}
+                />
+              )}
+            </SourceCard>
+
+            <SourceCard
+              title="Live subtitles"
+              control={
+                <IconButton
+                  icon="closed-caption"
+                  variant={subtitlesEnabled ? 'filled' : 'tonal'}
+                  accessibilityLabel="Live subtitles"
+                  disabled={isPublishing}
+                  onPress={() => setSubtitlesEnabled((on) => !on)}
+                />
+              }
+            >
+              {subtitlesEnabled && (
+                <SubtitlesSection
+                  url={url}
+                  path={path}
+                  publishing={isPublishing}
+                  micEnabled={micEnabled}
+                  dataTrack={subtitlesTrack}
                 />
               )}
             </SourceCard>
