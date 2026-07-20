@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EventEmitter } from '../EventEmitter';
 import {
   createSessionWithId,
@@ -6,6 +6,7 @@ import {
   type SessionHandle,
 } from '../session';
 import type { Session, SessionEvents, SessionState } from '../types';
+import { useSetupOnce } from './useSetupOnce';
 
 export function useSession(
   url: string,
@@ -43,9 +44,10 @@ export function useSession(
     handle.connect(targetLatencyMs);
   }, []);
 
+  // The handle emits the synthetic 'idle' transition; the stateChange
+  // listener above mirrors it into React state.
   const disconnect = useCallback(() => {
     handleRef.current?.disconnect();
-    setState('idle');
   }, []);
 
   const addListener = useCallback(
@@ -56,24 +58,20 @@ export function useSession(
     []
   );
 
-  const moqSession: Session = {
-    id,
-    url,
-    state,
-    emitter: emitterRef.current,
-    addListener,
-    connect,
-    disconnect,
-  };
+  const moqSession = useMemo<Session>(
+    () => ({
+      id,
+      url,
+      state,
+      emitter: emitterRef.current,
+      addListener,
+      connect,
+      disconnect,
+    }),
+    [id, url, state, addListener, connect, disconnect]
+  );
 
-  const moqSessionRef = useRef(moqSession);
-  moqSessionRef.current = moqSession;
-
-  const setupRef = useRef(setup);
-
-  useEffect(() => {
-    setupRef.current?.(moqSessionRef.current);
-  }, []);
+  useSetupOnce(moqSession, setup);
 
   return moqSession;
 }

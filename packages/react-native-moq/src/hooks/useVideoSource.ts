@@ -5,6 +5,7 @@ import {
   fillVideoTestPattern,
   mintVideoSourceId,
   pushVideoFrame,
+  resolveVideoSourceOptions,
   type PushVideoFrameArgs,
   type VideoSourceOptions,
   type VideoSourceTrack,
@@ -30,12 +31,8 @@ export type {
  * by re-mounting the hook (e.g. via a React `key`).
  */
 export function useVideoSource(options: VideoSourceOptions): VideoSourceTrack {
-  const name = options.name ?? 'video';
-  const codec = options.videoCodec ?? 'h264';
-  const width = options.width;
-  const height = options.height;
-  const framerate = options.framerate ?? 30;
-  const poolSize = options.poolSize ?? 3;
+  const { name, poolSize, encoder } = resolveVideoSourceOptions(options);
+  const { codec, width, height, framerate } = encoder;
   const [id] = useState(() => mintVideoSourceId());
   const [buffers, setBuffers] = useState<CustomVideoBufferDescriptor[]>([]);
 

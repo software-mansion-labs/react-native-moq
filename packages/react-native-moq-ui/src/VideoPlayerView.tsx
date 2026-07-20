@@ -54,6 +54,28 @@ export interface VideoPlayerViewRef {
   exitFullscreen(): void;
 }
 
+/** Largest rect of the given aspect ratio that fits inside the container. */
+function fitRect(
+  container: { width: number; height: number },
+  aspect: number
+): { width: number; height: number } {
+  return container.width / container.height > aspect
+    ? { width: container.height * aspect, height: container.height }
+    : { width: container.width, height: container.width / aspect };
+}
+
+/** Resolve a `boolean | ReactNode` controls prop to the element to render. */
+function resolveControls(
+  controls: boolean | ReactNode,
+  defaultElement: ReactNode
+): ReactNode {
+  return controls === false
+    ? null
+    : controls === true
+      ? defaultElement
+      : controls;
+}
+
 // Fullscreen uses an RN <Modal> rather than reparenting the native view: the
 // native view isn't a ViewGroup, and reparenting outside RN's root breaks touch
 // handling (overlay buttons become untappable). Wrapping it in a <View> toggled
@@ -110,19 +132,12 @@ export const VideoPlayerView = forwardRef<
   if (isFullscreen) {
     // Letterbox to fit the window while preserving aspect ratio; Android's
     // SurfaceView would otherwise stretch the buffer to the window shape.
-    const aspect = videoAspectRatio ?? 16 / 9;
-    const screenAspect = windowWidth / windowHeight;
-    const fitBox =
-      screenAspect > aspect
-        ? { width: windowHeight * aspect, height: windowHeight }
-        : { width: windowWidth, height: windowWidth / aspect };
+    const fitBox = fitRect(
+      { width: windowWidth, height: windowHeight },
+      videoAspectRatio ?? 16 / 9
+    );
 
-    const controlsElement: ReactNode =
-      controls === false ? null : controls === true ? (
-        <FullscreenControls />
-      ) : (
-        controls
-      );
+    const controlsElement = resolveControls(controls, <FullscreenControls />);
 
     return (
       <Modal
@@ -156,12 +171,10 @@ export const VideoPlayerView = forwardRef<
     );
   }
 
-  const miniControlsElement: ReactNode =
-    miniControls === false ? null : miniControls === true ? (
-      <MiniPlayerControls />
-    ) : (
-      miniControls
-    );
+  const miniControlsElement = resolveControls(
+    miniControls,
+    <MiniPlayerControls />
+  );
 
   return (
     <View style={style} {...rest}>
@@ -265,20 +278,10 @@ function MiniStage({
 
   // Letterbox the video so Android's SurfaceView doesn't stretch the buffer to
   // the container shape; a no-op on iOS beyond the wrapper (native videoGravity).
-  let fitBox: { width: number; height: number } | null = null;
-  if (size != null && size.width > 0 && size.height > 0) {
-    const containerAspect = size.width / size.height;
-    fitBox =
-      containerAspect > videoAspectRatio
-        ? {
-            width: size.height * videoAspectRatio,
-            height: size.height,
-          }
-        : {
-            width: size.width,
-            height: size.width / videoAspectRatio,
-          };
-  }
+  const fitBox =
+    size != null && size.width > 0 && size.height > 0
+      ? fitRect(size, videoAspectRatio)
+      : null;
 
   return (
     <MiniPlayerContext.Provider value={api}>

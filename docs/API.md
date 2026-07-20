@@ -53,7 +53,7 @@ Full API documentation for [`react-native-moq`](../README.md). For installation 
 
 A few rules hold across the whole API. They're stated once here instead of repeated on every hook:
 
-- **Mount lifecycle.** Hooks that own a native resource (`useCamera`, `useMicrophone`, `useMultiCamera`, `useDataTrack`, `useBroadcasts`, `useAudioChunks`, `useDataMessages`, `useVideoPlayer`, `useAudioPlayer`) start their work on mount and tear it down on unmount.
+- **Mount lifecycle.** Hooks that own a native resource (`useCamera`, `useMicrophone`, `useMultiCamera`, `useDataTrack`, `useBroadcasts`, `useAudioChunks`, `useDataMessages`, `useVideoPlayer`, `useAudioPlayer`) start their work on mount and tear it down on unmount. The device-capture hooks (`useCamera`, `useMultiCamera`, `useMicrophone`) also take `enabled?: boolean` — `false` keeps the hardware stopped while mounted, so capture can be gated without conditionally calling the hook.
 - **Hooks are optional.** Every hook wraps an imperative core you can call from plain JS — see [Using without React](#using-without-react-imperative-api).
 - **`setup` callbacks** run once, on mount. They're where you kick things off (`connect()`, `play()`, latency config).
 - **Refcounted singletons.** Capture hooks share one native instance across all consumers — two `useCamera` calls drive the same physical camera, and `flip()` on one is visible to all. Subscriptions to the same track are ref-counted too, so subscribing more than once is safe.
@@ -472,22 +472,7 @@ Broadcast availability is observed via [`useBroadcasts`](#usebroadcastssession-p
 Returned by `useAudioPlayer` — the `Player` shape narrowed to audio-only (no `currentVideoTrackName`, no `switchVideoTrack`).
 
 ```ts
-interface AudioPlayer {
-  readonly sessionId: string;
-  readonly broadcastPath: string;
-  readonly isPlaying: boolean;
-  readonly playbackStats: PlaybackStats | null;
-  readonly currentAudioTrackName?: string;
-  readonly volume: number;
-  readonly emitter: EventEmitter<PlayerEvents>;
-  addListener<T extends keyof PlayerEvents>(eventName: T, listener: PlayerEvents[T]): EventSubscription;
-  play(): void;
-  pause(): void;
-  stop(): void;
-  updateTargetLatency(ms: number): void;
-  switchAudioTrack(trackName: string): void;
-  setVolume(volume: number): void;
-}
+type AudioPlayer = Omit<Player, 'currentVideoTrackName' | 'switchVideoTrack'>;
 ```
 
 #### `BroadcastInfo`
@@ -1081,11 +1066,13 @@ interface CameraOptions {
   width?: number;              // Default: 1280
   height?: number;             // Default: 720
   framerate?: number;          // Default: 30
+  enabled?: boolean;           // Default: true — false keeps capture stopped
 }
 
 interface MicrophoneOptions {
   audioCodec?: AudioCodec;     // 'opus' | 'aac', default: 'opus'
   audioSampleRate?: number;    // Default: 48000
+  enabled?: boolean;           // Default: true — false keeps capture stopped
 }
 ```
 
@@ -1132,7 +1119,7 @@ Semantics, relative to the hooks:
 - **Lifecycle is yours.** What a hook does on mount happens at `create*()`; what it does on unmount happens at `destroy()`. Nothing is torn down for you.
 - **Live getters instead of re-renders.** `state`, `lastError`, `trackStates`, `isPlaying`, `buffers`, … always read current. Observe changes via `addListener` — capture handles add a `stateChange` event mirroring `{ state, lastError }`; session/publisher/player handles have the same events as their hooks.
 - **Handles are drop-in values.** Pass source handles to `publisher.publish({ tracks })`, `multiCamera.front` to `<PublisherView>`, player handles to `<VideoView>` — anywhere the hook value is accepted.
-- **No `enabled` option.** `createCamera` / `createMultiCamera` always start capture; toggle by destroying and re-creating.
+- **No `enabled` option.** `createCamera` / `createMultiCamera` / `createMicrophone` always start capture; toggle by destroying and re-creating.
 - `sessionHandle.url` is read at `connect()` time, so it can be reassigned before a reconnect.
 - `subscribeBroadcasts` waits for the session to connect and re-subscribes on reconnect, like the hook. `onChange` gets the full list on every change (`[]` on disconnect); `start()`/`stop()` behave like [`ChunkSubscription`](#chunksubscription)'s.
 - `videoSourceHandle.ready` resolves with the pool descriptors once native allocation completes; `buffers` is `[]` until then.
@@ -1427,7 +1414,7 @@ function AudioCard({ broadcast }) {
 |---|---|---|---|
 | `size` | `number` | No | Icon size in pixels. Default `16` |
 | `volume` | `number` | No | `0..1`; selects how many of the three wave arcs are filled (`0` shows the mute slash). Default `1` |
-| `color` | `string` | No | Foreground color (inactive arcs use a 35%-alpha variant). Default `#fff` |
+| `color` | `ColorValue` | No | Foreground color (inactive arcs use a 35%-alpha variant). Default `#fff` |
 
 ---
 

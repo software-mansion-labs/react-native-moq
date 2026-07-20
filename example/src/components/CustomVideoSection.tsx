@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { PublishedTrackState, VideoSourceTrack } from 'react-native-moq';
-import { Pill } from './ui';
-import { useTheme } from '../theme';
+import { PreviewFrame, PreviewRow } from './PreviewFrame';
+import { Hint, Pill } from './ui';
 
 // Matches the useVideoSource framerate set in PublishScreen.
 const DEMO_FPS = 24;
@@ -28,24 +28,20 @@ const PREVIEW_FRAME_STEP = 2;
  */
 export function CustomVideoSection({
   videoSource,
-  enabled,
   publishing,
   trackState,
   sourceHeight,
 }: {
   videoSource: VideoSourceTrack;
-  enabled: boolean;
   publishing: boolean;
   trackState?: PublishedTrackState;
   sourceHeight: number;
 }) {
-  const { colors } = useTheme();
   const frameRef = useRef(0);
   const [previewFrame, setPreviewFrame] = useState(0);
   const poolSize = videoSource.buffers.length;
 
   useEffect(() => {
-    if (!enabled) return;
     const id = setInterval(() => {
       const frame = frameRef.current++;
       // Push as soon as publishing starts: the encoder needs frames to emit its
@@ -60,7 +56,7 @@ export function CustomVideoSection({
       if (frame % PREVIEW_FRAME_STEP === 0) setPreviewFrame(frame);
     }, 1000 / DEMO_FPS);
     return () => clearInterval(id);
-  }, [enabled, publishing, poolSize, videoSource]);
+  }, [publishing, poolSize, videoSource]);
 
   // One tile's stripe colors, reused for every repetition of the tile.
   const f = previewFrame;
@@ -77,8 +73,22 @@ export function CustomVideoSection({
 
   return (
     <>
-      <View style={styles.previewRow}>
-        <View style={styles.preview}>
+      <PreviewRow
+        side={
+          <>
+            <Pill
+              text={
+                poolSize > 0 ? `${poolSize}-buffer pool` : 'allocating pool…'
+              }
+            />
+            <Pill text={`${DEMO_FPS} fps`} />
+            {publishing && (
+              <Pill tinted text={`track: ${trackState ?? 'idle'}`} />
+            )}
+          </>
+        }
+      >
+        <PreviewFrame>
           {Array.from({ length: tileCount }, (_, tile) => (
             <View
               key={tile}
@@ -92,46 +102,14 @@ export function CustomVideoSection({
               ))}
             </View>
           ))}
-        </View>
-        <View style={styles.previewSide}>
-          <Pill
-            text={poolSize > 0 ? `${poolSize}-buffer pool` : 'allocating pool…'}
-          />
-          <Pill text={`${DEMO_FPS} fps`} />
-          {publishing && (
-            <Pill tinted text={`track: ${trackState ?? 'idle'}`} />
-          )}
-        </View>
-      </View>
-      {!publishing && (
-        <Text style={[styles.status, { color: colors.secondaryLabel }]}>
-          Publish first to start pushing frames.
-        </Text>
-      )}
+        </PreviewFrame>
+      </PreviewRow>
+      {!publishing && <Hint>Publish first to start pushing frames.</Hint>}
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  previewRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-  },
-  preview: {
-    height: 200,
-    aspectRatio: 9 / 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-  },
   tile: { width: '100%' },
   stripe: { flex: 1 },
-  previewSide: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  status: { fontSize: 12 },
 });

@@ -128,7 +128,11 @@ export default function App() {
           android={androidTab(publishIcon)}
         >
           <StackedTab screenKey="publish" title="Publish">
-            <PublishScreen url={url} setUrl={setUrl} />
+            <PublishScreen
+              url={url}
+              setUrl={setUrl}
+              isActive={selectedScreenKey === 'publish'}
+            />
           </StackedTab>
         </Tabs.Screen>
         <Tabs.Screen

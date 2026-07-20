@@ -1,8 +1,13 @@
 import { NativeEventEmitter } from 'react-native';
-import { EventEmitter, type EventSubscription } from './EventEmitter';
+import type { Listenable } from './EventEmitter';
 import NativeMoQMultiCamera from './native/NativeMoQMultiCamera';
-import { watchNativeState } from './nativeState';
-import type { CameraCaptureState, CameraTrack, VideoCodec } from './camera';
+import { createNativeStateHandle, type StateChangeEvents } from './nativeState';
+import type {
+  CameraCaptureState,
+  CameraTrack,
+  VideoCodec,
+  VideoEncoderOptions,
+} from './camera';
 
 // Shared with useMultiCamera so both observe the same native module.
 export const multiCameraEmitter = new NativeEventEmitter(NativeMoQMultiCamera);
@@ -36,21 +41,25 @@ export interface MultiCameraTrack {
   readonly back: CameraTrack;
 }
 
-export type MultiCameraEvents = {
-  stateChange: (event: {
-    state: MultiCameraState;
-    lastError: string | null;
-  }) => void;
-};
+export type MultiCameraEvents = StateChangeEvents<MultiCameraState>;
 
 /** Hook-free multi-camera; `destroy()` stops the (ref-counted) capture. */
-export interface MultiCameraHandle extends MultiCameraTrack {
-  readonly emitter: EventEmitter<MultiCameraEvents>;
-  addListener<TEventName extends keyof MultiCameraEvents>(
-    eventName: TEventName,
-    listener: MultiCameraEvents[TEventName]
-  ): EventSubscription;
+export interface MultiCameraHandle
+  extends MultiCameraTrack, Listenable<MultiCameraEvents> {
   destroy(): void;
+}
+
+// Single source of the multi-camera defaults (portrait), shared by
+// createMultiCamera and useMultiCamera.
+export function resolveMultiCameraOptions(
+  options: MultiCameraOptions
+): VideoEncoderOptions {
+  return {
+    codec: options.videoCodec ?? 'h264',
+    width: options.width ?? 720,
+    height: options.height ?? 1280,
+    framerate: options.framerate ?? 30,
+  };
 }
 
 // Positions on a multi-camera track are fixed; warn instead of acting.
@@ -65,6 +74,30 @@ export function multiCameraNoop(label: string) {
   };
 }
 
+// One of the two fixed tracks; `read` supplies the capture state both share.
+// Used by createMultiCamera and useMultiCamera.
+export function makeMultiCameraTrack(
+  source: 'front' | 'back',
+  read: () => { state: MultiCameraState; lastError: string | null },
+  encoder: VideoEncoderOptions
+): CameraTrack {
+  return {
+    __type: 'camera',
+    __name: `${source}-camera`,
+    __source: `multi-${source}`,
+    get state() {
+      return read().state;
+    },
+    get lastError() {
+      return read().lastError;
+    },
+    position: source,
+    encoder,
+    flip: multiCameraNoop('flip'),
+    setPosition: multiCameraNoop('setPosition'),
+  };
+}
+
 /**
  * Imperative counterpart of `useMultiCamera` for non-React code: starts both
  * cameras immediately and keeps them alive until `destroy()`. Check
@@ -73,10 +106,7 @@ export function multiCameraNoop(label: string) {
 export function createMultiCamera(
   options: Omit<MultiCameraOptions, 'enabled'> = {}
 ): MultiCameraHandle {
-  const codec = options.videoCodec ?? 'h264';
-  const width = options.width ?? 720;
-  const height = options.height ?? 1280;
-  const framerate = options.framerate ?? 30;
+  const encoder = resolveMultiCameraOptions(options);
 
   let isSupported: boolean | null = null;
   NativeMoQMultiCamera.isSupported()
@@ -87,56 +117,36 @@ export function createMultiCamera(
       isSupported = false;
     });
 
-  let state: MultiCameraState = 'idle';
-  let lastError: string | null = null;
-  const emitter = new EventEmitter<MultiCameraEvents>();
-  const unwatch = watchNativeState<MultiCameraState>(
+  const watched = createNativeStateHandle<MultiCameraState>(
     multiCameraEmitter,
     'multiCameraStateChanged',
-    ['active', 'starting'],
-    (nextState, nextError) => {
-      state = nextState;
-      lastError = nextError;
-      emitter.emit('stateChange', { state: nextState, lastError: nextError });
-    }
+    ['active', 'starting']
   );
 
-  NativeMoQMultiCamera.startCapture(width, height, framerate);
+  NativeMoQMultiCamera.startCapture(
+    encoder.width,
+    encoder.height,
+    encoder.framerate
+  );
 
-  const encoder = { codec, width, height, framerate };
-  const cameraTrack = (source: 'front' | 'back'): CameraTrack => ({
-    __type: 'camera',
-    __name: `${source}-camera`,
-    __source: `multi-${source}`,
-    get state() {
-      return state;
-    },
-    get lastError() {
-      return lastError;
-    },
-    position: source,
-    encoder,
-    flip: multiCameraNoop('flip'),
-    setPosition: multiCameraNoop('setPosition'),
-  });
+  const read = () => ({ state: watched.state, lastError: watched.lastError });
 
   return {
     get isSupported() {
       return isSupported;
     },
     get state() {
-      return state;
+      return watched.state;
     },
     get lastError() {
-      return lastError;
+      return watched.lastError;
     },
-    front: cameraTrack('front'),
-    back: cameraTrack('back'),
-    emitter,
-    addListener: (eventName, listener) =>
-      emitter.addListener(eventName, listener),
+    front: makeMultiCameraTrack('front', read, encoder),
+    back: makeMultiCameraTrack('back', read, encoder),
+    emitter: watched.emitter,
+    addListener: watched.addListener,
     destroy() {
-      unwatch();
+      watched.unwatch();
       NativeMoQMultiCamera.stopCapture();
     },
   };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { subscribeAudioChunks } from '../audioChunks';
 import type {
   AudioChunk,
@@ -6,6 +6,7 @@ import type {
   BroadcastInfo,
   ChunkSubscription,
 } from '../types';
+import { useChunkSubscription } from './useChunkSubscription';
 
 export interface UseAudioChunksOptions {
   /**
@@ -48,9 +49,7 @@ export function useAudioChunks(
   const onChunkRef = useRef(onChunk);
   onChunkRef.current = onChunk;
 
-  // Key on primitives: `broadcast` may be a fresh object each render, but
-  // codec/sampleRate are stable per (path, track).
-  const subscription = useMemo(
+  return useChunkSubscription(
     () =>
       subscribeAudioChunks(
         broadcast,
@@ -58,14 +57,7 @@ export function useAudioChunks(
         (chunk) => onChunkRef.current(chunk),
         { autoStart: false, format }
       ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessionId, path, trackName, format]
+    [sessionId, path, trackName, format],
+    autoStart
   );
-
-  useEffect(() => {
-    if (autoStart) subscription.start();
-    return () => subscription.stop();
-  }, [subscription, autoStart]);
-
-  return subscription;
 }

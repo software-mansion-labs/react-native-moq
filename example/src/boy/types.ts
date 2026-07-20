@@ -1,9 +1,7 @@
-// A discovered game broadcast. `component` is the last path segment, used as
-// both the display name and the viewer path component.
+// A discovered game broadcast. `name` is the last path segment.
 export interface BoyGame {
   name: string;
   broadcastPath: string;
-  component: string;
 }
 
 // The eight inputs; string values are the wire names sent on the `command` track.

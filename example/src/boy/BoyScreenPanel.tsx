@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     minHeight: 150,
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: '#555',
+    backgroundColor: boyColors.screenFill,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.18)',
     alignItems: 'center',

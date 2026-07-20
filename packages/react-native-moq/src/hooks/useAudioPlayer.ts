@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import NativeMoQ from '../native/NativeMoQ';
-import type { AudioPlayer, BroadcastInfo, Player } from '../types';
+import type { AudioPlayer, BroadcastInfo } from '../types';
 import { AUDIO_PLAYER_KEY_SUFFIX, PlayerHandle } from '../types';
 import { usePlayer } from './usePlayer';
+import { useSetupOnce } from './useSetupOnce';
 
 export function useAudioPlayer(
   broadcastInfo: BroadcastInfo,
@@ -33,33 +34,11 @@ export function useAudioPlayer(
     };
   }, [sessionId, broadcastInfo.path, audioKey]);
 
-  const player: Player = usePlayer(audioHandle);
+  // Player is structurally an AudioPlayer; the narrower type hides the
+  // video-track members.
+  const audioPlayer: AudioPlayer = usePlayer(audioHandle);
 
-  const audioPlayer: AudioPlayer = {
-    sessionId: player.sessionId,
-    broadcastPath: player.broadcastPath,
-    isPlaying: player.isPlaying,
-    playbackStats: player.playbackStats,
-    currentAudioTrackName: player.currentAudioTrackName,
-    volume: player.volume,
-    emitter: player.emitter,
-    addListener: player.addListener,
-    play: player.play,
-    pause: player.pause,
-    stop: player.stop,
-    updateTargetLatency: player.updateTargetLatency,
-    switchAudioTrack: player.switchAudioTrack,
-    setVolume: player.setVolume,
-  };
-
-  const audioPlayerRef = useRef(audioPlayer);
-  audioPlayerRef.current = audioPlayer;
-
-  const setupRef = useRef(setup);
-
-  useEffect(() => {
-    setupRef.current?.(audioPlayerRef.current);
-  }, []);
+  useSetupOnce(audioPlayer, setup);
 
   return audioPlayer;
 }

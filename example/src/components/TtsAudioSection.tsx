@@ -1,13 +1,12 @@
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet } from 'react-native';
 import {
   KOKORO_AMERICAN_ENGLISH_FEMALE_HEART,
   useTextToSpeech,
 } from 'react-native-executorch';
 import type { AudioSourceTrack, PublishedTrackState } from 'react-native-moq';
 import { createMonoResampler } from '../resamplePcm';
-import { Button, Input } from './ui';
-import { useTheme } from '../theme';
+import { Button, ErrorText, Hint, Input } from './ui';
 
 // Kokoro synthesizes 24 kHz mono; resample to the 48 kHz the source publishes.
 const KOKORO_SAMPLE_RATE = 24000;
@@ -18,16 +17,14 @@ const SLICE_SAMPLES = Math.floor(PUBLISH_SAMPLE_RATE * 0.12);
 /**
  * Text-to-speech → publish. Runs Kokoro on-device (react-native-executorch),
  * resamples its 24 kHz float PCM to 48 kHz, and pushes it into the broadcast's
- * audio source. The model downloads on first enable.
+ * audio source. The model downloads on first mount.
  */
 export function TtsAudioSection({
   audioSource,
-  enabled,
   publishing,
   trackState,
 }: {
   audioSource: AudioSourceTrack;
-  enabled: boolean;
   publishing: boolean;
   trackState?: PublishedTrackState;
 }) {
@@ -37,10 +34,7 @@ export function TtsAudioSection({
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load Kokoro only once the user enables TTS.
-  const tts = useTextToSpeech(KOKORO_AMERICAN_ENGLISH_FEMALE_HEART, {
-    preventLoad: !enabled,
-  });
+  const tts = useTextToSpeech(KOKORO_AMERICAN_ENGLISH_FEMALE_HEART);
 
   const trackActive = trackState === 'active';
   const canSpeak =
@@ -97,29 +91,13 @@ export function TtsAudioSection({
         onPress={speak}
         disabled={!canSpeak}
       />
-      <Status text={status} />
+      <Hint>{status}</Hint>
       {publishing && !trackActive && (
-        <Status text="Waiting for the audio track to start…" />
+        <Hint>Waiting for the audio track to start…</Hint>
       )}
-      {!publishing && <Status text="Publish first, then speak." />}
+      {!publishing && <Hint>Publish first, then speak.</Hint>}
       {error && <ErrorText text={error} />}
     </>
-  );
-}
-
-function Status({ text }: { text: string }) {
-  const { colors } = useTheme();
-  return (
-    <Text style={[styles.status, { color: colors.secondaryLabel }]}>
-      {text}
-    </Text>
-  );
-}
-
-function ErrorText({ text }: { text: string }) {
-  const { colors } = useTheme();
-  return (
-    <Text style={[styles.error, { color: colors.destructive }]}>{text}</Text>
   );
 }
 
@@ -128,6 +106,4 @@ const styles = StyleSheet.create({
     minHeight: 60,
     textAlignVertical: 'top',
   },
-  status: { fontSize: 12 },
-  error: { fontSize: 13 },
 });

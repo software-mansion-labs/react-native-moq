@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { subscribeDataMessages } from '../dataMessages';
 import type { DataMessage } from '../dataMessages';
 import type { BroadcastInfo, ChunkSubscription } from '../types';
+import { useChunkSubscription } from './useChunkSubscription';
 
 export interface UseDataMessagesOptions {
   /**
@@ -35,8 +36,7 @@ export function useDataMessages(
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
 
-  // Key on primitives: `broadcast` may be a fresh object each render.
-  const subscription = useMemo(
+  return useChunkSubscription(
     () =>
       subscribeDataMessages(
         broadcast,
@@ -44,14 +44,7 @@ export function useDataMessages(
         (message) => onMessageRef.current(message),
         { autoStart: false }
       ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessionId, path, trackName]
+    [sessionId, path, trackName],
+    autoStart
   );
-
-  useEffect(() => {
-    if (autoStart) subscription.start();
-    return () => subscription.stop();
-  }, [subscription, autoStart]);
-
-  return subscription;
 }

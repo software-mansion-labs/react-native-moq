@@ -45,6 +45,12 @@ export function utf8Decode(bytes: Uint8Array): string {
       continue;
     }
     i += needed;
+    // Reject overlong encodings, encoded surrogates, and > U+10FFFF.
+    const minCp = [0x80, 0x800, 0x10000][needed - 1]!;
+    if (cp < minCp || (cp >= 0xd800 && cp <= 0xdfff) || cp > 0x10ffff) {
+      out += '�';
+      continue;
+    }
     if (cp >= 0x10000) {
       cp -= 0x10000;
       out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));

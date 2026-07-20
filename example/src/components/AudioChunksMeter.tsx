@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import {
   useAudioChunks,
   type AudioChunkFormat,
   type BroadcastInfo,
 } from 'react-native-moq';
+import { useChunkTally } from '../hooks/useChunkTally';
 import { Button } from './ui';
 import { useTheme } from '../theme';
 
@@ -20,38 +21,10 @@ const DEFAULT_FORMAT: AudioChunkFormat =
 export function AudioChunksMeter({ broadcast }: { broadcast: BroadcastInfo }) {
   const { colors, radius } = useTheme();
   const [format, setFormat] = useState<AudioChunkFormat>(DEFAULT_FORMAT);
-  // Chunks arrive at frame rate; accumulate in a ref, flush to state on a timer.
-  const tally = useRef({ count: 0, bytes: 0, last: 0, frames: 0, rate: 0 });
-  const [display, setDisplay] = useState({
-    count: 0,
-    bytes: 0,
-    last: 0,
-    frames: 0,
-    rate: 0,
-  });
+  const { stats, onChunk } = useChunkTally(format);
   const [running, setRunning] = useState(true);
 
-  const chunks = useAudioChunks(
-    broadcast,
-    (chunk) => {
-      tally.current.count += 1;
-      tally.current.bytes += chunk.data.byteLength;
-      tally.current.last = chunk.data.byteLength;
-      tally.current.frames = chunk.frameCount ?? 0;
-      tally.current.rate = chunk.sampleRate;
-    },
-    { format }
-  );
-
-  // Reset the tally on format change so numbers reflect only the current stream.
-  useEffect(() => {
-    tally.current = { count: 0, bytes: 0, last: 0, frames: 0, rate: 0 };
-  }, [format]);
-
-  useEffect(() => {
-    const id = setInterval(() => setDisplay({ ...tally.current }), 500);
-    return () => clearInterval(id);
-  }, []);
+  const chunks = useAudioChunks(broadcast, onChunk, { format });
 
   const track = broadcast.audioTracks[0];
   const isPcm = format !== 'encoded';
@@ -75,12 +48,10 @@ export function AudioChunksMeter({ broadcast }: { broadcast: BroadcastInfo }) {
         Audio chunks · {isPcm ? 'PCM f32' : (track?.codec.toUpperCase() ?? '—')}
         {canToggle ? ' (tap to switch)' : ''}
       </Text>
-      <Stat text={`received: ${display.count}`} />
-      <Stat text={`total: ${(display.bytes / 1024).toFixed(1)} KiB`} />
-      <Stat text={`last: ${display.last} B`} />
-      {isPcm && (
-        <Stat text={`frames: ${display.frames} @ ${display.rate} Hz`} />
-      )}
+      <Stat text={`received: ${stats.count}`} />
+      <Stat text={`total: ${(stats.bytes / 1024).toFixed(1)} KiB`} />
+      <Stat text={`last: ${stats.last} B`} />
+      {isPcm && <Stat text={`frames: ${stats.frames} @ ${stats.rate} Hz`} />}
       <Button
         title={running ? 'Stop chunks' : 'Start chunks'}
         icon={running ? 'stop' : 'play-arrow'}

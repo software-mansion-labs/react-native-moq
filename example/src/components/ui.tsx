@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -10,6 +11,7 @@ import {
   type ColorValue,
   type StyleProp,
   type TextInputProps,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 import MaterialIcons from '@react-native-vector-icons/material-icons';
@@ -272,8 +274,73 @@ export function Segmented<T extends string | number>({
   );
 }
 
+/** Scrolling screen body with the shared padding / max-width scaffold. */
+export function ScreenScroll({ children }: { children: ReactNode }) {
+  const { colors } = useTheme();
+  return (
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={styles.screenScroll}
+      contentInsetAdjustmentBehavior="automatic"
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+/** Row with content pushed to the edges — state chip left, control right. */
+export function SplitRow({ children }: { children: ReactNode }) {
+  return <View style={styles.splitRow}>{children}</View>;
+}
+
+/** Card with a control beside its header; extra content renders below. */
+export function SourceCard({
+  title,
+  control,
+  children,
+}: {
+  title: string;
+  control: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <Card>
+      <View style={styles.sourceHeader}>
+        <SectionHeader title={title} />
+        {control}
+      </View>
+      {children}
+    </Card>
+  );
+}
+
+/** Muted helper text. */
+export function Hint({
+  children,
+  tone = 'secondary',
+  style,
+}: {
+  children: ReactNode;
+  tone?: 'secondary' | 'tertiary';
+  style?: StyleProp<TextStyle>;
+}) {
+  const { colors } = useTheme();
+  const color =
+    tone === 'tertiary' ? colors.tertiaryLabel : colors.secondaryLabel;
+  return <Text style={[styles.hint, { color }, style]}>{children}</Text>;
+}
+
+export function ErrorText({ text }: { text: string }) {
+  const { colors } = useTheme();
+  return (
+    <Text style={[styles.errorText, { color: colors.destructive }]}>
+      {text}
+    </Text>
+  );
+}
+
 /** True when the window is wide enough for side-by-side layouts. */
-export function useWide(): boolean {
+function useWide(): boolean {
   return useWindowDimensions().width >= 700;
 }
 
@@ -380,4 +447,24 @@ const styles = StyleSheet.create({
   columnsWide: { flexDirection: 'row', alignItems: 'flex-start' },
   column: { gap: 12 },
   columnWide: { flex: 1 },
+  screenScroll: {
+    padding: 16,
+    gap: 12,
+    width: '100%',
+    maxWidth: 1080,
+    alignSelf: 'center',
+  },
+  splitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  sourceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  hint: { fontSize: 13, lineHeight: 18 },
+  errorText: { fontSize: 13 },
 });

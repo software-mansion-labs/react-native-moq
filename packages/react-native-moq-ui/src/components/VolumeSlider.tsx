@@ -3,6 +3,7 @@ import {
   PanResponder,
   Platform,
   View,
+  type ColorValue,
   type GestureResponderEvent,
   type LayoutChangeEvent,
   type PanResponderGestureState,
@@ -150,7 +151,7 @@ export function SpeakerGlyph({
   // 0..1; 0 shows the muted glyph.
   volume?: number;
   // White for video overlays; pass a darker shade on light backgrounds.
-  color?: string;
+  color?: ColorValue;
 }) {
   const name =
     volume <= 0

@@ -1,9 +1,9 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { BroadcastInfo } from 'react-native-moq';
 import { Button } from './ui';
+import { TranscriptBox } from './TranscriptBox';
 import { WhisperModelGate } from './WhisperModelGate';
 import { useWhisperTranscription } from '../hooks/useWhisperTranscription';
-import { useTheme } from '../theme';
 
 /**
  * Live on-device transcription of a broadcast's audio — the UI over
@@ -14,7 +14,6 @@ export function TranscriptionPanel({
 }: {
   broadcast: BroadcastInfo;
 }) {
-  const { colors, radius } = useTheme();
   const transcription = useWhisperTranscription(broadcast);
   const { capturing, transcript } = transcription;
 
@@ -30,24 +29,13 @@ export function TranscriptionPanel({
           variant={capturing ? 'tonal' : 'filled'}
           onPress={capturing ? transcription.stop : transcription.start}
         />
-        <View
-          style={[
-            styles.transcriptBox,
-            { backgroundColor: colors.fill, borderRadius: radius.control },
-          ]}
-        >
-          {transcript === '' ? (
-            <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
-              {capturing
-                ? 'Listening…'
-                : 'Press start to caption the live audio.'}
-            </Text>
-          ) : (
-            <Text style={[styles.transcript, { color: colors.label }]}>
-              {transcript}
-            </Text>
-          )}
-        </View>
+        <TranscriptBox
+          transcript={transcript}
+          placeholder={
+            capturing ? 'Listening…' : 'Press start to caption the live audio.'
+          }
+          minHeight={96}
+        />
       </WhisperModelGate>
     </View>
   );
@@ -55,10 +43,4 @@ export function TranscriptionPanel({
 
 const styles = StyleSheet.create({
   panel: { gap: 12 },
-  muted: { fontSize: 13, lineHeight: 18 },
-  transcriptBox: {
-    minHeight: 96,
-    padding: 12,
-  },
-  transcript: { fontSize: 15, lineHeight: 22 },
 });

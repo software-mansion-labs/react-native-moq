@@ -1,7 +1,7 @@
 import { NativeEventEmitter } from 'react-native';
-import { EventEmitter, type EventSubscription } from './EventEmitter';
+import type { Listenable } from './EventEmitter';
 import NativeMoQCamera from './native/NativeMoQCamera';
-import { watchNativeState } from './nativeState';
+import { createNativeStateHandle, type StateChangeEvents } from './nativeState';
 
 // Shared with useCamera so both observe the same native module.
 export const cameraEmitter = new NativeEventEmitter(NativeMoQCamera);
@@ -55,25 +55,31 @@ export interface CameraTrack {
   setPosition(position: CameraPosition): void;
 }
 
-export type CameraEvents = {
-  stateChange: (event: {
-    state: CameraCaptureState;
-    lastError: string | null;
-  }) => void;
-};
+export type CameraEvents = StateChangeEvents<CameraCaptureState>;
 
 /** Hook-free camera track; `destroy()` stops the (ref-counted) capture. */
-export interface CameraHandle extends CameraTrack {
-  readonly emitter: EventEmitter<CameraEvents>;
-  addListener<TEventName extends keyof CameraEvents>(
-    eventName: TEventName,
-    listener: CameraEvents[TEventName]
-  ): EventSubscription;
+export interface CameraHandle extends CameraTrack, Listenable<CameraEvents> {
   destroy(): void;
 }
 
 export function getSupportedVideoCodecs(): VideoCodec[] {
   return NativeMoQCamera.getSupportedCodecs() as VideoCodec[];
+}
+
+// Single source of the camera defaults, shared by createCamera and useCamera.
+export function resolveCameraOptions(options: CameraOptions): {
+  position: CameraPosition;
+  encoder: VideoEncoderOptions;
+} {
+  return {
+    position: options.position ?? 'front',
+    encoder: {
+      codec: options.videoCodec ?? 'h264',
+      width: options.width ?? 1280,
+      height: options.height ?? 720,
+      framerate: options.framerate ?? 30,
+    },
+  };
 }
 
 /**
@@ -84,24 +90,13 @@ export function getSupportedVideoCodecs(): VideoCodec[] {
 export function createCamera(
   options: Omit<CameraOptions, 'enabled'> = {}
 ): CameraHandle {
-  let position = options.position ?? 'front';
-  const codec = options.videoCodec ?? 'h264';
-  const width = options.width ?? 1280;
-  const height = options.height ?? 720;
-  const framerate = options.framerate ?? 30;
+  const { position: initialPosition, encoder } = resolveCameraOptions(options);
+  let position = initialPosition;
 
-  let state: CameraCaptureState = 'idle';
-  let lastError: string | null = null;
-  const emitter = new EventEmitter<CameraEvents>();
-  const unwatch = watchNativeState<CameraCaptureState>(
+  const watched = createNativeStateHandle<CameraCaptureState>(
     cameraEmitter,
     'cameraStateChanged',
-    ['active', 'starting'],
-    (nextState, nextError) => {
-      state = nextState;
-      lastError = nextError;
-      emitter.emit('stateChange', { state: nextState, lastError: nextError });
-    }
+    ['active', 'starting']
   );
 
   NativeMoQCamera.startCapture(position);
@@ -117,22 +112,21 @@ export function createCamera(
     __name: 'camera',
     __source: 'single',
     get state() {
-      return state;
+      return watched.state;
     },
     get lastError() {
-      return lastError;
+      return watched.lastError;
     },
     get position() {
       return position;
     },
-    encoder: { codec, width, height, framerate },
+    encoder,
     flip: () => setPosition(position === 'front' ? 'back' : 'front'),
     setPosition,
-    emitter,
-    addListener: (eventName, listener) =>
-      emitter.addListener(eventName, listener),
+    emitter: watched.emitter,
+    addListener: watched.addListener,
     destroy() {
-      unwatch();
+      watched.unwatch();
       NativeMoQCamera.stopCapture();
     },
   };

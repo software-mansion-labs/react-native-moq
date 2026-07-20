@@ -87,11 +87,8 @@ function VideoSection({
     p.play();
   });
 
-  // Pause on unmount (mode switch / disconnect) so the video stream stops.
-  useEffect(() => {
-    return () => player.pause();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Stop on unmount (mode switch / removal) to free the native subscription.
+  useEffect(() => player.stop, [player.stop]);
 
   const sortedVideoTracks = sortVideoTracksByResolution(broadcast.videoTracks);
 

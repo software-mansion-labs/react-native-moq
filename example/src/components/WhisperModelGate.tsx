@@ -1,5 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { Button } from './ui';
+import { StyleSheet, View } from 'react-native';
+import { Button, ErrorText, Hint } from './ui';
 import { useTheme } from '../theme';
 import type { WhisperTranscription } from '../hooks/useWhisperTranscription';
 
@@ -21,18 +21,14 @@ export function WhisperModelGate({
 
   if (transcription.modelError) {
     return (
-      <Text style={[styles.text, { color: colors.destructive }]}>
-        Model error: {String(transcription.modelError)}
-      </Text>
+      <ErrorText text={`Model error: ${String(transcription.modelError)}`} />
     );
   }
 
   if (!transcription.modelRequested) {
     return (
       <>
-        <Text style={[styles.text, { color: colors.secondaryLabel }]}>
-          {intro}
-        </Text>
+        <Hint>{intro}</Hint>
         <Button
           title="Load Whisper model"
           icon="download"
@@ -46,9 +42,7 @@ export function WhisperModelGate({
     const pct = Math.round(transcription.downloadProgress * 100);
     return (
       <>
-        <Text style={[styles.text, { color: colors.secondaryLabel }]}>
-          Downloading & loading Whisper… {pct}%
-        </Text>
+        <Hint>Downloading & loading Whisper… {pct}%</Hint>
         <View style={[styles.progressTrack, { backgroundColor: colors.fill }]}>
           <View
             style={[
@@ -65,7 +59,6 @@ export function WhisperModelGate({
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 13, lineHeight: 18 },
   progressTrack: {
     height: 6,
     borderRadius: 3,

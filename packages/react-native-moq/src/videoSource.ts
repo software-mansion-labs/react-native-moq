@@ -59,6 +59,25 @@ export interface VideoSourceTrack {
   fillTestPattern(bufferIndex: number, frameIndex: number): void;
 }
 
+// Single source of the video-source defaults, shared by createVideoSource and
+// useVideoSource.
+export function resolveVideoSourceOptions(options: VideoSourceOptions): {
+  name: string;
+  poolSize: number;
+  encoder: VideoEncoderOptions;
+} {
+  return {
+    name: options.name ?? 'video',
+    poolSize: options.poolSize ?? 3,
+    encoder: {
+      codec: options.videoCodec ?? 'h264',
+      width: options.width,
+      height: options.height,
+      framerate: options.framerate ?? 30,
+    },
+  };
+}
+
 /** Hook-free video source; `destroy()` releases the native buffer pool. */
 export interface VideoSourceHandle extends VideoSourceTrack {
   // Resolves with the pool descriptors once native allocation completes
@@ -106,18 +125,13 @@ export function createVideoSourceWithId(
   id: string,
   options: VideoSourceOptions
 ): VideoSourceHandle {
-  const name = options.name ?? 'video';
-  const codec = options.videoCodec ?? 'h264';
-  const width = options.width;
-  const height = options.height;
-  const framerate = options.framerate ?? 30;
-  const poolSize = options.poolSize ?? 3;
+  const { name, poolSize, encoder } = resolveVideoSourceOptions(options);
 
   let buffers: CustomVideoBufferDescriptor[] = [];
   let destroyed = false;
 
   const ready: Promise<CustomVideoBufferDescriptor[]> = NativeMoQVideoSource
-    ? NativeMoQVideoSource.create(id, width, height, poolSize)
+    ? NativeMoQVideoSource.create(id, encoder.width, encoder.height, poolSize)
         .then((descriptors) => {
           if (!destroyed) buffers = descriptors;
           return buffers;
@@ -130,7 +144,7 @@ export function createVideoSourceWithId(
     __type: 'videoSource',
     __name: name,
     __id: id,
-    encoder: { codec, width, height, framerate },
+    encoder,
     get buffers() {
       return buffers;
     },

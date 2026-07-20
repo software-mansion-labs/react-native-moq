@@ -1,10 +1,14 @@
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MaterialIcons } from '@react-native-vector-icons/material-icons/static';
 import { type Player } from 'react-native-moq';
 import { useFullscreenControls } from '../contexts/FullscreenContext';
 import { usePlayPause } from '../usePlayPause';
-import { SpeakerGlyph, VolumeSlider } from './VolumeSlider';
+import {
+  AndroidScrim,
+  ChromeIconButton,
+  PlayPauseButton,
+  VolumeRow,
+} from './chrome';
 
 // Default fullscreen chrome, mirroring platform conventions: close button
 // top-left on iOS / top-right on Android, centered play/pause, bottom volume
@@ -71,38 +75,23 @@ function IOSChrome({
   return (
     <View style={styles.fill} pointerEvents="box-none">
       <View style={[styles.topBar, topBarStyle]} pointerEvents="box-none">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Exit fullscreen"
+        <ChromeIconButton
+          icon="close"
+          iconSize={20}
+          size={36}
           hitSlop={12}
+          accessibilityLabel="Exit fullscreen"
           onPress={onExit}
-          style={({ pressed }) => [
-            styles.iosCircleButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <MaterialIcons name="close" size={20} color="#fff" />
-        </Pressable>
+        />
       </View>
 
-      <View style={styles.center} pointerEvents="box-none">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-          hitSlop={16}
-          onPress={onTogglePlay}
-          style={({ pressed }) => [
-            styles.iosPlayButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <MaterialIcons
-            name={isPlaying ? 'pause' : 'play-arrow'}
-            size={40}
-            color="#fff"
-          />
-        </Pressable>
-      </View>
+      <PlayPauseButton
+        isPlaying={isPlaying}
+        onPress={onTogglePlay}
+        size={72}
+        iconSize={40}
+        hitSlop={16}
+      />
 
       <View
         style={[
@@ -115,10 +104,7 @@ function IOSChrome({
         ]}
         pointerEvents="box-none"
       >
-        <View style={styles.volumeRow}>
-          <SpeakerGlyph size={20} volume={player.volume} />
-          <VolumeSlider player={player} width={160} />
-        </View>
+        <VolumeRow player={player} size="large" />
       </View>
     </View>
   );
@@ -146,53 +132,27 @@ function AndroidChrome({
   };
   return (
     <View style={styles.fill} pointerEvents="box-none">
-      {/* Soft scrim so icons stay legible over light video frames. */}
-      <View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFill, styles.androidScrim]}
-      />
+      <AndroidScrim />
 
       <View style={[styles.topBar, topBarStyle]} pointerEvents="box-none">
         <View style={styles.flexFill} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Exit fullscreen"
+        <ChromeIconButton
+          icon="close"
+          iconSize={24}
+          size={44}
           hitSlop={12}
+          accessibilityLabel="Exit fullscreen"
           onPress={onExit}
-          android_ripple={{ color: 'rgba(255,255,255,0.18)', borderless: true }}
-          style={({ pressed }) => [
-            styles.androidIconButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <MaterialIcons name="close" size={24} color="#fff" />
-        </Pressable>
+        />
       </View>
 
-      <View style={styles.center} pointerEvents="box-none">
-        {/* `borderless: false` on purpose: borderless swaps out the bg
-            drawable, so the dark circle would disappear over a dark frame. */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-          hitSlop={16}
-          onPress={onTogglePlay}
-          android_ripple={{
-            color: 'rgba(255,255,255,0.18)',
-            borderless: false,
-          }}
-          style={({ pressed }) => [
-            styles.androidPlayButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <MaterialIcons
-            name={isPlaying ? 'pause' : 'play-arrow'}
-            size={42}
-            color="#fff"
-          />
-        </Pressable>
-      </View>
+      <PlayPauseButton
+        isPlaying={isPlaying}
+        onPress={onTogglePlay}
+        size={72}
+        iconSize={42}
+        hitSlop={16}
+      />
 
       <View
         style={[
@@ -205,10 +165,7 @@ function AndroidChrome({
         ]}
         pointerEvents="box-none"
       >
-        <View style={styles.volumeRow}>
-          <SpeakerGlyph size={20} volume={player.volume} />
-          <VolumeSlider player={player} width={160} />
-        </View>
+        <VolumeRow player={player} size="large" />
       </View>
     </View>
   );
@@ -217,7 +174,6 @@ function AndroidChrome({
 const styles = StyleSheet.create({
   fill: { ...StyleSheet.absoluteFill },
   flexFill: { flex: 1 },
-  pressed: { opacity: 0.7 },
 
   topBar: {
     position: 'absolute',
@@ -235,56 +191,5 @@ const styles = StyleSheet.create({
     bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-  },
-
-  volumeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-  },
-
-  center: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  iosCircleButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iosPlayButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  androidIconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  androidPlayButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  androidScrim: {
-    backgroundColor: 'rgba(0, 0, 0, 0.18)',
   },
 });

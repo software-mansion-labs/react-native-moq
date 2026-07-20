@@ -50,10 +50,7 @@ export function MoQBoyScreen() {
   const games = useMemo<BoyGame[]>(
     () =>
       broadcasts
-        .map((b) => {
-          const component = lastComponent(b.path);
-          return { name: component, broadcastPath: b.path, component };
-        })
+        .map((b) => ({ name: lastComponent(b.path), broadcastPath: b.path }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [broadcasts]
   );

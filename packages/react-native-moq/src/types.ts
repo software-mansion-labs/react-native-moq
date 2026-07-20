@@ -1,5 +1,5 @@
 import NativeMoQ from './native/NativeMoQ';
-import type { EventEmitter, EventSubscription } from './EventEmitter';
+import type { Listenable } from './EventEmitter';
 
 export type SessionState =
   | 'idle'
@@ -181,20 +181,15 @@ export type SessionEvents = {
   stateChange: (event: { state: SessionState }) => void;
 };
 
-export interface Session {
+export interface Session extends Listenable<SessionEvents> {
   readonly id: string;
   readonly url: string;
-  state: SessionState;
-  readonly emitter: EventEmitter<SessionEvents>;
-  addListener<TEventName extends keyof SessionEvents>(
-    eventName: TEventName,
-    listener: SessionEvents[TEventName]
-  ): EventSubscription;
+  readonly state: SessionState;
   connect(targetLatencyMs?: number): void;
   disconnect(): void;
 }
 
-export interface Player {
+export interface Player extends Listenable<PlayerEvents> {
   readonly sessionId: string;
   readonly broadcastPath: string;
   readonly isPlaying: boolean;
@@ -202,11 +197,6 @@ export interface Player {
   readonly currentVideoTrackName?: string;
   readonly currentAudioTrackName?: string;
   readonly volume: number;
-  readonly emitter: EventEmitter<PlayerEvents>;
-  addListener<TEventName extends keyof PlayerEvents>(
-    eventName: TEventName,
-    listener: PlayerEvents[TEventName]
-  ): EventSubscription;
   play(): void;
   pause(): void;
   stop(): void;
@@ -216,22 +206,8 @@ export interface Player {
   setVolume(volume: number): void;
 }
 
-export interface AudioPlayer {
-  readonly sessionId: string;
-  readonly broadcastPath: string;
-  readonly isPlaying: boolean;
-  readonly playbackStats: PlaybackStats | null;
-  readonly currentAudioTrackName?: string;
-  readonly volume: number;
-  readonly emitter: EventEmitter<PlayerEvents>;
-  addListener<TEventName extends keyof PlayerEvents>(
-    eventName: TEventName,
-    listener: PlayerEvents[TEventName]
-  ): EventSubscription;
-  play(): void;
-  pause(): void;
-  stop(): void;
-  updateTargetLatency(ms: number): void;
-  switchAudioTrack(trackName: string): void;
-  setVolume(volume: number): void;
-}
+/** `Player` without the video-track members. */
+export type AudioPlayer = Omit<
+  Player,
+  'currentVideoTrackName' | 'switchVideoTrack'
+>;

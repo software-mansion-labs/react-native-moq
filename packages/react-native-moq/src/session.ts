@@ -60,7 +60,10 @@ export function createSessionWithId(
     },
     disconnect() {
       NativeMoQ.disconnect(id);
-      state = 'idle';
+      if (state !== 'idle') {
+        state = 'idle';
+        emitter.emit('stateChange', { state: 'idle' });
+      }
     },
     destroy() {
       sub.remove();

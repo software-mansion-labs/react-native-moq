@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   createAudioSourceWithId,
   mintAudioSourceId,
+  resolveAudioSourceOptions,
   sendPcm,
   type AudioSourceOptions,
   type AudioSourceTrack,
@@ -27,10 +28,8 @@ export type {
 export function useAudioSource(
   options: AudioSourceOptions = {}
 ): AudioSourceTrack {
-  const name = options.name ?? 'audio';
-  const codec = options.audioCodec ?? 'opus';
-  const sampleRate = options.sampleRate ?? 48000;
-  const channels = options.channels ?? 1;
+  const { name, channels, encoder } = resolveAudioSourceOptions(options);
+  const { codec, sampleRate } = encoder;
   const [id] = useState(() => mintAudioSourceId());
 
   useEffect(() => {

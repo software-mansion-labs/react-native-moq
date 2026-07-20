@@ -41,6 +41,23 @@ export interface AudioSourceHandle extends AudioSourceTrack {
   destroy(): void;
 }
 
+// Single source of the audio-source defaults, shared by createAudioSource and
+// useAudioSource.
+export function resolveAudioSourceOptions(options: AudioSourceOptions): {
+  name: string;
+  channels: number;
+  encoder: AudioEncoderOptions;
+} {
+  return {
+    name: options.name ?? 'audio',
+    channels: options.channels ?? 1,
+    encoder: {
+      codec: options.audioCodec ?? 'opus',
+      sampleRate: options.sampleRate ?? 48000,
+    },
+  };
+}
+
 // Normalize the pushed PCM to raw interleaved 16-bit LE bytes for the bridge.
 function toInt16Bytes(pcm: PcmData): Uint8Array {
   if (pcm instanceof Float32Array) {
@@ -85,18 +102,15 @@ export function createAudioSourceWithId(
   id: string,
   options: AudioSourceOptions = {}
 ): AudioSourceHandle {
-  const name = options.name ?? 'audio';
-  const codec = options.audioCodec ?? 'opus';
-  const sampleRate = options.sampleRate ?? 48000;
-  const channels = options.channels ?? 1;
+  const { name, channels, encoder } = resolveAudioSourceOptions(options);
 
-  NativeMoQAudioSource.create(id, sampleRate, channels);
+  NativeMoQAudioSource.create(id, encoder.sampleRate, channels);
 
   return {
     __type: 'audioSource',
     __name: name,
     __id: id,
-    encoder: { codec, sampleRate },
+    encoder,
     channels,
     send: (pcm) => sendPcm(id, pcm),
     destroy: () => NativeMoQAudioSource.destroy(id),

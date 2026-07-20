@@ -1,7 +1,7 @@
 import { NativeEventEmitter } from 'react-native';
-import { EventEmitter, type EventSubscription } from './EventEmitter';
+import type { Listenable } from './EventEmitter';
 import NativeMoQMicrophone from './native/NativeMoQMicrophone';
-import { watchNativeState } from './nativeState';
+import { createNativeStateHandle, type StateChangeEvents } from './nativeState';
 
 // Shared with useMicrophone so both observe the same native module.
 export const micEmitter = new NativeEventEmitter(NativeMoQMicrophone);
@@ -22,6 +22,11 @@ export interface AudioEncoderOptions {
 export interface MicrophoneOptions {
   audioCodec?: AudioCodec;
   audioSampleRate?: number;
+  // When false the mic isn't started (state stays 'idle'); toggling it
+  // starts/stops the shared capture. Lets an app run the mic conditionally
+  // without conditionally calling the hook. Hook-only; createMicrophone always
+  // starts capture.
+  enabled?: boolean;
 }
 
 export interface MicrophoneTrack {
@@ -32,25 +37,27 @@ export interface MicrophoneTrack {
   readonly encoder: AudioEncoderOptions;
 }
 
-export type MicrophoneEvents = {
-  stateChange: (event: {
-    state: MicrophoneCaptureState;
-    lastError: string | null;
-  }) => void;
-};
+export type MicrophoneEvents = StateChangeEvents<MicrophoneCaptureState>;
 
 /** Hook-free microphone track; `destroy()` stops the (ref-counted) capture. */
-export interface MicrophoneHandle extends MicrophoneTrack {
-  readonly emitter: EventEmitter<MicrophoneEvents>;
-  addListener<TEventName extends keyof MicrophoneEvents>(
-    eventName: TEventName,
-    listener: MicrophoneEvents[TEventName]
-  ): EventSubscription;
+export interface MicrophoneHandle
+  extends MicrophoneTrack, Listenable<MicrophoneEvents> {
   destroy(): void;
 }
 
 export function getSupportedAudioCodecs(): AudioCodec[] {
   return NativeMoQMicrophone.getSupportedCodecs() as AudioCodec[];
+}
+
+// Single source of the microphone defaults, shared by createMicrophone and
+// useMicrophone.
+export function resolveMicrophoneOptions(
+  options: MicrophoneOptions
+): AudioEncoderOptions {
+  return {
+    codec: options.audioCodec ?? 'opus',
+    sampleRate: options.audioSampleRate ?? 48000,
+  };
 }
 
 /**
@@ -59,41 +66,31 @@ export function getSupportedAudioCodecs(): AudioCodec[] {
  * mic is shared across consumers.
  */
 export function createMicrophone(
-  options: MicrophoneOptions = {}
+  options: Omit<MicrophoneOptions, 'enabled'> = {}
 ): MicrophoneHandle {
-  const codec = options.audioCodec ?? 'opus';
-  const sampleRate = options.audioSampleRate ?? 48000;
+  const encoder = resolveMicrophoneOptions(options);
 
-  let state: MicrophoneCaptureState = 'idle';
-  let lastError: string | null = null;
-  const emitter = new EventEmitter<MicrophoneEvents>();
-  const unwatch = watchNativeState<MicrophoneCaptureState>(
+  const watched = createNativeStateHandle<MicrophoneCaptureState>(
     micEmitter,
     'micStateChanged',
-    ['active', 'starting'],
-    (nextState, nextError) => {
-      state = nextState;
-      lastError = nextError;
-      emitter.emit('stateChange', { state: nextState, lastError: nextError });
-    }
+    ['active', 'starting']
   );
 
-  NativeMoQMicrophone.startCapture(sampleRate);
+  NativeMoQMicrophone.startCapture(encoder.sampleRate);
 
   return {
     __type: 'microphone',
     get state() {
-      return state;
+      return watched.state;
     },
     get lastError() {
-      return lastError;
+      return watched.lastError;
     },
-    encoder: { codec, sampleRate },
-    emitter,
-    addListener: (eventName, listener) =>
-      emitter.addListener(eventName, listener),
+    encoder,
+    emitter: watched.emitter,
+    addListener: watched.addListener,
     destroy() {
-      unwatch();
+      watched.unwatch();
       NativeMoQMicrophone.stopCapture();
     },
   };

@@ -2,6 +2,7 @@ import {
   Platform,
   requireNativeComponent,
   View,
+  type ColorValue,
   type ViewProps,
 } from 'react-native';
 
@@ -10,12 +11,12 @@ export interface BroadcastPickerViewProps extends ViewProps {
   // it so it's a single tap. iOS-only.
   preferredExtension?: string;
   // iOS-only.
-  tintColor?: string;
+  tintColor?: ColorValue;
 }
 
 interface NativeBroadcastPickerViewProps extends ViewProps {
   preferredExtension?: string;
-  tintColor?: string;
+  tintColor?: ColorValue;
 }
 
 // iOS wraps RPSystemBroadcastPickerView (system sheet launches the extension);

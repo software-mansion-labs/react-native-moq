@@ -101,7 +101,8 @@ export { subscribeAudioChunks } from './audioChunks';
 export type { SubscribeAudioChunksOptions } from './audioChunks';
 export { useEvent, useEventListener } from './hooks/useEvent';
 export { EventEmitter } from './EventEmitter';
-export type { EventSubscription } from './EventEmitter';
+export type { EventsMap, EventSubscription, Listenable } from './EventEmitter';
+export type { StateChangeEvents } from './nativeState';
 export { PlayerHandle } from './types';
 export type {
   AudioChunk,

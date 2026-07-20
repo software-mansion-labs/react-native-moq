@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import {
   useAudioChunks,
   useBroadcasts,
@@ -8,15 +8,18 @@ import {
   type BroadcastInfo,
   type Session,
 } from 'react-native-moq';
-import { StateIndicator } from '../components/StateIndicator';
+import { BroadcastRow } from '../components/BroadcastRow';
+import { ConnectionCard, sessionFlags } from '../components/ConnectionCard';
 import { WaveformMeter } from '../components/WaveformMeter';
 import { TranscriptionPanel } from '../components/TranscriptionPanel';
 import { useAudioApiPlayback } from '../hooks/useAudioApiPlayback';
+import { useChunkTally } from '../hooks/useChunkTally';
 import {
   Button,
   Card,
+  Hint,
   IconButton,
-  Input,
+  ScreenScroll,
   SectionHeader,
   Segmented,
   TwoColumn,
@@ -38,10 +41,8 @@ export function AudioChunksScreen({
   url: string;
   setUrl: (url: string) => void;
 }) {
-  const { colors } = useTheme();
   const session = useSession(url);
-  const canConnect = session.state === 'idle' || session.state === 'closed';
-  const isConnected = session.state === 'connected';
+  const { canConnect, isConnected } = sessionFlags(session);
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
@@ -50,43 +51,22 @@ export function AudioChunksScreen({
   }, [isConnected]);
 
   return (
-    <ScrollView
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={styles.container}
-      contentInsetAdjustmentBehavior="automatic"
-    >
+    <ScreenScroll>
       <TwoColumn
         left={
           <>
-            <Text style={[styles.intro, { color: colors.secondaryLabel }]}>
+            <Hint>
               Subscribe to a broadcast&apos;s audio track as raw chunks with
               useAudioChunks, then play decoded PCM through
               react-native-audio-api.
-            </Text>
+            </Hint>
 
-            <Card>
-              <SectionHeader title="Connection" />
-              <Input
-                value={url}
-                onChangeText={setUrl}
-                placeholder="Relay URL"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={canConnect}
-              />
-              <View style={styles.connectRow}>
-                <StateIndicator state={session.state} />
-                <Button
-                  title={canConnect ? 'Connect' : 'Disconnect'}
-                  icon={canConnect ? 'link' : 'link-off'}
-                  variant={canConnect ? 'filled' : 'tonal'}
-                  destructive={!canConnect}
-                  onPress={
-                    canConnect ? () => session.connect() : session.disconnect
-                  }
-                />
-              </View>
-            </Card>
+            <ConnectionCard
+              session={session}
+              url={url}
+              setUrl={setUrl}
+              urlEditable={canConnect}
+            />
           </>
         }
         right={
@@ -99,7 +79,7 @@ export function AudioChunksScreen({
           )
         }
       />
-    </ScrollView>
+    </ScreenScroll>
   );
 }
 
@@ -118,11 +98,7 @@ function AudioBroadcasts({
   const selected = broadcasts.find((b) => b.path === selectedPath);
 
   if (broadcasts.length === 0) {
-    return (
-      <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
-        No broadcasts available yet…
-      </Text>
-    );
+    return <Hint tone="tertiary">No broadcasts available yet…</Hint>;
   }
 
   if (selected) {
@@ -153,49 +129,29 @@ function AudioBroadcasts({
       {broadcasts.map((b) => {
         const audio = b.audioTracks[0];
         return (
-          <Card key={b.path} style={styles.pickCard}>
-            <View style={styles.pickInfo}>
-              <Text
-                style={[styles.pickPath, { color: colors.label }]}
-                numberOfLines={1}
-              >
-                {b.path}
-              </Text>
-              <Text style={[styles.muted, { color: colors.secondaryLabel }]}>
-                {audio
-                  ? `${audio.codec.toUpperCase()} · ${audio.sampleRate} Hz`
-                  : 'no audio track'}
-              </Text>
-            </View>
-            <IconButton
-              icon="graphic-eq"
-              variant="filled"
-              accessibilityLabel={`Open ${b.path}`}
-              onPress={() => onSelect(b.path)}
-              disabled={!audio}
-            />
-          </Card>
+          <BroadcastRow
+            key={b.path}
+            path={b.path}
+            subtitle={
+              audio
+                ? `${audio.codec.toUpperCase()} · ${audio.sampleRate} Hz`
+                : 'no audio track'
+            }
+            actions={
+              <IconButton
+                icon="graphic-eq"
+                variant="filled"
+                accessibilityLabel={`Open ${b.path}`}
+                onPress={() => onSelect(b.path)}
+                disabled={!audio}
+              />
+            }
+          />
         );
       })}
     </View>
   );
 }
-
-interface ChunkStats {
-  count: number;
-  bytes: number;
-  last: number;
-  rate: number;
-  kbps: number;
-}
-
-const EMPTY_STATS: ChunkStats = {
-  count: 0,
-  bytes: 0,
-  last: 0,
-  rate: 0,
-  kbps: 0,
-};
 
 type DemoMode = 'playback' | 'transcribe';
 
@@ -223,35 +179,25 @@ function AudioChunksDemo({ broadcast }: { broadcast: BroadcastInfo }) {
 }
 
 function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
-  const { colors } = useTheme();
   const [format, setFormat] = useState<AudioChunkFormat>('pcm-f32');
   const isPcm = format !== 'encoded';
 
   const playback = useAudioApiPlayback();
+  const { stats, onChunk } = useChunkTally(format);
 
-  // Per-chunk data lands in refs (chunks arrive at frame rate); a timer flushes
-  // a snapshot to state.
+  // Per-chunk levels land in a ref (chunks arrive at frame rate); the meter
+  // repaints on its own timer.
   const levelsRef = useRef<number[]>(new Array(BAR_COUNT).fill(0));
-  const tally = useRef({ count: 0, bytes: 0, last: 0, rate: 0 });
-  const windowRef = useRef({ bytes: 0, t0: Date.now() });
-  const [stats, setStats] = useState<ChunkStats>(EMPTY_STATS);
 
-  // Reset on format change so numbers/meter reflect only the current stream.
+  // Reset on format change so the meter reflects only the current stream.
   useEffect(() => {
-    tally.current = { count: 0, bytes: 0, last: 0, rate: 0 };
     levelsRef.current = new Array(BAR_COUNT).fill(0);
-    windowRef.current = { bytes: 0, t0: Date.now() };
-    setStats(EMPTY_STATS);
   }, [format]);
 
   useAudioChunks(
     broadcast,
     (chunk) => {
-      tally.current.count += 1;
-      tally.current.bytes += chunk.data.byteLength;
-      tally.current.last = chunk.data.byteLength;
-      tally.current.rate = chunk.sampleRate;
-      windowRef.current.bytes += chunk.data.byteLength;
+      onChunk(chunk);
 
       if (chunk.format !== 'encoded') {
         // Peak amplitude over a subsampling of the PCM → one meter bar.
@@ -271,24 +217,6 @@ function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
     },
     { format }
   );
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const now = Date.now();
-      const w = windowRef.current;
-      const secs = (now - w.t0) / 1000;
-      const kbps = secs > 0 ? (w.bytes * 8) / secs / 1000 : 0;
-      windowRef.current = { bytes: 0, t0: now };
-      setStats({
-        count: tally.current.count,
-        bytes: tally.current.bytes,
-        last: tally.current.last,
-        rate: tally.current.rate,
-        kbps,
-      });
-    }, 500);
-    return () => clearInterval(id);
-  }, []);
 
   const track = broadcast.audioTracks[0];
 
@@ -316,17 +244,17 @@ function PlaybackPanel({ broadcast }: { broadcast: BroadcastInfo }) {
             onPress={playback.isPlaying ? playback.stop : playback.start}
           />
           {!playback.isPlaying && (
-            <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
+            <Hint tone="tertiary">
               Chunks are decoding live — press play to hear them and animate the
               meter.
-            </Text>
+            </Hint>
           )}
         </>
       ) : (
-        <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
+        <Hint tone="tertiary">
           Encoded objects are delivered exactly as published — decode them (e.g.
           with a codec) before playback. Inspect their stats below.
-        </Text>
+        </Hint>
       )}
 
       <View style={styles.statsGrid}>
@@ -357,30 +285,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 12,
-    width: '100%',
-    maxWidth: 1080,
-    alignSelf: 'center',
-  },
-  intro: { fontSize: 13, lineHeight: 18 },
-  connectRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  muted: { fontSize: 13, lineHeight: 18 },
   list: { gap: 8 },
-  pickCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  pickInfo: { flex: 1, gap: 2 },
-  pickPath: { fontSize: 14, fontWeight: '600' },
   demoWrap: { gap: 12 },
   demoHeader: {
     flexDirection: 'row',

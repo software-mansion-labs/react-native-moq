@@ -21,6 +21,54 @@ export interface PlayerEventSink {
   statsUpdate(stats: PlaybackStats): void;
 }
 
+export interface PlayerEventState {
+  isPlaying: boolean;
+  playbackStats: PlaybackStats | null;
+  currentVideoTrackName?: string;
+  currentAudioTrackName?: string;
+}
+
+export function clampVolume(volume: number): number {
+  return Math.min(Math.max(volume, 0), 1);
+}
+
+// The one place mapping player events to state, shared by the imperative
+// players and usePlayer. `state` is mutated before each re-emit, so listeners
+// always read a consistent snapshot.
+export function createPlayerEventBridge(
+  emitter: EventEmitter<PlayerEvents>,
+  initial: { videoTrackName?: string; audioTrackName?: string }
+): { state: PlayerEventState; sink: PlayerEventSink } {
+  const state: PlayerEventState = {
+    isPlaying: false,
+    playbackStats: null,
+    currentVideoTrackName: initial.videoTrackName,
+    currentAudioTrackName: initial.audioTrackName,
+  };
+  const sink: PlayerEventSink = {
+    playingChange(next) {
+      state.isPlaying = next;
+      emitter.emit('playingChange', { isPlaying: next });
+    },
+    trackStopped() {
+      state.playbackStats = null;
+      state.currentVideoTrackName = undefined;
+      state.currentAudioTrackName = undefined;
+      emitter.emit('trackStopped', {});
+    },
+    trackSwitched(trackKind, trackName) {
+      if (trackKind === 'video') state.currentVideoTrackName = trackName;
+      else state.currentAudioTrackName = trackName;
+      emitter.emit('trackSwitched', { trackKind, trackName });
+    },
+    statsUpdate(stats) {
+      state.playbackStats = stats;
+      emitter.emit('statsUpdate', stats);
+    },
+  };
+  return { state, sink };
+}
+
 // Wires the shared native events for one (sessionId, broadcastPath) into the
 // sink. Returns a detach function.
 export function attachPlayerEvents(
@@ -97,48 +145,32 @@ function createPlayerFromHandle(
   onDestroy?: () => void
 ): VideoPlayerHandle {
   const emitter = new EventEmitter<PlayerEvents>();
-  let isPlaying = false;
-  let playbackStats: PlaybackStats | null = null;
-  let currentVideoTrackName = handle.initialVideoTrackName;
-  let currentAudioTrackName = handle.initialAudioTrackName;
   let volume = 1;
 
-  const detach = attachPlayerEvents(handle.sessionId, handle.broadcastPath, {
-    playingChange(next) {
-      isPlaying = next;
-      emitter.emit('playingChange', { isPlaying: next });
-    },
-    trackStopped() {
-      playbackStats = null;
-      currentVideoTrackName = undefined;
-      currentAudioTrackName = undefined;
-      emitter.emit('trackStopped', {});
-    },
-    trackSwitched(trackKind, trackName) {
-      if (trackKind === 'video') currentVideoTrackName = trackName;
-      else currentAudioTrackName = trackName;
-      emitter.emit('trackSwitched', { trackKind, trackName });
-    },
-    statsUpdate(stats) {
-      playbackStats = stats;
-      emitter.emit('statsUpdate', stats);
-    },
+  const { state, sink } = createPlayerEventBridge(emitter, {
+    videoTrackName: handle.initialVideoTrackName,
+    audioTrackName: handle.initialAudioTrackName,
   });
+  const detach = attachPlayerEvents(
+    handle.sessionId,
+    handle.broadcastPath,
+    sink
+  );
 
   return {
     sessionId: handle.sessionId,
     broadcastPath: handle.broadcastPath,
     get isPlaying() {
-      return isPlaying;
+      return state.isPlaying;
     },
     get playbackStats() {
-      return playbackStats;
+      return state.playbackStats;
     },
     get currentVideoTrackName() {
-      return currentVideoTrackName;
+      return state.currentVideoTrackName;
     },
     get currentAudioTrackName() {
-      return currentAudioTrackName;
+      return state.currentAudioTrackName;
     },
     get volume() {
       return volume;
@@ -153,7 +185,7 @@ function createPlayerFromHandle(
     switchVideoTrack: (trackName) => handle.switchVideoTrack(trackName),
     switchAudioTrack: (trackName) => handle.switchAudioTrack(trackName),
     setVolume(next) {
-      const clamped = Math.min(Math.max(next, 0), 1);
+      const clamped = clampVolume(next);
       handle.setVolume(clamped);
       volume = clamped;
     },

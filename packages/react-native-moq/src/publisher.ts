@@ -59,7 +59,7 @@ export interface PublisherHandle extends Publisher {
   destroy(): void;
 }
 
-interface SerializedTrack {
+export interface SerializedTrack {
   type: 'camera' | 'microphone' | 'data' | 'audioSource' | 'videoSource';
   name: string;
   // Camera-only: which native capture source backs the track (see CameraSource).
@@ -70,36 +70,41 @@ interface SerializedTrack {
   encoder?: Record<string, unknown>;
 }
 
-function serializeTracks(tracks: PublishTrack[]): SerializedTrack[] {
-  return tracks.map((t) => {
-    if (t.__type === 'camera') {
-      return {
-        type: 'camera',
-        name: t.__name,
-        source: t.__source,
-        encoder: { ...t.encoder },
-      };
+// Exhaustive on __type so a new track kind fails to compile instead of being
+// silently mis-routed. Exported for tests.
+export function serializeTracks(tracks: PublishTrack[]): SerializedTrack[] {
+  return tracks.map((t): SerializedTrack => {
+    switch (t.__type) {
+      case 'camera':
+        return {
+          type: 'camera',
+          name: t.__name,
+          source: t.__source,
+          encoder: { ...t.encoder },
+        };
+      case 'data':
+        return { type: 'data', name: t.__name, id: t.__id };
+      case 'audioSource':
+        return {
+          type: 'audioSource',
+          name: t.__name,
+          id: t.__id,
+          encoder: { ...t.encoder, channels: t.channels },
+        };
+      case 'videoSource':
+        return {
+          type: 'videoSource',
+          name: t.__name,
+          id: t.__id,
+          encoder: { ...t.encoder },
+        };
+      case 'microphone':
+        return { type: 'microphone', name: 'mic', encoder: { ...t.encoder } };
+      default: {
+        const unknown: never = t;
+        throw new Error(`Unknown publish track: ${JSON.stringify(unknown)}`);
+      }
     }
-    if (t.__type === 'data') {
-      return { type: 'data', name: t.__name, id: t.__id };
-    }
-    if (t.__type === 'audioSource') {
-      return {
-        type: 'audioSource',
-        name: t.__name,
-        id: t.__id,
-        encoder: { ...t.encoder, channels: t.channels },
-      };
-    }
-    if (t.__type === 'videoSource') {
-      return {
-        type: 'videoSource',
-        name: t.__name,
-        id: t.__id,
-        encoder: { ...t.encoder },
-      };
-    }
-    return { type: 'microphone', name: 'mic', encoder: { ...t.encoder } };
   });
 }
 

@@ -1,7 +1,7 @@
 import { NativeEventEmitter } from 'react-native';
-import { EventEmitter, type EventSubscription } from './EventEmitter';
+import type { Listenable } from './EventEmitter';
 import NativeMoQScreenBroadcast from './native/NativeMoQScreenBroadcast';
-import { watchNativeState } from './nativeState';
+import { createNativeStateHandle, type StateChangeEvents } from './nativeState';
 import type { VideoCodec } from './camera';
 import type { AudioCodec } from './microphone';
 import type { Session } from './types';
@@ -42,20 +42,11 @@ export interface ScreenBroadcast {
   stop(): void;
 }
 
-export type ScreenBroadcastEvents = {
-  stateChange: (event: {
-    state: ScreenBroadcastState;
-    lastError: string | null;
-  }) => void;
-};
+export type ScreenBroadcastEvents = StateChangeEvents<ScreenBroadcastState>;
 
 /** Hook-free screen broadcast; `destroy()` stops it and detaches listeners. */
-export interface ScreenBroadcastHandle extends ScreenBroadcast {
-  readonly emitter: EventEmitter<ScreenBroadcastEvents>;
-  addListener<TEventName extends keyof ScreenBroadcastEvents>(
-    eventName: TEventName,
-    listener: ScreenBroadcastEvents[TEventName]
-  ): EventSubscription;
+export interface ScreenBroadcastHandle
+  extends ScreenBroadcast, Listenable<ScreenBroadcastEvents> {
   destroy(): void;
 }
 
@@ -106,34 +97,25 @@ export function createScreenBroadcast(
 ): ScreenBroadcastHandle {
   configureScreenBroadcast(session.url, options);
 
-  let state: ScreenBroadcastState = 'idle';
-  let lastError: string | null = null;
-  const emitter = new EventEmitter<ScreenBroadcastEvents>();
-  const unwatch = watchNativeState<ScreenBroadcastState>(
+  const watched = createNativeStateHandle<ScreenBroadcastState>(
     screenEmitter,
     'screenBroadcastStateChanged',
-    ['broadcasting', 'connecting'],
-    (nextState, nextError) => {
-      state = nextState;
-      lastError = nextError;
-      emitter.emit('stateChange', { state: nextState, lastError: nextError });
-    }
+    ['broadcasting', 'connecting']
   );
 
   return {
     get state() {
-      return state;
+      return watched.state;
     },
     get lastError() {
-      return lastError;
+      return watched.lastError;
     },
     start: () => NativeMoQScreenBroadcast.startScreenBroadcast(),
     stop: () => NativeMoQScreenBroadcast.stopScreenBroadcast(),
-    emitter,
-    addListener: (eventName, listener) =>
-      emitter.addListener(eventName, listener),
+    emitter: watched.emitter,
+    addListener: watched.addListener,
     destroy() {
-      unwatch();
+      watched.unwatch();
       NativeMoQScreenBroadcast.stopScreenBroadcast();
     },
   };

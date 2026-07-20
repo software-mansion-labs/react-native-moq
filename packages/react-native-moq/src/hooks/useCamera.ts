@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import NativeMoQCamera from '../native/NativeMoQCamera';
 import {
   cameraEmitter,
+  resolveCameraOptions,
   type CameraCaptureState,
   type CameraOptions,
   type CameraPosition,
@@ -24,11 +25,8 @@ export type {
 // singleton: hook instances share one native, ref-counted capture session, and
 // position changes apply to the shared session (visible to every consumer).
 export function useCamera(options: CameraOptions = {}): CameraTrack {
-  const initialPosition = options.position ?? 'front';
-  const codec = options.videoCodec ?? 'h264';
-  const width = options.width ?? 1280;
-  const height = options.height ?? 720;
-  const framerate = options.framerate ?? 30;
+  const { position: initialPosition, encoder } = resolveCameraOptions(options);
+  const { codec, width, height, framerate } = encoder;
   const enabled = options.enabled ?? true;
 
   const [position, setPositionState] =

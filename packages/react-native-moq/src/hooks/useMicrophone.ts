@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import NativeMoQMicrophone from '../native/NativeMoQMicrophone';
 import {
   micEmitter,
+  resolveMicrophoneOptions,
   type MicrophoneCaptureState,
   type MicrophoneOptions,
   type MicrophoneTrack,
@@ -22,8 +23,8 @@ export type {
 export function useMicrophone(
   options: MicrophoneOptions = {}
 ): MicrophoneTrack {
-  const codec = options.audioCodec ?? 'opus';
-  const sampleRate = options.audioSampleRate ?? 48000;
+  const { codec, sampleRate } = resolveMicrophoneOptions(options);
+  const enabled = options.enabled ?? true;
 
   const { state, lastError } = useNativeState<MicrophoneCaptureState>(
     micEmitter,
@@ -32,11 +33,12 @@ export function useMicrophone(
   );
 
   useEffect(() => {
+    if (!enabled) return;
     NativeMoQMicrophone.startCapture(sampleRate);
     return () => NativeMoQMicrophone.stopCapture();
-    // Mount-only: sampleRate changes don't affect the running native capture.
+    // sampleRate changes don't affect the running native capture.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enabled]);
 
   return useMemo<MicrophoneTrack>(
     () => ({

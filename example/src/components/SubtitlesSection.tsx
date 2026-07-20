@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useBroadcasts, useSession, type DataTrack } from 'react-native-moq';
+import { TranscriptBox } from './TranscriptBox';
 import { WhisperModelGate } from './WhisperModelGate';
 import { useWhisperTranscription } from '../hooks/useWhisperTranscription';
-import { useTheme } from '../theme';
+import { Hint } from './ui';
 
 /**
  * Publisher-side live subtitles. While live, a loopback session subscribes to
@@ -24,8 +25,6 @@ export function SubtitlesSection({
   micEnabled: boolean;
   dataTrack: DataTrack;
 }) {
-  const { colors, radius } = useTheme();
-
   // Loopback session: connected only while publishing, so the extra pull from
   // the relay lives exactly as long as the broadcast.
   const loop = useSession(url);
@@ -74,37 +73,16 @@ export function SubtitlesSection({
         intro="Caption this broadcast on-device with Whisper and publish the transcript as a subtitles data track viewers can toggle. The model downloads once (~tens of MB) and runs locally."
       >
         {!micEnabled ? (
-          <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
+          <Hint tone="tertiary">
             Enable the mic — subtitles transcribe the broadcast&apos;s audio
             track.
-          </Text>
+          </Hint>
         ) : !publishing ? (
-          <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
-            Go live to start captioning.
-          </Text>
+          <Hint tone="tertiary">Go live to start captioning.</Hint>
         ) : !own ? (
-          <Text style={[styles.muted, { color: colors.tertiaryLabel }]}>
-            Waiting for the broadcast audio…
-          </Text>
+          <Hint tone="tertiary">Waiting for the broadcast audio…</Hint>
         ) : (
-          <View
-            style={[
-              styles.transcriptBox,
-              { backgroundColor: colors.fill, borderRadius: radius.control },
-            ]}
-          >
-            <Text
-              style={[
-                transcript === '' ? styles.muted : styles.transcript,
-                {
-                  color:
-                    transcript === '' ? colors.tertiaryLabel : colors.label,
-                },
-              ]}
-            >
-              {transcript === '' ? 'Listening…' : transcript}
-            </Text>
-          </View>
+          <TranscriptBox transcript={transcript} placeholder="Listening…" />
         )}
       </WhisperModelGate>
     </View>
@@ -113,10 +91,4 @@ export function SubtitlesSection({
 
 const styles = StyleSheet.create({
   panel: { gap: 12 },
-  muted: { fontSize: 13, lineHeight: 18 },
-  transcriptBox: {
-    minHeight: 72,
-    padding: 12,
-  },
-  transcript: { fontSize: 15, lineHeight: 22 },
 });

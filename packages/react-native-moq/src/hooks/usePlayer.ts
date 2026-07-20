@@ -1,21 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EventEmitter } from '../EventEmitter';
-import { attachPlayerEvents } from '../player';
-import type { PlaybackStats, Player, PlayerEvents } from '../types';
+import {
+  attachPlayerEvents,
+  clampVolume,
+  createPlayerEventBridge,
+  type PlayerEventState,
+} from '../player';
+import type { Player, PlayerEvents } from '../types';
 import { PlayerHandle } from '../types';
 
 // Shared event-subscription and state logic for useVideoPlayer and useAudioPlayer.
 export function usePlayer(player: PlayerHandle): Player {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackStats, setPlaybackStats] = useState<PlaybackStats | null>(
-    null
-  );
-  const [currentVideoTrackName, setCurrentVideoTrackName] = useState<
-    string | undefined
-  >(player.initialVideoTrackName);
-  const [currentAudioTrackName, setCurrentAudioTrackName] = useState<
-    string | undefined
-  >(player.initialAudioTrackName);
+  const [snapshot, setSnapshot] = useState<PlayerEventState>(() => ({
+    isPlaying: false,
+    playbackStats: null,
+    currentVideoTrackName: player.initialVideoTrackName,
+    currentAudioTrackName: player.initialAudioTrackName,
+  }));
   const [volume, setVolumeState] = useState(1);
 
   const playerRef = useRef(player);
@@ -29,55 +30,37 @@ export function usePlayer(player: PlayerHandle): Player {
   // inside attachPlayerEvents) only when (sessionId, broadcastPath) changes.
   useEffect(() => {
     const emitter = emitterRef.current;
-    return attachPlayerEvents(sessionId, broadcastPath, {
-      playingChange(next) {
-        setIsPlaying(next);
-        emitter.emit('playingChange', { isPlaying: next });
-      },
-      trackStopped() {
-        setPlaybackStats(null);
-        setCurrentVideoTrackName(undefined);
-        setCurrentAudioTrackName(undefined);
-        emitter.emit('trackStopped', {});
-      },
-      trackSwitched(trackKind, trackName) {
-        if (trackKind === 'video') setCurrentVideoTrackName(trackName);
-        else setCurrentAudioTrackName(trackName);
-        emitter.emit('trackSwitched', { trackKind, trackName });
-      },
-      statsUpdate(stats) {
-        setPlaybackStats(stats);
-        emitter.emit('statsUpdate', stats);
-      },
+    const { state, sink } = createPlayerEventBridge(emitter, {
+      videoTrackName: playerRef.current.initialVideoTrackName,
+      audioTrackName: playerRef.current.initialAudioTrackName,
     });
+    const mirror = () => setSnapshot({ ...state });
+    mirror();
+    const subs = (
+      ['playingChange', 'trackStopped', 'trackSwitched', 'statsUpdate'] as const
+    ).map((eventName) => emitter.addListener(eventName, mirror));
+    const detach = attachPlayerEvents(sessionId, broadcastPath, sink);
+    return () => {
+      detach();
+      subs.forEach((s) => s.remove());
+    };
   }, [sessionId, broadcastPath]);
 
-  const play = useCallback(() => {
-    playerRef.current.play();
-  }, []);
-
-  const pause = useCallback(() => {
-    playerRef.current.pause();
-  }, []);
-
-  const stop = useCallback(() => {
-    playerRef.current.stop();
-  }, []);
-
-  const updateTargetLatency = useCallback((ms: number) => {
-    playerRef.current.updateTargetLatency(ms);
-  }, []);
-
-  const switchVideoTrack = useCallback((trackName: string) => {
-    playerRef.current.switchVideoTrack(trackName);
-  }, []);
-
-  const switchAudioTrack = useCallback((trackName: string) => {
-    playerRef.current.switchAudioTrack(trackName);
-  }, []);
+  // Stable command wrappers; `playerRef` keeps them pointed at the latest handle.
+  const commands = useRef({
+    play: () => playerRef.current.play(),
+    pause: () => playerRef.current.pause(),
+    stop: () => playerRef.current.stop(),
+    updateTargetLatency: (ms: number) =>
+      playerRef.current.updateTargetLatency(ms),
+    switchVideoTrack: (trackName: string) =>
+      playerRef.current.switchVideoTrack(trackName),
+    switchAudioTrack: (trackName: string) =>
+      playerRef.current.switchAudioTrack(trackName),
+  }).current;
 
   const setVolume = useCallback((next: number) => {
-    const clamped = Math.min(Math.max(next, 0), 1);
+    const clamped = clampVolume(next);
     playerRef.current.setVolume(clamped);
     setVolumeState(clamped);
   }, []);
@@ -93,19 +76,11 @@ export function usePlayer(player: PlayerHandle): Player {
   return {
     sessionId,
     broadcastPath,
-    isPlaying,
-    playbackStats,
-    currentVideoTrackName,
-    currentAudioTrackName,
+    ...snapshot,
     volume,
     emitter: emitterRef.current,
     addListener,
-    play,
-    pause,
-    stop,
-    updateTargetLatency,
-    switchVideoTrack,
-    switchAudioTrack,
+    ...commands,
     setVolume,
   };
 }

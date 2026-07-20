@@ -18,12 +18,18 @@ export function useAudioApiPlayback() {
 
   const start = useCallback(() => {
     if (ctxRef.current) return;
-    // Playback session so audio is audible with the iOS ringer switch off.
+    // Mirror MicrophoneImpl.configurePublishingAudioSession exactly: with the
+    // same category/mode/options react-native-audio-api skips setCategory when
+    // the mic is capturing (changing the category then fails with
+    // insufficientPriority) and playback shares the session with a live mic.
+    // playAndRecord also ignores the ringer switch, like playback.
+    // No explicit setAudioSessionActivity: the engine activates the session on
+    // start, and a second concurrent activation can reject (SessionActivationError).
     AudioManager.setAudioSessionOptions({
-      iosCategory: 'playback',
-      iosMode: 'default',
+      iosCategory: 'playAndRecord',
+      iosMode: 'videoRecording',
+      iosOptions: ['defaultToSpeaker', 'allowBluetoothHFP'],
     });
-    AudioManager.setAudioSessionActivity(true);
 
     const ctx = new AudioContext();
     const queue = ctx.createBufferQueueSource();
@@ -40,7 +46,7 @@ export function useAudioApiPlayback() {
   const stop = useCallback(() => {
     queueRef.current?.stop();
     queueRef.current = null;
-    ctxRef.current?.close();
+    ctxRef.current?.close().catch(() => {});
     ctxRef.current = null;
     setIsPlaying(false);
   }, []);

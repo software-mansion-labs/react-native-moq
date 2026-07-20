@@ -1,7 +1,16 @@
-type EventsMap = Record<string, (event: any) => void>;
+export type EventsMap = Record<string, (event: any) => void>;
 
 export interface EventSubscription {
   remove(): void;
+}
+
+// Shared event surface of every handle/hook object that exposes an emitter.
+export interface Listenable<TEventsMap extends EventsMap> {
+  readonly emitter: EventEmitter<TEventsMap>;
+  addListener<TEventName extends keyof TEventsMap>(
+    eventName: TEventName,
+    listener: TEventsMap[TEventName]
+  ): EventSubscription;
 }
 
 export class EventEmitter<TEventsMap extends EventsMap = Record<never, never>> {

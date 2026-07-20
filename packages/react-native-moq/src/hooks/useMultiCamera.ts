@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import NativeMoQMultiCamera from '../native/NativeMoQMultiCamera';
 import {
+  makeMultiCameraTrack,
   multiCameraEmitter,
-  multiCameraNoop,
+  resolveMultiCameraOptions,
   type MultiCameraOptions,
   type MultiCameraState,
   type MultiCameraTrack,
 } from '../multiCamera';
-import type { CameraTrack } from '../camera';
 import { useNativeState } from './useNativeState';
 
 export { isMultiCameraSupported } from '../multiCamera';
@@ -22,10 +22,8 @@ export type {
 export function useMultiCamera(
   options: MultiCameraOptions = {}
 ): MultiCameraTrack {
-  const codec = options.videoCodec ?? 'h264';
-  const width = options.width ?? 720;
-  const height = options.height ?? 1280;
-  const framerate = options.framerate ?? 30;
+  const { codec, width, height, framerate } =
+    resolveMultiCameraOptions(options);
   const enabled = options.enabled ?? true;
 
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
@@ -59,28 +57,13 @@ export function useMultiCamera(
 
   return useMemo<MultiCameraTrack>(() => {
     const encoder = { codec, width, height, framerate };
-    const front: CameraTrack = {
-      __type: 'camera',
-      __name: 'front-camera',
-      __source: 'multi-front',
+    const read = () => ({ state, lastError });
+    return {
+      isSupported,
       state,
       lastError,
-      position: 'front',
-      encoder,
-      flip: multiCameraNoop('flip'),
-      setPosition: multiCameraNoop('setPosition'),
+      front: makeMultiCameraTrack('front', read, encoder),
+      back: makeMultiCameraTrack('back', read, encoder),
     };
-    const back: CameraTrack = {
-      __type: 'camera',
-      __name: 'back-camera',
-      __source: 'multi-back',
-      state,
-      lastError,
-      position: 'back',
-      encoder,
-      flip: multiCameraNoop('flip'),
-      setPosition: multiCameraNoop('setPosition'),
-    };
-    return { isSupported, state, lastError, front, back };
   }, [isSupported, state, lastError, codec, width, height, framerate]);
 }
