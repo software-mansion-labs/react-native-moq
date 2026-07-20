@@ -34,8 +34,8 @@ export function useAudioApiPlayback() {
     const ctx = new AudioContext();
     const queue = ctx.createBufferQueueSource();
     queue.connect(ctx.destination);
-    // Pass offset 0 explicitly: react-native-audio-api 0.12.2's queue-source
-    // `start()` defaults offset to -1 then rejects it, so bare `start()` throws.
+    // Pass offset 0 explicitly: react-native-audio-api's queue-source `start()`
+    // (still in 0.13.2) defaults offset to -1 then rejects it, so bare `start()` throws.
     queue.start(0, 0);
 
     ctxRef.current = ctx;

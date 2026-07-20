@@ -10,11 +10,7 @@ import type { Session } from './types';
 export const screenEmitter = new NativeEventEmitter(NativeMoQScreenBroadcast);
 
 export type ScreenBroadcastState =
-  | 'idle'
-  | 'connecting'
-  | 'broadcasting'
-  | 'stopped'
-  | `error:${string}`;
+  'idle' | 'connecting' | 'broadcasting' | 'stopped' | `error:${string}`;
 
 export interface ScreenBroadcastOptions {
   path: string;

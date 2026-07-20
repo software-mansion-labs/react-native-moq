@@ -15,10 +15,7 @@ export type VideoCodec = 'h264' | 'h265';
 export type CameraSource = 'single' | 'multi-front' | 'multi-back';
 
 export type CameraCaptureState =
-  | 'idle'
-  | 'starting'
-  | 'active'
-  | `error:${string}`;
+  'idle' | 'starting' | 'active' | `error:${string}`;
 
 export interface VideoEncoderOptions {
   codec: VideoCodec;

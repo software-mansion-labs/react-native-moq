@@ -9,10 +9,7 @@ export const micEmitter = new NativeEventEmitter(NativeMoQMicrophone);
 export type AudioCodec = 'opus' | 'aac';
 
 export type MicrophoneCaptureState =
-  | 'idle'
-  | 'starting'
-  | 'active'
-  | `error:${string}`;
+  'idle' | 'starting' | 'active' | `error:${string}`;
 
 export interface AudioEncoderOptions {
   codec: AudioCodec;

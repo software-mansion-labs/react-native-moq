@@ -2,11 +2,7 @@ import NativeMoQ from './native/NativeMoQ';
 import type { Listenable } from './EventEmitter';
 
 export type SessionState =
-  | 'idle'
-  | 'connecting'
-  | 'connected'
-  | 'closed'
-  | `error:${string}`;
+  'idle' | 'connecting' | 'connected' | 'closed' | `error:${string}`;
 
 export interface VideoTrackInfo {
   name: string;

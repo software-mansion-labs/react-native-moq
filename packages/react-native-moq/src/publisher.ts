@@ -11,11 +11,7 @@ import type { Session } from './types';
 const publisherEmitter = new NativeEventEmitter(NativeMoQPublisher);
 
 export type PublisherState =
-  | 'idle'
-  | 'connecting'
-  | 'publishing'
-  | 'stopped'
-  | `error:${string}`;
+  'idle' | 'connecting' | 'publishing' | 'stopped' | `error:${string}`;
 
 export type PublishedTrackState = 'idle' | 'starting' | 'active' | 'stopped';
 

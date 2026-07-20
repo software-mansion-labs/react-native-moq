@@ -6,11 +6,4 @@ export interface BoyGame {
 
 // The eight inputs; string values are the wire names sent on the `command` track.
 export type BoyControl =
-  | 'up'
-  | 'down'
-  | 'left'
-  | 'right'
-  | 'a'
-  | 'b'
-  | 'start'
-  | 'select';
+  'up' | 'down' | 'left' | 'right' | 'a' | 'b' | 'start' | 'select';

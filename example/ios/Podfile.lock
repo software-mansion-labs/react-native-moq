@@ -1452,7 +1452,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-background-downloader (4.5.6):
+  - react-native-background-downloader (4.5.8):
     - hermes-engine
     - MMKV (>= 1.2.0)
     - RCTRequired
@@ -1987,7 +1987,7 @@ PODS:
     - React-utils (= 0.86.0)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.86.0)
-  - ReactNativeFs (2.39.1):
+  - ReactNativeFs (2.39.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2009,7 +2009,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNAudioAPI (0.12.2):
+  - RNAudioAPI (0.13.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2030,9 +2030,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNAudioAPI/audioapi (= 0.12.2)
+    - RNAudioAPI/audioapi (= 0.13.2)
     - Yoga
-  - RNAudioAPI/audioapi (0.12.2):
+  - RNAudioAPI/audioapi (0.13.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2053,33 +2053,11 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNAudioAPI/audioapi/audioapi_dsp (= 0.12.2)
-    - RNAudioAPI/audioapi/ios (= 0.12.2)
-    - RNAudioAPI/audioapi/miniaudio_impl (= 0.12.2)
+    - RNAudioAPI/audioapi/audioapi_dsp (= 0.13.2)
+    - RNAudioAPI/audioapi/ios (= 0.13.2)
+    - RNAudioAPI/audioapi/miniaudio_impl (= 0.13.2)
     - Yoga
-  - RNAudioAPI/audioapi/audioapi_dsp (0.12.2):
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
-  - RNAudioAPI/audioapi/ios (0.12.2):
+  - RNAudioAPI/audioapi/audioapi_dsp (0.13.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2101,7 +2079,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNAudioAPI/audioapi/miniaudio_impl (0.12.2):
+  - RNAudioAPI/audioapi/ios (0.13.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2123,7 +2101,29 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNScreens (4.25.2):
+  - RNAudioAPI/audioapi/miniaudio_impl (0.13.2):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - RNScreens (4.26.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2145,9 +2145,9 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNScreens/common (= 4.25.2)
+    - RNScreens/common (= 4.26.2)
     - Yoga
-  - RNScreens/common (4.25.2):
+  - RNScreens/common (4.26.2):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2480,7 +2480,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 1a42eda3f9d415ba9f7dcd7f1fe19d4f27925751
   React-microtasksnativemodule: 354ab193a7ed66e42869c8a0c2c0d844e8e22f67
   React-mutationobservernativemodule: f53ad06cbe4b44d2a33df6aa3f01ca8e9b57e83b
-  react-native-background-downloader: d1bcea281c64e129d113b61a9405fab1c7f26b23
+  react-native-background-downloader: 39926c41851c62318aaf415e940c438f0c97f0ee
   react-native-executorch: 8799e1e4ef6b2d3724bf9721b6fb568be6addce1
   react-native-safe-area-context: 0bbcdfba5c4a1b3203276f1ed9128e3239fdf199
   react-native-vector-icons: e24e0f4b93baa44023da7d685260d150d6356e43
@@ -2520,11 +2520,11 @@ SPEC CHECKSUMS:
   ReactCodegen: cd296de5e1c422deebafff34134d1721b5c29704
   ReactCommon: d5c1bb4427bf51c443de5926aac332c89ddd9363
   ReactNativeDependencies: fa0a54b3f5319ae0e3b9aff32bfee7a424b88e66
-  ReactNativeFs: 6bc0e1a4be3632505ad398421722dfd02e365682
-  RNAudioAPI: 2df605d06a3f0d57ad3d203e7c471632f092beb1
-  RNScreens: 8d318eb8905fa1d3439a1ce5d567f82ae8245657
+  ReactNativeFs: 1a3df27060be57d44dad3be7bddc8ba5f26c97b2
+  RNAudioAPI: 28de0839bf62c82162d141590bccdc7cc57b1346
+  RNScreens: 5b4b260e28d8263d97fddcb53e59649515797bcc
   Yoga: c30c859b7e9b75e547b600b486fe33165f60de00
 
 PODFILE CHECKSUM: 9ee4819feade5192b414012e94787d6d4aa4d0b2
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.15.2
