@@ -84,3 +84,7 @@ android/generated
 
 # React Native Nitro Modules
 nitrogen/
+
+# Claude Code (only local state — .claude/skills is committed)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

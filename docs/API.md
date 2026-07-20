@@ -914,11 +914,11 @@ Returns a `VideoSourceTrack`:
 | `__type` | `'videoSource'` | Discriminator `usePublisher` uses to route to a video track |
 | `__name` | `string` | Track name in the broadcast catalog (the `name` option) |
 | `encoder` | `VideoEncoderOptions` | `{ codec, width, height, framerate }` — snapshotted by `publish()` |
-| `buffers` | `CustomVideoBuffer[]` | Pool slots to render into; empty until the native pool is allocated |
+| `buffers` | `CustomVideoBufferDescriptor[]` | Pool slots to render into; empty until the native pool is allocated |
 | `pushFrame(frame)` | `(frame: PushVideoFrameArgs) => void` | Submit a rendered slot. No-op until `publishing` |
 | `fillTestPattern(bufferIndex, frameIndex)` | `(number, number) => void` | Demo helper — CPU-fills a slot with an animated pattern (no GPU renderer needed) |
 
-Each `CustomVideoBuffer` is `{ index, surfaceHandle, width, height }`. On iOS `surfaceHandle` is the `(uintptr_t)IOSurfaceRef` as a **decimal string** (64-bit handles exceed JS's safe integer range) — import it in your native GPU renderer to draw into the surface.
+Each `CustomVideoBufferDescriptor` is `{ index, surfaceHandle, width, height }`. On iOS `surfaceHandle` is the `(uintptr_t)IOSurfaceRef` as a **decimal string** (64-bit handles exceed JS's safe integer range) — import it in your native GPU renderer to draw into the surface.
 
 Include it in a publish, then render + push once `publisher.state === 'publishing'`:
 
@@ -1051,10 +1051,10 @@ Subscribe via `useEventListener`, `useEvent`, or `publisher.addListener` — sam
 ```ts
 interface PublishOptions {
   path: string;           // Broadcast path published to the relay
-  tracks: PublishTrack[]; // Sources from useCamera / useMicrophone / useDataTrack
+  tracks: PublishTrack[]; // Sources from useCamera / useMicrophone / useDataTrack / useAudioSource / useVideoSource
 }
 
-type PublishTrack = CameraTrack | MicrophoneTrack | DataTrack;
+type PublishTrack = CameraTrack | MicrophoneTrack | DataTrack | AudioSourceTrack | VideoSourceTrack;
 ```
 
 #### `CameraOptions` / `MicrophoneOptions`
@@ -1117,7 +1117,7 @@ Every hook has a hook-free counterpart for code that can't follow the rules of h
 Semantics, relative to the hooks:
 
 - **Lifecycle is yours.** What a hook does on mount happens at `create*()`; what it does on unmount happens at `destroy()`. Nothing is torn down for you.
-- **Live getters instead of re-renders.** `state`, `lastError`, `trackStates`, `isPlaying`, `buffers`, … always read current. Observe changes via `addListener` — capture handles add a `stateChange` event mirroring `{ state, lastError }`; session/publisher/player handles have the same events as their hooks.
+- **Live getters instead of re-renders.** `state`, `lastError`, `trackStates`, `isPlaying`, `buffers`, … always read current. Observe changes via `addListener` — capture handles add a `stateChange` event (the exported `StateChangeEvents` map) mirroring `{ state, lastError }`; session/publisher/player handles have the same events as their hooks.
 - **Handles are drop-in values.** Pass source handles to `publisher.publish({ tracks })`, `multiCamera.front` to `<PublisherView>`, player handles to `<VideoView>` — anywhere the hook value is accepted.
 - **No `enabled` option.** `createCamera` / `createMultiCamera` / `createMicrophone` always start capture; toggle by destroying and re-creating.
 - `sessionHandle.url` is read at `connect()` time, so it can be reassigned before a reconnect.
@@ -1383,7 +1383,7 @@ Takes no props.
 
 ### `<VolumeSlider />` and `<SpeakerGlyph />`
 
-The building blocks behind the volume control in the default chrome. Useful for your own chrome or non-video surfaces (e.g. an audio-only card). Drawn from plain `<View>`s — no SVG or icon-font dependency.
+The building blocks behind the volume control in the default chrome. Useful for your own chrome or non-video surfaces (e.g. an audio-only card). The slider is drawn from plain `<View>`s; `<SpeakerGlyph>` renders a Material Icons glyph, so it needs the `@react-native-vector-icons/material-icons` setup from the README.
 
 ```tsx
 import { useAudioPlayer } from 'react-native-moq';
@@ -1412,7 +1412,7 @@ function AudioCard({ broadcast }) {
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `size` | `number` | No | Icon size in pixels. Default `16` |
+| `size` | `number` | No | Icon size in pixels. Default `20` |
 | `volume` | `number` | No | `0..1`; selects how many of the three wave arcs are filled (`0` shows the mute slash). Default `1` |
 | `color` | `ColorValue` | No | Foreground color (inactive arcs use a 35%-alpha variant). Default `#fff` |
 

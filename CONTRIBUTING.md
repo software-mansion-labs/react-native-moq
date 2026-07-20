@@ -8,7 +8,7 @@ We want this community to be friendly and respectful to each other. Please follo
 
 This project is a monorepo managed using [Yarn workspaces](https://yarnpkg.com/features/workspaces). It contains the following packages:
 
-- The library package in the root directory.
+- The library packages in the `packages/` directory (`react-native-moq`, `react-native-moq-ui`).
 - An example app in the `example/` directory.
 
 To get started with the project, make sure you have the correct version of [Node.js](https://nodejs.org/) installed. See the [`.nvmrc`](./.nvmrc) file for the version used in this project.
@@ -136,5 +136,6 @@ When you're sending a pull request:
 - Prefer small pull requests focused on one change.
 - Verify that linters and tests are passing.
 - Review the documentation to make sure it looks good.
+- For public-API changes, update [docs/API.md](docs/API.md) **and** the agent skill in [skills/](skills/) — both must stay in sync with the source (bump the version line in `skills/react-native-moq/SKILL.md` when releasing).
 - Follow the pull request template when opening a pull request.
 - For pull requests that change the API or implementation, discuss with maintainers first by opening an issue.
