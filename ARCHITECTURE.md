@@ -21,7 +21,7 @@ The TypeScript API. `index.tsx` is the single export surface; `types.ts` holds t
 The JS side is layered, bottom to top:
 
 - **`src/native/`** — TurboModule specs (codegen, `NativeMoQ*.ts`). `NativeMoQ.ts` covers sessions, broadcast discovery and playback; each capture/source feature (camera, microphone, data track, audio/video source, screen broadcast, publisher) has its own module.
-- **`src/*.ts` (cores)** — hook-free imperative handles: `createSession`, `createCamera`, `subscribeBroadcasts`, etc. Each core owns its native ids, watches native state events, and exposes live getters plus an `EventEmitter`. `nativeState.ts` centralizes the state-watching/`lastError` machinery shared by all of them.
+- **`src/*.ts` (cores)** — hook-free imperative handles: `createSession`, `createCamera`, `subscribeBroadcasts`, etc. Each core owns its native ids, watches native state events, and exposes live getters plus an `EventEmitter`. `nativeState.ts` centralizes the state-watching/`lastError` machinery shared by the capture-style handles; the other cores wire their own event bridges.
 - **`src/hooks/`** — thin React wrappers over the cores: mint ids, create the handle once, subscribe to `stateChange`, re-render.
 
   **Architecture Invariant:** hooks contain no domain logic. Anything a hook can do must be doable from plain JS through the corresponding `create*`/`subscribe*` core.
@@ -30,7 +30,7 @@ The JS side is layered, bottom to top:
 
 The two native implementations below mirror each other, one file/folder per feature.
 
-**Architecture Invariant:** iOS and Android expose byte-identical module/event/state contracts to JS. The TypeScript layer contains no `Platform.OS` branches for core behavior.
+**Architecture Invariant:** iOS and Android expose identical module/event/state contracts to JS, and the TypeScript layer contains no `Platform.OS` branches for core behavior. Two acknowledged exceptions, both for genuinely platform-only features: `getPlayer` is a JSI HostObject on iOS and absent on Android (feature-detected in `broadcasts.ts`, not OS-branched), and `BroadcastPickerView` wraps the iOS-only system picker, rendering an empty view on Android.
 
 ### `packages/react-native-moq/ios`
 
@@ -85,7 +85,7 @@ Two subtleties are worth internalizing:
 ### Threading
 
 - **iOS:** all bridge work and event emission run on the **main actor**, deliberately, to keep call ordering deterministic.
-- **Android:** control methods hand async work to a background coroutine scope; events are emitted from there, with no dedicated event thread.
+- **Android:** coroutine scopes vary per module — the core `MoQModule` uses a background scope, most feature modules run on the main dispatcher; events are emitted from whichever scope did the work, with no dedicated event thread.
 
 The invariant that matters across both: **view/layer/surface attachment happens on the main thread.** iOS gets this for free (everything is already on main). Android must re-post surface delivery onto the main thread — a deliberate happens-before barrier so the surface push observes a fully-built playback pipeline. Getting that barrier wrong is a classic source of black-screen races.
 
