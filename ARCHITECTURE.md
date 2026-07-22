@@ -4,7 +4,7 @@ This document describes the high-level architecture of react-native-moq. If you 
 
 ## Bird's Eye View
 
-Media over QUIC (MoQ) media pipelines exist natively in [moq-kit](https://github.com/software-mansion/moq-kit), a separate Software Mansion library, but have no React Native surface. The problem this repo solves is marshalling that event-driven native media stack into React's declarative world: sub-second-latency video/audio playback, camera/mic/screen publishing, and realtime data tracks, all through a MoQ relay.
+Media over QUIC (MoQ) media pipelines exist natively in [moq-kit](https://github.com/software-mansion-labs/moq-kit), a separate Software Mansion library, but have no React Native surface. The problem this repo solves is marshalling that event-driven native media stack into React's declarative world: sub-second-latency video/audio playback, camera/mic/screen publishing, and realtime data tracks, all through a MoQ relay.
 
 The actual MoQ protocol, media pipelines, encoders and decoders all live in moq-kit. **This repo contains no protocol or media code** — it is the React Native binding layer: TurboModules and native views on the native side, and a state/lifecycle layer on the JS side that turns moq-kit's callbacks into reactive objects and hooks.
 
