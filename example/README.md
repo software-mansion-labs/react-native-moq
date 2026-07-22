@@ -25,6 +25,19 @@ On iOS, install pods first: `cd ios && bundle install && bundle exec pod install
 
 > **Note:** Complete the [React Native environment setup](https://reactnative.dev/docs/set-up-your-environment) before your first build.
 
+## Connecting to a relay
+
+The app needs a MoQ relay to discover and play broadcasts. Run one locally from the [moq-kit](https://github.com/software-mansion-labs/moq-kit) repo root:
+
+```sh
+mise relay:run                               # start a local relay
+mise stream:file --input path/to/video.mp4   # publish a broadcast from a local file
+```
+
+See moq-kit's [Run a local relay and test streams](https://github.com/software-mansion-labs/moq-kit#run-a-local-relay-and-test-streams) for the full task list.
+
+The default relay URL in [`src/App.tsx`](src/App.tsx) (`http://192.168.1.48:4443`) is the URL/IP address of the device running the relay — replace it with your machine's LAN IP so the app can reach it from a physical device.
+
 ## The Audio tab's extra native modules
 
 The **Audio** tab pulls in react-native-audio-api, react-native-executorch (+ its bare resource fetcher), react-native-fs, and background-downloader. They're already in `package.json` — just `yarn` then `pod install`. A few platform gotchas:

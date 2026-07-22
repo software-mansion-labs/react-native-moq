@@ -23,6 +23,8 @@ yarn
 
 The [example app](/example/) demonstrates usage of the library. You need to run it to test any changes you make.
 
+Testing playback requires a MoQ relay. Run one locally from the [moq-kit](https://github.com/software-mansion-labs/moq-kit) repo root with `mise relay:run`, and publish a broadcast from a local file with `mise stream:file --input path/to/video.mp4`. The relay URL entered in the app (e.g. `http://192.168.1.48:4443`) is the URL/IP address of the device running the relay — use your machine's LAN IP so a physical device can reach it. See [example/README.md](example/README.md#connecting-to-a-relay).
+
 It is configured to use the local version of the library, so any changes you make to the library's source code will be reflected in the example app. Changes to the library's JavaScript code will be reflected in the example app without a rebuild, but native code changes will require a rebuild of the example app.
 
 If you want to use Android Studio or Xcode to edit the native code, you can open the `example/android` or `example/ios` directories respectively in those editors. To edit the Objective-C or Swift files, open `example/ios/MoQExample.xcworkspace` in Xcode and find the source files at `Pods > Development Pods > react-native-moq`.

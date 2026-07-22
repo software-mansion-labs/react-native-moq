@@ -6,7 +6,7 @@ Guidance for AI coding agents working in this repo. Read [ARCHITECTURE.md](ARCHI
 
 React Native bindings for [moq-kit](https://github.com/software-mansion-labs/moq-kit) (Media over QUIC). This repo contains **no protocol or media code** — transport, decoding, A/V sync, and latency bugs almost always belong in moq-kit.
 
-**Before debugging any media, A/V-sync, or latency issue:** establish which side of the moq-kit boundary it's on (see "The moq-kit boundary" in ARCHITECTURE.md). When a bug looks like it lives on the moq-kit side, read [moq-kit](https://github.com/software-mansion-labs/moq-kit) directly (a sibling `../moq-kit` checkout, if present) rather than guessing at its behavior from this side.
+**Before debugging any media, A/V-sync, or latency issue:** establish which side of the moq-kit boundary it's on (see "The moq-kit boundary" in ARCHITECTURE.md). When a bug looks like it lives on the moq-kit side, read [moq-kit](https://github.com/software-mansion-labs/moq-kit) directly rather than guessing at its behavior from this side.
 
 ## Layout
 
@@ -36,9 +36,10 @@ The public API surface is documented in [docs/API.md](docs/API.md) — read it t
 ## Verifying changes
 
 - JS changes hot-reload into the example app; **native changes require a rebuild** via `yarn example ios|android`.
+- Testing playback needs a MoQ relay: from the moq-kit repo root, `mise relay:run` starts one and `mise stream:file --input path/to/video.mp4` publishes a broadcast from a file. The relay URL entered in the app is the URL/IP of the device running the relay (use the machine's LAN IP for physical devices).
 - Jest covers only the TypeScript layer (`packages/react-native-moq/src/__tests__/`) with mocked TurboModules. **Native code has no automated tests** — verify manually in the example app, on both platforms if the change touches both.
 - CI runs lint, typecheck, tests, a library build, and example builds for both platforms (the iOS build on `macos-26` — see "Don't touch without a reason to").
-- The bindings consume **published** moq-kit artifacts — Android via `com.swmansion.moqkit:moqkit` in `packages/react-native-moq/android/build.gradle`, iOS via the SPM pin in `packages/react-native-moq/MoQ.podspec` — not the sibling checkout. Verifying a local moq-kit change means publishing it to `mavenLocal` at the pinned version (Android) or pointing the SPM reference at the local checkout (iOS), then rebuilding the example.
+- The bindings consume **published** moq-kit artifacts — Android via `com.swmansion.moqkit:moqkit` in `packages/react-native-moq/android/build.gradle`, iOS via the SPM pin in `packages/react-native-moq/MoQ.podspec` — not a local checkout. Verifying a local moq-kit change means publishing it to `mavenLocal` at the pinned version (Android) or pointing the SPM reference at the local checkout (iOS), then rebuilding the example.
 
 ## Invariants — do not break
 

@@ -92,6 +92,7 @@ export default function App() {
   const { dark } = useTheme();
   const [selectedScreenKey, setSelectedScreenKey] = useState('subscribe');
   const provenance = useRef(0);
+  // URL/IP of the device running the moq relay — see "Connecting to a relay" in example/README.md
   const [url, setUrl] = useState('http://192.168.1.48:4443');
 
   return (
