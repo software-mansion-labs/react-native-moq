@@ -57,7 +57,7 @@ A new API is a vertical slice — core in `src/*.ts`, hook wrapper in `src/hooks
 Keep these in sync in the same PR:
 
 1. `docs/API.md`
-2. `skills/react-native-moq/SKILL.md` (bump its version line when releasing — releases run via the Publish workflow in `.github/workflows/publish.yml`)
+2. `skills/react-native-moq/SKILL.md` (releases run via the Publish workflow in `.github/workflows/publish.yml`)
 3. Both native implementations (`packages/react-native-moq/ios` and `android`)
 
 ## Don't touch without a reason to

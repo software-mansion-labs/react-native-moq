@@ -10,8 +10,6 @@ React Native bindings for Media over QUIC (MoQ): live video, audio, and data tra
 
 **Requirements:** React Native New Architecture (Fabric + TurboModules), iOS 16+, Android API 30+.
 
-**Documents:** react-native-moq + react-native-moq-ui 0.0.1 (moq-kit 0.3.0) — if the installed version differs, verify signatures against the package's types.
-
 ```sh
 npm install react-native-moq
 cd ios && pod install
