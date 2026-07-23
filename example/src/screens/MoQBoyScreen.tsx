@@ -7,19 +7,25 @@ import {
   useSession,
   useVideoPlayer,
   type BroadcastInfo,
+  type Player,
   type Session,
 } from 'react-native-moq';
-import { BoyConsole, type BoyConsoleProps } from '../boy/BoyConsole';
+import { BoyConsole } from '../boy/BoyConsole';
 import { useBoyCommands } from '../boy/useBoyCommands';
 import type { BoyControl, BoyGame } from '../boy/types';
 import { sortVideoTracksByResolution } from '../videoTracks';
 
-// Props shared by the idle console and the live game session (everything except
-// the player/controller wiring that only exists while a game runs).
-type SharedConsoleProps = Omit<
-  BoyConsoleProps,
-  'player' | 'controlsEnabled' | 'onButton' | 'lastError'
->;
+// Wiring the headless BoyGameSession reports up to the single BoyConsole.
+// VideoView only reads the player's stable sessionId/broadcastPath, so a
+// snapshot of the player object is safe to hold in state.
+type LiveGame = {
+  path: string;
+  player: Player;
+  onButton: (control: BoyControl, isPressed: boolean) => void;
+  lastError: string | null;
+};
+
+const noopButton = () => {};
 
 // MoQBoy cloud-gaming client. Discovers game broadcasts under `boy`, plays the
 // selected game as the console screen, and publishes a `command` data track to
@@ -133,58 +139,63 @@ export function MoQBoyScreen() {
     };
   }, [isConnected, isConnecting, selectedGameName]);
 
-  const common: SharedConsoleProps = {
-    isConnected,
-    isConnecting,
-    canStop,
-    onPower,
-    selectedGameName,
-    placeholder,
-    games,
-    selectedGamePath,
-    onSelectGame,
-    latency,
-    onLatencyChange: setLatency,
-    showsBack,
-    onToggleFlip: toggleFlip,
-    onFlipSettled,
-  };
+  // BoyGameSession is headless and the single BoyConsole below never
+  // unmounts: swapping the console subtree on cartridge change blanked it
+  // for a frame (visible flicker on Android) while the fresh mount
+  // re-measured its layout. Gating `live` on the active path keeps a
+  // stopping player out of VideoView during eject/swap.
+  const [live, setLive] = useState<LiveGame | null>(null);
+  const activeLive =
+    activeBroadcast && live?.path === activeBroadcast.path ? live : null;
 
   return (
     <View style={styles.container}>
-      {activeBroadcast ? (
+      {activeBroadcast && (
         <BoyGameSession
           key={activeBroadcast.path}
           broadcast={activeBroadcast}
           session={session}
           latency={latency}
-          common={common}
-        />
-      ) : (
-        <BoyConsole
-          {...common}
-          player={null}
-          controlsEnabled={false}
-          onButton={() => {}}
-          lastError={null}
+          onLiveChange={setLive}
         />
       )}
+      <BoyConsole
+        isConnected={isConnected}
+        isConnecting={isConnecting}
+        canStop={canStop}
+        onPower={onPower}
+        selectedGameName={selectedGameName}
+        placeholder={placeholder}
+        games={games}
+        selectedGamePath={selectedGamePath}
+        onSelectGame={onSelectGame}
+        latency={latency}
+        onLatencyChange={setLatency}
+        showsBack={showsBack}
+        onToggleFlip={toggleFlip}
+        onFlipSettled={onFlipSettled}
+        player={activeLive?.player ?? null}
+        controlsEnabled={activeLive != null}
+        onButton={activeLive?.onButton ?? noopButton}
+        lastError={activeLive?.lastError ?? null}
+      />
     </View>
   );
 }
 
-// Mounted only while a cartridge is inserted (keyed on broadcast path). Owns the
-// video player and the controller publisher for the selected game.
+// Mounted only while a cartridge is inserted (keyed on broadcast path). Owns
+// the video player and the controller publisher for the selected game;
+// renders nothing itself and reports its wiring via onLiveChange.
 function BoyGameSession({
   broadcast,
   session,
   latency,
-  common,
+  onLiveChange,
 }: {
   broadcast: BroadcastInfo;
   session: Session;
   latency: number;
-  common: SharedConsoleProps;
+  onLiveChange: (live: LiveGame | null) => void;
 }) {
   const player = useVideoPlayer(broadcast, (p) => p.play());
 
@@ -250,15 +261,22 @@ function BoyGameSession({
     [ensurePublished, setButton]
   );
 
-  return (
-    <BoyConsole
-      {...common}
-      player={player}
-      controlsEnabled
-      onButton={onButton}
-      lastError={publisher.lastError}
-    />
-  );
+  // `player` is a fresh object every render (its reactive snapshot), so it
+  // stays out of the deps; the ref hands the latest one to the rare syncs.
+  const playerRef = useRef(player);
+  playerRef.current = player;
+  const { lastError } = publisher;
+  useEffect(() => {
+    onLiveChange({
+      path: broadcast.path,
+      player: playerRef.current,
+      onButton,
+      lastError,
+    });
+  }, [onLiveChange, broadcast.path, onButton, lastError]);
+  useEffect(() => () => onLiveChange(null), [onLiveChange]);
+
+  return null;
 }
 
 const styles = StyleSheet.create({
