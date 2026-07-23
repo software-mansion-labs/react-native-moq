@@ -63,14 +63,13 @@ Our pre-commit hooks verify that your commit message matches this format when co
 
 ### Publishing to npm
 
-We use [release-it](https://github.com/release-it/release-it) to make it easier to publish new versions. It handles common tasks like bumping version based on semver, creating tags and releases etc.
+Releases run through the **Publish** GitHub Actions workflow ([.github/workflows/publish.yml](.github/workflows/publish.yml)), built on [software-mansion/npm-package-publish](https://github.com/software-mansion/npm-package-publish). Trigger it manually from the repo's **Actions** tab and pick:
 
-The `release` script lives in each package, not at the repo root. To publish a new version, run it in the package's workspace:
+- **release-type** — `stable` (default), `rc`, `beta`, or `alpha`.
+- **version** — explicit `x.y.z`; leave empty to infer it from the branch / npm latest.
+- **dry-run** — enabled by default: builds and validates everything without publishing to npm or pushing tags. Run once as a dry run, then re-run with it disabled to publish for real.
 
-```sh
-yarn workspace react-native-moq release
-yarn workspace react-native-moq-ui release
-```
+One run publishes both packages: `react-native-moq` first (it also owns the release commit and version tag), then `react-native-moq-ui`.
 
 ### Sending a pull request
 
