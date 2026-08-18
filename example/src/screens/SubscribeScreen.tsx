@@ -158,6 +158,7 @@ function BroadcastsList({
             <BroadcastPlayer
               key={broadcast.path}
               broadcast={broadcast}
+              connectionStats={session.connectionStats}
               initialMode={active.initialMode}
               onRemove={() => removePlayer(broadcast.path)}
               addEntry={addEntry}

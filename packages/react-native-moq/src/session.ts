@@ -1,7 +1,12 @@
 import { NativeEventEmitter } from 'react-native';
 import { EventEmitter } from './EventEmitter';
 import NativeMoQ from './native/NativeMoQ';
-import type { Session, SessionEvents, SessionState } from './types';
+import type {
+  ConnectionStats,
+  Session,
+  SessionEvents,
+  SessionState,
+} from './types';
 
 const moqEmitter = new NativeEventEmitter(NativeMoQ);
 
@@ -38,12 +43,23 @@ export function createSessionWithId(
   emitter: EventEmitter<SessionEvents> = new EventEmitter()
 ): SessionHandle {
   let state: SessionState = 'idle';
+  let connectionStats: ConnectionStats | null = null;
 
-  const sub = moqEmitter.addListener('sessionStateChanged', (event) => {
+  const stateSub = moqEmitter.addListener('sessionStateChanged', (event) => {
     const e = event as { sessionId: string; state: string };
     if (e.sessionId !== id) return;
     state = e.state as SessionState;
+    if (state !== 'connected') connectionStats = null;
     emitter.emit('stateChange', { state });
+  });
+
+  const statsSub = moqEmitter.addListener('connectionStatsUpdated', (event) => {
+    const { sessionId, ...stats } = event as ConnectionStats & {
+      sessionId: string;
+    };
+    if (sessionId !== id || state !== 'connected') return;
+    connectionStats = stats;
+    emitter.emit('statsUpdate', stats);
   });
 
   const handle: SessionHandle = {
@@ -51,6 +67,9 @@ export function createSessionWithId(
     url,
     get state() {
       return state;
+    },
+    get connectionStats() {
+      return connectionStats;
     },
     emitter,
     addListener: (eventName, listener) =>
@@ -62,11 +81,13 @@ export function createSessionWithId(
       NativeMoQ.disconnect(id);
       if (state !== 'idle') {
         state = 'idle';
+        connectionStats = null;
         emitter.emit('stateChange', { state: 'idle' });
       }
     },
     destroy() {
-      sub.remove();
+      stateSub.remove();
+      statsSub.remove();
       NativeMoQ.disconnect(id);
     },
   };

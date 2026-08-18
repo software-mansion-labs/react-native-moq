@@ -97,6 +97,7 @@ Returns a `Session`:
 | `id` | `string` | Opaque per-hook identifier. Routes native calls/events when multiple sessions are active |
 | `url` | `string` | Relay URL passed to the hook |
 | `state` | `SessionState` | Current connection state |
+| `connectionStats` | `ConnectionStats \| null` | Shared transport metrics, updated every ~1 second while connected |
 | `emitter` | `EventEmitter<SessionEvents>` | Emitter for session events |
 | `addListener(eventName, listener)` | `(eventName, listener) => EventSubscription` | Subscribe imperatively |
 | `connect(targetLatencyMs?)` | `(targetLatencyMs?: number) => void` | Open the session. Default `targetLatencyMs=200` |
@@ -400,6 +401,7 @@ sub.remove();
 | Event | Payload | Description |
 |---|---|---|
 | `stateChange` | `{ state }` | Session state transitioned |
+| `statsUpdate` | `ConnectionStats` | Connection metrics updated (~every 1 s) |
 
 ---
 
@@ -462,6 +464,7 @@ type PlayerEvents = {
 ```ts
 type SessionEvents = {
   stateChange: (event: { state: SessionState }) => void;
+  statsUpdate: (event: ConnectionStats) => void;
 };
 ```
 
@@ -546,7 +549,7 @@ interface ChunkSubscription {
 }
 ```
 
-#### `PlaybackStats`
+#### `PlaybackStats` and `ConnectionStats`
 
 ```ts
 interface PlaybackStats {
@@ -563,6 +566,18 @@ interface PlaybackStats {
   audioFramesDropped?: number;
   videoStalls?: StallStats;
   audioStalls?: StallStats;
+}
+
+interface ConnectionStats {
+  roundTripTimeMs?: number;
+  estimatedSendRateBps?: number;
+  estimatedReceiveRateBps?: number;
+  bytesSent?: number;
+  bytesReceived?: number;
+  bytesLost?: number;
+  packetsSent?: number;
+  packetsReceived?: number;
+  packetsLost?: number;
 }
 
 interface StallStats {
@@ -1212,7 +1227,7 @@ player.updateTargetLatency(300);
 
 ### Displaying live stats
 
-Read `player.playbackStats` (updated every ~500 ms), or subscribe to `statsUpdate`:
+Read `player.playbackStats` for player-scoped metrics (updated every ~500 ms) and `session.connectionStats` for the shared relay connection (updated every ~1 second). Both expose a `statsUpdate` event:
 
 ```tsx
 const player = useVideoPlayer(broadcast, (p) => p.play());
@@ -1221,8 +1236,13 @@ if (player.playbackStats) {
   console.log(`Latency: ${player.playbackStats.videoLatencyMs} ms`);
 }
 
+if (session.connectionStats) {
+  console.log(`RTT: ${session.connectionStats.roundTripTimeMs} ms`);
+}
+
 // Or reactively:
-const stats = useEvent(player, 'statsUpdate');
+const playbackStats = useEvent(player, 'statsUpdate');
+const connectionStats = useEvent(session, 'statsUpdate');
 ```
 
 ## Troubleshooting

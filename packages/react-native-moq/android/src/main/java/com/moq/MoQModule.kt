@@ -7,6 +7,7 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.moq.player.PlayerHandle
+import com.swmansion.moqkit.ConnectionStats
 import com.swmansion.moqkit.Session
 import com.swmansion.moqkit.subscribe.AudioDataFormat
 import com.swmansion.moqkit.subscribe.AudioDataStream
@@ -26,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val AUDIO_KEY_SUFFIX = "_audio"
@@ -39,6 +41,7 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     var targetLatencyMs: Int = 200
     var state: Session.State = Session.State.Idle
     var stateJob: Job? = null
+    var connectionStatsJob: Job? = null
     val subscriptions = ConcurrentHashMap<String, MoQPrefixSubscription>()
     val prefixForPath = ConcurrentHashMap<String, String>()
     val catalogs = ConcurrentHashMap<String, Catalog>()
@@ -134,11 +137,16 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
             connectedSessions[sessionId] = s
           } else {
             connectedSessions.remove(sessionId)
+            ctx.connectionStatsJob?.cancel()
+            ctx.connectionStatsJob = null
           }
           val map = Arguments.createMap()
           map.putString("sessionId", sessionId)
           map.putString("state", state.toStringValue())
           emitEvent("sessionStateChanged", map)
+          if (state == Session.State.Connected) {
+            startConnectionStatsPolling(ctx)
+          }
         }
       }
 
@@ -152,10 +160,26 @@ class MoQModule(reactContext: ReactApplicationContext) : NativeMoQSpec(reactCont
     val ctx = contexts.remove(sessionId) ?: return
     ctx.stateJob?.cancel()
     ctx.stateJob = null
+    ctx.connectionStatsJob?.cancel()
+    ctx.connectionStatsJob = null
     connectedSessions.remove(sessionId)
 
     unsubscribeAll(ctx)
     ctx.session.close()
+  }
+
+  private fun startConnectionStatsPolling(ctx: SessionContext) {
+    ctx.connectionStatsJob?.cancel()
+    ctx.connectionStatsJob = moduleScope.launch {
+      while (true) {
+        ctx.session.connectionStats()?.let { stats ->
+          val map = stats.toWritableMap()
+          map.putString("sessionId", ctx.id)
+          emitEvent("connectionStatsUpdated", map)
+        }
+        delay(1_000)
+      }
+    }
   }
 
   override fun subscribe(sessionId: String, prefix: String) {
@@ -581,6 +605,20 @@ fun PlaybackStats.toWritableMap(): WritableMap {
   audioFramesDropped?.let { map.putDouble("audioFramesDropped", it.toDouble()) }
   videoStalls?.let { map.putMap("videoStalls", it.toWritableMap()) }
   audioStalls?.let { map.putMap("audioStalls", it.toWritableMap()) }
+  return map
+}
+
+private fun ConnectionStats.toWritableMap(): WritableMap {
+  val map = Arguments.createMap()
+  roundTripTime?.let { map.putDouble("roundTripTimeMs", it.toMillisDouble()) }
+  estimatedSendRateBps?.let { map.putDouble("estimatedSendRateBps", it.toDouble()) }
+  estimatedReceiveRateBps?.let { map.putDouble("estimatedReceiveRateBps", it.toDouble()) }
+  bytesSent?.let { map.putDouble("bytesSent", it.toDouble()) }
+  bytesReceived?.let { map.putDouble("bytesReceived", it.toDouble()) }
+  bytesLost?.let { map.putDouble("bytesLost", it.toDouble()) }
+  packetsSent?.let { map.putDouble("packetsSent", it.toDouble()) }
+  packetsReceived?.let { map.putDouble("packetsReceived", it.toDouble()) }
+  packetsLost?.let { map.putDouble("packetsLost", it.toDouble()) }
   return map
 }
 

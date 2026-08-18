@@ -1,4 +1,8 @@
-import type { PlaybackStats, StallStats } from 'react-native-moq';
+import type {
+  ConnectionStats,
+  PlaybackStats,
+  StallStats,
+} from 'react-native-moq';
 import { useState } from 'react';
 import {
   Platform,
@@ -11,7 +15,13 @@ import {
 import MaterialIcons from '@react-native-vector-icons/material-icons';
 import { useTheme, type Theme } from '../theme';
 
-export function StatsPanel({ stats }: { stats: PlaybackStats }) {
+export function StatsPanel({
+  stats,
+  connectionStats,
+}: {
+  stats: PlaybackStats;
+  connectionStats: ConnectionStats | null;
+}) {
   const theme = useTheme();
   const { colors, radius } = theme;
   const [expanded, setExpanded] = useState(false);
@@ -58,6 +68,55 @@ export function StatsPanel({ stats }: { stats: PlaybackStats }) {
 
       {expanded && (
         <View style={styles.sections}>
+          {connectionStats && (
+            <Section title="Connection">
+              <StatRow
+                label="Round-trip time"
+                value={connectionStats.roundTripTimeMs}
+                format={formatMs}
+              />
+              <StatRow
+                label="Estimated receive rate"
+                value={connectionStats.estimatedReceiveRateBps}
+                format={formatBitsPerSecond}
+              />
+              <StatRow
+                label="Estimated send rate"
+                value={connectionStats.estimatedSendRateBps}
+                format={formatBitsPerSecond}
+              />
+              <StatRow
+                label="Bytes received"
+                value={connectionStats.bytesReceived}
+                format={formatBytes}
+              />
+              <StatRow
+                label="Bytes sent"
+                value={connectionStats.bytesSent}
+                format={formatBytes}
+              />
+              <StatRow
+                label="Bytes lost"
+                value={connectionStats.bytesLost}
+                format={formatBytes}
+              />
+              <StatRow
+                label="Packets received"
+                value={connectionStats.packetsReceived}
+                format={formatCount}
+              />
+              <StatRow
+                label="Packets sent"
+                value={connectionStats.packetsSent}
+                format={formatCount}
+              />
+              <StatRow
+                label="Packets lost"
+                value={connectionStats.packetsLost}
+                format={formatCount}
+              />
+            </Section>
+          )}
           <Section title="Startup">
             <StatRow
               label="Time to first video frame"
@@ -224,6 +283,21 @@ function formatMs(ms: number) {
 function formatBitrate(kbps: number) {
   if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;
   return `${Math.round(kbps)} kbps`;
+}
+
+function formatBitsPerSecond(bps: number) {
+  return formatBitrate(bps / 1000);
+}
+
+function formatBytes(bytes: number) {
+  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} kB`;
+  return `${Math.round(bytes)} B`;
+}
+
+function formatCount(count: number) {
+  return Math.round(count).toLocaleString();
 }
 
 // count / total duration / rebuffering ratio

@@ -111,6 +111,7 @@ export type {
   AudioTrackInfo,
   BroadcastInfo,
   ChunkSubscription,
+  ConnectionStats,
   PlaybackStats,
   Player,
   PlayerEvents,

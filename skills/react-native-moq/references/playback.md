@@ -6,7 +6,7 @@
 const session = useSession(url, (s) => s.connect()); // setup runs once per session
 ```
 
-- `Session`: `id`, `url`, `state`, `connect(targetLatencyMs?)` (default 200 ms), `disconnect()`, `addListener('stateChange', ...)`.
+- `Session`: `id`, `url`, `state`, `connectionStats` (null while disconnected), `connect(targetLatencyMs?)` (default 200 ms), `disconnect()`, `addListener('stateChange' | 'statsUpdate', ...)`.
 - `SessionState`: `'idle' | 'connecting' | 'connected' | 'closed' | 'error:${string}'`.
 - No auto-connect — call `connect()` in `setup` or on user action. `url` is read at `connect()` time — changing it doesn't recreate the session, it applies on the next `connect()`.
 
@@ -64,6 +64,8 @@ player.updateTargetLatency(500); // higher = more buffer, fewer stalls
 ## Stats
 
 `PlaybackStats`: `videoLatencyMs`, `audioLatencyMs`, `videoBitrateKbps`, `audioBitrateKbps`, `videoFps`, `videoJitterBufferMs`, `audioRingBufferMs`, `timeToFirstVideoFrameMs`, `timeToFirstAudioFrameMs`, `videoFramesDropped`, `audioFramesDropped`, `videoStalls` / `audioStalls` (`{ count, totalDurationMs, rebufferingRatio }`). All optional.
+
+`session.connectionStats` is shared by every player on the relay connection and updates about once per second. `ConnectionStats`: `roundTripTimeMs`, `estimatedSendRateBps`, `estimatedReceiveRateBps`, `bytesSent`, `bytesReceived`, `bytesLost`, `packetsSent`, `packetsReceived`, `packetsLost`. All fields are optional because the transport may not expose a value yet. Subscribe with `session.addListener('statsUpdate', ...)` for side effects.
 
 ## Events without re-rendering
 

@@ -77,7 +77,7 @@ publisher.publish({ path: 'live/test', tracks: [camera, microphone] });
 
 | Task | Read |
 | --- | --- |
-| Sessions, broadcast discovery, video/audio playback, `<VideoView>`, stats, track switching, events, `react-native-moq-ui` | [references/playback.md](references/playback.md) |
+| Sessions, broadcast discovery, video/audio playback, `<VideoView>`, playback and connection stats, track switching, events, `react-native-moq-ui` | [references/playback.md](references/playback.md) |
 | Camera, multi-camera, microphone, publisher lifecycle, screen broadcasting, codec queries | [references/publishing.md](references/publishing.md) |
 | Data tracks & messages, audio chunks to JS, push-your-own audio (PCM) and video (frame buffers) | [references/custom-tracks.md](references/custom-tracks.md) |
 | Using without React: `create*` handles, `subscribe*` functions, cleanup | [references/imperative.md](references/imperative.md) |

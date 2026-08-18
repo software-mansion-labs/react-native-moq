@@ -47,6 +47,7 @@ private let audioKeySuffix = "_audio"
     var state: SessionState = .idle
 
     var stateTask: Task<Void, Never>?
+    var connectionStatsTask: Task<Void, Never>?
     var subscriptions: [String: MoQPrefixSubscription] = [:]
     var prefixForPath: [String: String] = [:]
     var playerRefs: [String: PlayerRef] = [:]
@@ -209,6 +210,7 @@ private let audioKeySuffix = "_audio"
         // and lingers dead; drop it so a second connect() reconnects instead of
         // no-oping. User-initiated disconnect removes the context itself.
         existing.stateTask?.cancel()
+        existing.connectionStatsTask?.cancel()
         for sub in existing.subscriptions.values { _ = sub.cancel() }
         let dead = existing.session
         contexts.removeValue(forKey: sessionId)
@@ -232,11 +234,35 @@ private let audioKeySuffix = "_audio"
         self.onEvent?(
           "sessionStateChanged",
           ["sessionId": sessionId, "state": state.stringValue])
+        if case .connected = state {
+          self._startConnectionStatsPolling(ctx)
+        } else {
+          ctx.connectionStatsTask?.cancel()
+          ctx.connectionStatsTask = nil
+        }
       }
     }
 
     Task { @MainActor in
       try? await s.connect()
+    }
+  }
+
+  @MainActor
+  private func _startConnectionStatsPolling(_ ctx: SessionContext) {
+    ctx.connectionStatsTask?.cancel()
+    let sessionId = ctx.id
+    let session = ctx.session
+    ctx.connectionStatsTask = Task { @MainActor [weak self] in
+      while !Task.isCancelled {
+        guard let self, self.contexts[sessionId] === ctx else { return }
+        if let stats = await session.connectionStats() {
+          var body = stats.asDictionary()
+          body["sessionId"] = sessionId
+          self.onEvent?("connectionStatsUpdated", body)
+        }
+        try? await Task.sleep(for: .seconds(1))
+      }
     }
   }
 
@@ -307,6 +333,7 @@ private let audioKeySuffix = "_audio"
   private func _disconnect(sessionId: String) {
     guard let ctx = contexts[sessionId] else { return }
     ctx.stateTask?.cancel(); ctx.stateTask = nil
+    ctx.connectionStatsTask?.cancel(); ctx.connectionStatsTask = nil
     ctx.state = .idle
 
     let s = ctx.session
@@ -705,6 +732,22 @@ extension PlaybackStats {
         "rebufferingRatio": s.rebufferingRatio,
       ]
     }
+    return d
+  }
+}
+
+extension ConnectionStats {
+  func asDictionary() -> [String: Any] {
+    var d: [String: Any] = [:]
+    if let v = roundTripTime { d["roundTripTimeMs"] = v.inMilliseconds }
+    if let v = estimatedSendRateBps { d["estimatedSendRateBps"] = Double(v) }
+    if let v = estimatedReceiveRateBps { d["estimatedReceiveRateBps"] = Double(v) }
+    if let v = bytesSent { d["bytesSent"] = Double(v) }
+    if let v = bytesReceived { d["bytesReceived"] = Double(v) }
+    if let v = bytesLost { d["bytesLost"] = Double(v) }
+    if let v = packetsSent { d["packetsSent"] = Double(v) }
+    if let v = packetsReceived { d["packetsReceived"] = Double(v) }
+    if let v = packetsLost { d["packetsLost"] = Double(v) }
     return d
   }
 }

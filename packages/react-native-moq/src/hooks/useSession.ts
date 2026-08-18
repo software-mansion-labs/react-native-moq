@@ -5,7 +5,12 @@ import {
   mintSessionId,
   type SessionHandle,
 } from '../session';
-import type { Session, SessionEvents, SessionState } from '../types';
+import type {
+  ConnectionStats,
+  Session,
+  SessionEvents,
+  SessionState,
+} from '../types';
 import { useSetupOnce } from './useSetupOnce';
 
 export function useSession(
@@ -13,6 +18,8 @@ export function useSession(
   setup?: (session: Session) => void
 ): Session {
   const [state, setState] = useState<SessionState>('idle');
+  const [connectionStats, setConnectionStats] =
+    useState<ConnectionStats | null>(null);
 
   const idRef = useRef<string | null>(null);
   if (idRef.current === null) idRef.current = mintSessionId();
@@ -27,11 +34,16 @@ export function useSession(
   useEffect(() => {
     const handle = createSessionWithId(id, urlRef.current, emitterRef.current);
     handleRef.current = handle;
-    const sub = emitterRef.current.addListener('stateChange', (e) =>
-      setState(e.state)
+    const stateSub = emitterRef.current.addListener('stateChange', (e) => {
+      setState(e.state);
+      setConnectionStats(handle.connectionStats);
+    });
+    const statsSub = emitterRef.current.addListener('statsUpdate', (stats) =>
+      setConnectionStats(stats)
     );
     return () => {
-      sub.remove();
+      stateSub.remove();
+      statsSub.remove();
       handleRef.current = null;
       handle.destroy();
     };
@@ -63,12 +75,13 @@ export function useSession(
       id,
       url,
       state,
+      connectionStats,
       emitter: emitterRef.current,
       addListener,
       connect,
       disconnect,
     }),
-    [id, url, state, addListener, connect, disconnect]
+    [id, url, state, connectionStats, addListener, connect, disconnect]
   );
 
   useSetupOnce(moqSession, setup);
