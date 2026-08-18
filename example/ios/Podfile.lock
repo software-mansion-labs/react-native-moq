@@ -6,7 +6,7 @@ PODS:
   - MMKV (2.4.0):
     - MMKVCore (~> 2.4.0)
   - MMKVCore (2.4.0)
-  - MoQ (0.0.1):
+  - MoQ (0.3.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2441,7 +2441,7 @@ SPEC CHECKSUMS:
   hermes-engine: 645eb2a3d39178606068f895b3dcdbf48012f8f9
   MMKV: 86859fdfa2b0b21db1fd6e48788474a6416a2c77
   MMKVCore: 3d16ce9f7d411e135020915fde98a056859a1efa
-  MoQ: f2634cb440517f95c23e6a5bba4a3c76a2d2c540
+  MoQ: af5bf0b38a14eef086b3f007b5f9ebe8fb81b72a
   opencv-rne: 2305807573b6e29c8c87e3416ab096d09047a7a0
   RCTDeprecation: 2a74a2c57675e64419bd89078efde81f7c1de90b
   RCTRequired: 30451112e6fef4e6f31b4e7eee0845156e35e4b0

@@ -1,6 +1,6 @@
 {
   "name": "react-native-moq-ui",
-  "version": "0.0.1",
+  "version": "0.3.0",
   "description": "Default UI components for react-native-moq",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
