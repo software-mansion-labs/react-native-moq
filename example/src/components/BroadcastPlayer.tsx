@@ -1,6 +1,7 @@
 import type {
   AudioTrackInfo,
   BroadcastInfo,
+  ConnectionStats,
   VideoTrackInfo,
 } from 'react-native-moq';
 import { useEffect, useRef, useState } from 'react';
@@ -28,11 +29,13 @@ type Mode = 'video' | 'audio';
 
 export function BroadcastPlayer({
   broadcast,
+  connectionStats,
   initialMode,
   onRemove,
   addEntry,
 }: {
   broadcast: BroadcastInfo;
+  connectionStats: ConnectionStats | null;
   initialMode: Mode;
   onRemove: () => void;
   addEntry: AddEntry;
@@ -67,9 +70,17 @@ export function BroadcastPlayer({
       />
 
       {mode === 'video' ? (
-        <VideoSection broadcast={broadcast} addEntry={addEntry} />
+        <VideoSection
+          broadcast={broadcast}
+          connectionStats={connectionStats}
+          addEntry={addEntry}
+        />
       ) : (
-        <AudioSection broadcast={broadcast} addEntry={addEntry} />
+        <AudioSection
+          broadcast={broadcast}
+          connectionStats={connectionStats}
+          addEntry={addEntry}
+        />
       )}
     </Card>
   );
@@ -77,9 +88,11 @@ export function BroadcastPlayer({
 
 function VideoSection({
   broadcast,
+  connectionStats,
   addEntry,
 }: {
   broadcast: BroadcastInfo;
+  connectionStats: ConnectionStats | null;
   addEntry: AddEntry;
 }) {
   const { colors } = useTheme();
@@ -153,7 +166,12 @@ function VideoSection({
         />
       )}
 
-      {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
+      {player.playbackStats && (
+        <StatsPanel
+          stats={player.playbackStats}
+          connectionStats={connectionStats}
+        />
+      )}
     </>
   );
 }
@@ -202,9 +220,11 @@ function useSubtitles(broadcast: BroadcastInfo, enabled: boolean): string {
 
 function AudioSection({
   broadcast,
+  connectionStats,
   addEntry,
 }: {
   broadcast: BroadcastInfo;
+  connectionStats: ConnectionStats | null;
   addEntry: AddEntry;
 }) {
   const { dark, colors, radius } = useTheme();
@@ -257,7 +277,12 @@ function AudioSection({
 
       <AudioChunksMeter broadcast={broadcast} />
 
-      {player.playbackStats && <StatsPanel stats={player.playbackStats} />}
+      {player.playbackStats && (
+        <StatsPanel
+          stats={player.playbackStats}
+          connectionStats={connectionStats}
+        />
+      )}
     </>
   );
 }

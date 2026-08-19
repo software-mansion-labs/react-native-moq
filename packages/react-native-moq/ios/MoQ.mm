@@ -41,6 +41,7 @@ RCT_EXPORT_MODULE()
 - (NSArray<NSString *> *)supportedEvents {
   return @[
     @"sessionStateChanged",
+    @"connectionStatsUpdated",
     @"broadcastAvailable",
     @"broadcastUnavailable",
     @"playerEvent",

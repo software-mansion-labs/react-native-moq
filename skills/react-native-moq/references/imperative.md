@@ -19,7 +19,7 @@ Differences from hooks:
 
 - Capture factories take the hook options **minus `enabled`** — creation always starts capture; toggle by `destroy()` + recreate.
 - `createVideoSource` additionally exposes `ready: Promise<CustomVideoBufferDescriptor[]>` — await it before pushing frames.
-- State changes surface via `addListener` — but the event differs per handle: capture handles (`createCamera`/`createMicrophone`/`createMultiCamera`/`createScreenBroadcast`) emit `stateChange` with `{ state, lastError }`; `PublisherHandle` emits `stateChange` (`{ state }`) plus `trackStateChange` (`{ name, state, error? }`); players emit `playingChange`/`trackSwitched`/`trackStopped`/`statsUpdate`. The `createDataTrack`/`createAudioSource`/`createVideoSource` handles have **no listeners** — just their send/push methods plus `destroy()`.
+- State changes surface via `addListener` — but the event differs per handle: sessions emit `stateChange` plus `statsUpdate` for connection metrics; capture handles (`createCamera`/`createMicrophone`/`createMultiCamera`/`createScreenBroadcast`) emit `stateChange` with `{ state, lastError }`; `PublisherHandle` emits `stateChange` (`{ state }`) plus `trackStateChange` (`{ name, state, error? }`); players emit `playingChange`/`trackSwitched`/`trackStopped`/`statsUpdate`. The `createDataTrack`/`createAudioSource`/`createVideoSource` handles have **no listeners** — just their send/push methods plus `destroy()`.
 - `VideoPlayerHandle.destroy()` only detaches listeners (the native player is shared per broadcast); `AudioPlayerHandle.destroy()` also releases its dedicated native player.
 - Views still need React, but accept imperative handles: `<VideoView player={videoPlayerHandle}>`, `<PublisherView camera={cameraHandle}>`.
 

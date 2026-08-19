@@ -163,6 +163,19 @@ export interface PlaybackStats {
   audioStalls?: StallStats;
 }
 
+/** A point-in-time snapshot of the shared relay connection's transport stats. */
+export interface ConnectionStats {
+  roundTripTimeMs?: number;
+  estimatedSendRateBps?: number;
+  estimatedReceiveRateBps?: number;
+  bytesSent?: number;
+  bytesReceived?: number;
+  bytesLost?: number;
+  packetsSent?: number;
+  packetsReceived?: number;
+  packetsLost?: number;
+}
+
 export type PlayerEvents = {
   playingChange: (event: { isPlaying: boolean }) => void;
   trackStopped: (event: Record<never, never>) => void;
@@ -175,12 +188,14 @@ export type PlayerEvents = {
 
 export type SessionEvents = {
   stateChange: (event: { state: SessionState }) => void;
+  statsUpdate: (event: ConnectionStats) => void;
 };
 
 export interface Session extends Listenable<SessionEvents> {
   readonly id: string;
   readonly url: string;
   readonly state: SessionState;
+  readonly connectionStats: ConnectionStats | null;
   connect(targetLatencyMs?: number): void;
   disconnect(): void;
 }
